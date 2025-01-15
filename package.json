@@ -1,0 +1,14 @@
+{
+    "name": "com.game-crafters-guild.worldbuilding",
+    "displayName": "Game Crafters' Guild World Building",
+    "description": "A WorldBuilding tool.",
+    "version": "0.0.1",
+    "author": {
+        "name": "Game Crafters' Guild"
+    },
+    "unity": "6000.0",
+    "license": "-",
+    "dependencies": {
+        "com.unity.splines": "2.0.0"
+    }
+  }

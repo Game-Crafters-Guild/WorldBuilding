@@ -1,0 +1,52 @@
+#pragma kernel CSMain
+
+RWTexture2D<float4> Result;
+StructuredBuffer<float3> SplinePositions;
+uniform int NumPositions;
+uniform float4 RegionMin;
+uniform float4 RegionSize;
+
+bool IsPointInsidePolygon(float3 position)
+{
+    uint intersections = 0;
+    int vertexCount = NumPositions;
+ 
+    // Iterate over each edge of the polygon
+    for (int i = 0, j = vertexCount - 1; i < vertexCount; j = i++)
+    {
+        float3 vertex1 = SplinePositions[i];
+        float3 vertex2 = SplinePositions[j];
+ 
+        // Check if the edge crosses the horizontal ray originating from the point
+        bool crossesRay = (vertex1.z > position.z) != (vertex2.z > position.z);
+ 
+        if (crossesRay)
+        {
+            // Calculate the x-coordinate of the intersection point
+            float intersectionX = vertex2.x - (vertex2.z - position.z) * (vertex2.x - vertex1.x) / (vertex2.z - vertex1.z);
+ 
+            // Count the intersection if the x-coordinate is to the right of the point
+            if (position.x < intersectionX)
+            {
+                intersections++;
+            }
+        }
+    }
+    // Odd number of intersections means the point is inside
+    return intersections % 2 != 0;
+}
+
+[numthreads(8,8,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    uint outputTextureWidth;
+    uint outputTextureHeight;
+    Result.GetDimensions(outputTextureWidth, outputTextureHeight);
+    float2 uv = id.xy / float2(outputTextureWidth, outputTextureHeight);
+    float3 position = float3(RegionMin.x + uv.x * RegionSize.x, 0.0f, RegionMin.z + uv.y * RegionSize.z);
+    bool isInSpline = IsPointInsidePolygon(position);
+
+    //Result[id.xy] = isInSpline ? float4(1.0f, 1.0f, 1.0f, 1.0f) : float4(0.0f, 0.0f, 0.0f, 0.0f);
+    Result[id.xy] = isInSpline ? float4(0.0f, 0.0f, 0.0f, 0.0f) : float4(1.0f, 1.0f, 1.0f, 1.0f);
+}
+

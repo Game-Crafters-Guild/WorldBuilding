@@ -1,0 +1,20 @@
+using System;
+using System.Threading.Tasks;
+using Unity.Collections;
+using Unity.Mathematics;
+using UnityEngine;
+
+[Serializable]
+public class SetHeightModifier : ITerrainHeightModifier
+{
+    public float Height = 0.0f;
+    public override string FilePath => GetFilePath();
+    public HeightWriteMode Mode;
+    public MaskFalloff Fallof;
+    
+    public override void ApplyHeightmap(WorldBuildingContext context, Bounds worldBounds, Texture mask)
+    {
+        context.MaskFalloff = Fallof;
+        context.ApplyHeightmap(worldBounds, null, mask, Mode, 0.0f, Height);
+    }
+}
