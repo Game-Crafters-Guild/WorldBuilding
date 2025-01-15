@@ -2,8 +2,8 @@
     "name": "GameCraftersGuild.WorldBuilding.Editor",
     "rootNamespace": "",
     "references": [
-        "GUID:ab77810392a394445b54798381166985",
-        "GUID:d8b63aba1907145bea998dd612889d6b"
+        "GUID:d8b63aba1907145bea998dd612889d6b",
+        "GUID:8a152112eea79954d9c1f9fbaab9d4a5"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
