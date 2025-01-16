@@ -45,8 +45,7 @@ public class NoisePropertiesPropertyDrawer : PropertyDrawer
             {
                 dirtyProperty.boolValue = true;
             }
-            property.FindPropertyRelative("m_IsDirty").boolValue = true;
-            property.serializedObject.ApplyModifiedProperties();
+            property?.serializedObject?.ApplyModifiedProperties();
             GenerateNoiseTexture(image, property);
         }
     }
@@ -54,6 +53,11 @@ public class NoisePropertiesPropertyDrawer : PropertyDrawer
     private static void GenerateNoiseTexture(Image image, SerializedProperty property)
     {
         NoiseProperties properties = property.boxedValue as NoiseProperties;
+        if (properties == null)
+        {
+            return;
+        }
+
         var noiseMap = NoiseGenerator.FromNoiseProperties(properties, Allocator.Temp);
         image.image = NoiseGenerator.GenerateNoiseTexture(noiseMap, new int2(properties.NoiseResolution, properties.NoiseResolution));
         noiseMap.Dispose();
