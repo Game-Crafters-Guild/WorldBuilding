@@ -25,6 +25,7 @@ public class WorldBuildingSystem : MonoBehaviour
     [SerializeField] public Material m_SplatmapMaterial;
     [SerializeField] private Mesh m_Quad;
     private List<Terrain> m_ActiveTerrains = new List<Terrain>();
+    private Queue<Terrain> m_TerrainsToUpdate = new Queue<Terrain>();
     
     private HashSet<TerrainLayer> m_TerrainLayersHashset = new HashSet<TerrainLayer>();
 
@@ -235,14 +236,16 @@ public class WorldBuildingSystem : MonoBehaviour
         {
             Generate();
         }
-        else if (m_LODUpdateDelay > 0.0f)
+        else if (m_LODUpdateDelay > 0.0f && m_TerrainsToUpdate.Count > 0)
         {
             m_LODUpdateDelay -= Time.unscaledDeltaTime;
             if (m_LODUpdateDelay < 0.0f)
             {
-                TerrainData terrainData = Terrain.activeTerrain.terrainData;
+                Terrain terrain = m_TerrainsToUpdate.Dequeue();
+                TerrainData terrainData = terrain.terrainData;
                 terrainData.SyncHeightmap();
                 terrainData.SyncTexture(TerrainData.AlphamapTextureName);
+                m_LODUpdateDelay = 1.0f;
             }
         }
     }
@@ -299,6 +302,7 @@ public class WorldBuildingSystem : MonoBehaviour
         }
         m_IsDirty = false;
         m_IsGenerating = true;
+        m_TerrainsToUpdate.Clear();
         CreateFullScreenQuad();
 
         Terrain.GetActiveTerrains(m_ActiveTerrains);
@@ -338,6 +342,7 @@ public class WorldBuildingSystem : MonoBehaviour
             }
 
             m_WorldBuildingContext.Release();
+            m_TerrainsToUpdate.Enqueue(terrain);
         }
 
         m_LODUpdateDelay = 1.0f;
