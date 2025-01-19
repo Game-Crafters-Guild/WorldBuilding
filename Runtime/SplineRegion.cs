@@ -25,9 +25,6 @@ public class SplineRegion : BaseWorldBuilder
     private static readonly int kComputeNumPositionsId = Shader.PropertyToID("NumPositions");
     private static readonly int kComputeSplinePositions = Shader.PropertyToID("SplinePositions");
 
-    private Bounds m_WorldBounds;
-    public override Bounds WorldBounds => m_WorldBounds;
-
     private void CalculateWorldBounds()
     {
         Bounds bounds = new Bounds();
@@ -35,8 +32,7 @@ public class SplineRegion : BaseWorldBuilder
         {
             bounds.Encapsulate(spline.GetBounds());
         }
-        bounds.center = transform.TransformPoint(bounds.center);
-        m_WorldBounds = bounds;
+        LocalBounds = bounds;
     }
     
     /*public float Intervals = 1.5f;

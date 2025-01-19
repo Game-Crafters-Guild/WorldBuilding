@@ -24,8 +24,6 @@ public class SplinePath : BaseWorldBuilder
     [SerializeField] private Material m_SplineToMaskMaterial;
     private const int kMaskTextureWidth = 256;
     private const int kMaskTextureHeight = 256;
-    private Bounds m_WorldBounds;
-    public override Bounds WorldBounds => m_WorldBounds;
 
     private void OnValidate()
     {
@@ -67,8 +65,7 @@ public class SplinePath : BaseWorldBuilder
             new float2(0.0f, 1.0f));
 
         Bounds meshBounds = splineMesh.bounds;
-        m_WorldBounds = meshBounds;
-        m_WorldBounds.center = transform.TransformPoint(m_WorldBounds.center);
+        LocalBounds = meshBounds;
         float largerMeshExtents = math.max(meshBounds.extents.x, meshBounds.extents.z);
         Matrix4x4 projectionMatrix = Matrix4x4.Ortho(-largerMeshExtents, largerMeshExtents, -largerMeshExtents,
             largerMeshExtents, Mathf.Min(-10.0f, meshBounds.min.y - 1.0f), Mathf.Max(10.0f, meshBounds.max.y + 1.0f));

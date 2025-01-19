@@ -21,6 +21,23 @@ public abstract class BaseWorldBuilder : MonoBehaviour, IWorldBuilder
 
     [SerializeField]
     public WorldModifiersContainer m_Modifiers = new WorldModifiersContainer();
+    
+    [SerializeField][HideInInspector]
+    private Bounds m_LocalBounds;
+
+    protected Bounds LocalBounds
+    {
+        set => m_LocalBounds = value;
+    }
+    public Bounds WorldBounds
+    {
+        get
+        {
+            Bounds bounds = m_LocalBounds;
+            bounds.center = transform.TransformPoint(bounds.center);
+            return bounds;
+        }
+    }
 
     public bool IsDirty
     {
@@ -71,7 +88,6 @@ public abstract class BaseWorldBuilder : MonoBehaviour, IWorldBuilder
     public abstract void ApplyHeights(WorldBuildingContext context);
     public abstract void ApplySplatmap(WorldBuildingContext context);
     public abstract void SpawnGameObjects(WorldBuildingContext context);
-    public abstract Bounds WorldBounds { get; }
     public abstract void GenerateMask(RenderTexture renderTexture);
     public List<ITerrainSplatModifier> TerrainSplatModifiers => m_Modifiers.TerrainSplatModifiers;
 
