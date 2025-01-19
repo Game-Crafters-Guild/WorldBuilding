@@ -37,7 +37,7 @@ public abstract class BaseWorldBuilder : MonoBehaviour, IWorldBuilder
         set => m_IsDirty = value;
     }
 
-    [SerializeField] private bool m_IsDirty;
+    [SerializeField] private bool m_IsDirty = true;
 
     private void OnDestroy()
     {

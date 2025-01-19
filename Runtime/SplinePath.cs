@@ -55,6 +55,7 @@ public class SplinePath : BaseWorldBuilder
 
     public override void GenerateMask(RenderTexture renderTexture)
     {
+        FindSplineMaskMaterial();
         if (m_MaskTexture == null)
         {
             m_MaskTexture = new Texture2D(kMaskTextureWidth, kMaskTextureHeight, TextureFormat.ARGB32, false, true);

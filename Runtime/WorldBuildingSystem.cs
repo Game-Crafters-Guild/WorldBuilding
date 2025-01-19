@@ -415,6 +415,11 @@ public class WorldBuildingSystem : MonoBehaviour
         {
             return;
         }
+
+        if (worldBuilder.IsDirty)
+        {
+            worldBuilder.GenerateMask(m_MaskRenderTexture);
+        }
         m_IsDirty = true;
     }
 
