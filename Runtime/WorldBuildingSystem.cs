@@ -21,158 +21,12 @@ public class WorldBuildingSystem : MonoBehaviour
     [HideInInspector][SerializeField] private bool m_IsReloadingDomain;
     public float m_LODUpdateDelay = -1.0f;
 
-    [Serializable]
-    internal struct TerrainHeightData
-    {
-        [SerializeField] internal int Width;
-        [SerializeField] internal int Height;
-
-        private float[,] m_HeightData;
-
-        [SerializeField] [HideInInspector] private float[] m_FlattenedData;
-
-        public float[,] HeightData
-        {
-            get
-            {
-                if (m_HeightData == null && m_FlattenedData != null)
-                {
-                    m_HeightData = new float[Width, Height];
-                    int index = 0;
-                    for (int i = 0; i < Width; i++)
-                    {
-                        for (int j = 0; j < Height; j++)
-                        {
-                            m_HeightData[i, j] = m_FlattenedData[index++];
-                        }
-                    }
-                }
-                return m_HeightData;
-            }
-        }
-        
-        public static TerrainHeightData Create(float[,] data)
-        {
-            TerrainHeightData  terrainHeightData = new TerrainHeightData();
-            terrainHeightData.Width = data.GetLength(0);
-            terrainHeightData.Height = data.GetLength(1);
-            terrainHeightData.m_HeightData = data;
-            terrainHeightData.m_FlattenedData = new float[terrainHeightData.Width * terrainHeightData.Height];
-            int index = 0;
-            for (int i = 0; i < terrainHeightData.Width; i++)
-            {
-                for (int j = 0; j < terrainHeightData.Height; j++)
-                {
-                    terrainHeightData.m_FlattenedData[index++] = data[i, j];
-                }
-            }
-            return terrainHeightData;
-        }
-    }
-
-    [Serializable]
-    internal struct TerrainSplatData
-    {
-        [SerializeField] public int Width;
-        [SerializeField] public int Height;
-        [SerializeField] public int Layers;
-
-        private float[,,] m_LayersData;
-
-        [SerializeField] [HideInInspector] private float[] m_FlattenedData;
-
-        public float[,,] LayersData
-        {
-            get
-            {
-                if (m_LayersData == null && m_FlattenedData != null)
-                {
-                    m_LayersData = new float[Width, Height, Layers];
-                    int index = 0;
-                    for (int i = 0; i < Width; i++)
-                    {
-                        for (int j = 0; j < Height; j++)
-                        {
-                            for (int k = 0; k < Layers; k++)
-                            {
-                                m_LayersData[i, j, k] = m_FlattenedData[index++];
-                            }
-                        }
-                    }
-                }
-                return m_LayersData;
-            }
-        }
-
-        public static TerrainSplatData CreateExplicitSize(float[,,] data, int width, int height, int layers)
-        {
-            TerrainSplatData  terrainSplatData = new TerrainSplatData();
-            terrainSplatData.Width = width;
-            terrainSplatData.Height = height;
-            terrainSplatData.Layers = layers;
-            terrainSplatData.m_FlattenedData = new float[terrainSplatData.Width * terrainSplatData.Height * terrainSplatData.Layers];
-            int index = 0;
-            
-            int minWidth = Mathf.Min(width, data.GetLength(0));
-            int minHeight = Mathf.Min(height, data.GetLength(1));
-            int minLayer = Mathf.Min(layers, data.GetLength(2));
-            for (int i = 0; i < minWidth; i++)
-            {
-                for (int j = 0; j < minHeight; j++)
-                {
-                    for (int k = 0; k < minLayer; k++)
-                    {
-                        terrainSplatData.m_FlattenedData[index++] = data[i, j, k];
-                    }
-                }
-            }
-            return terrainSplatData;
-        }
-
-        public static TerrainSplatData Create(float[,,] data)
-        {
-            TerrainSplatData  terrainSplatData = new TerrainSplatData();
-            terrainSplatData.Width = data.GetLength(0);
-            terrainSplatData.Height = data.GetLength(1);
-            terrainSplatData.Layers = data.GetLength(2);
-            terrainSplatData.m_LayersData = data;
-            terrainSplatData.m_FlattenedData = new float[terrainSplatData.Width * terrainSplatData.Height * terrainSplatData.Layers];
-            int index = 0;
-            for (int i = 0; i < terrainSplatData.Width; i++)
-            {
-                for (int j = 0; j < terrainSplatData.Height; j++)
-                {
-                    for (int k = 0; k < terrainSplatData.Layers; k++)
-                    {
-                        terrainSplatData.m_FlattenedData[index++] = data[i, j, k];
-                    }
-                }
-            }
-            return terrainSplatData;
-        }
-    }
-
-    [SerializeField] [HideInInspector]
-    private TerrainHeightData m_OriginalTerrainHeights;
-    [SerializeField] [HideInInspector]
-    private TerrainSplatData m_OriginalTerrainSplatmap;
-
     [SerializeField] public Material m_HeightmapMaterial;
     [SerializeField] public Material m_SplatmapMaterial;
     [SerializeField] private Mesh m_Quad;
+    private List<Terrain> m_ActiveTerrains = new List<Terrain>();
     
     private HashSet<TerrainLayer> m_TerrainLayersHashset = new HashSet<TerrainLayer>();
-
-    public void RestoreTerrainData()
-    {
-        TerrainData terrainData = Terrain.activeTerrain.terrainData;
-        terrainData.SetHeights(0, 0, m_OriginalTerrainHeights.HeightData);
-        if (m_OriginalTerrainSplatmap.LayersData.GetLength(2) != terrainData.alphamapLayers)
-        {
-            m_OriginalTerrainSplatmap = TerrainSplatData.CreateExplicitSize(m_OriginalTerrainSplatmap.LayersData, terrainData.alphamapWidth, terrainData.alphamapHeight, terrainData.alphamapLayers);
-        }
-        terrainData.SetAlphamaps(0, 0, m_OriginalTerrainSplatmap.LayersData);
-    }
 
     void CreateDefaultTerrain()
     {
@@ -185,17 +39,6 @@ public class WorldBuildingSystem : MonoBehaviour
         newTerrain.transform.position = Vector3.zero;
     }
 
-    public void BackupTerrainData()
-    {
-        if (Terrain.activeTerrain == null)
-        {
-            CreateDefaultTerrain();
-        }
-        TerrainData terrainData = Terrain.activeTerrain.terrainData;
-        m_OriginalTerrainHeights = TerrainHeightData.Create(terrainData.GetHeights(0, 0, terrainData.heightmapResolution, terrainData.heightmapResolution));
-        m_OriginalTerrainSplatmap = TerrainSplatData.Create(terrainData.GetAlphamaps(0, 0, terrainData.alphamapWidth, terrainData.alphamapHeight));
-    }
-    
     public static WorldBuildingSystem FindSystemInScene()
     {
         var systems = GameObject.FindObjectsByType<WorldBuildingSystem>(FindObjectsSortMode.None);
@@ -218,7 +61,6 @@ public class WorldBuildingSystem : MonoBehaviour
         if (worldBuildingSystem == null)
         {
             worldBuildingSystem = new GameObject("WorldBuilding System").AddComponent<WorldBuildingSystem>();
-            worldBuildingSystem.BackupTerrainData();
         }
         return worldBuildingSystem;
     }
@@ -459,40 +301,45 @@ public class WorldBuildingSystem : MonoBehaviour
         m_IsGenerating = true;
         CreateFullScreenQuad();
 
-        Terrain terrain = Terrain.activeTerrain;
-        TerrainData terrainData = terrain.terrainData;
-        if (terrain.drawInstanced == false)
+        Terrain.GetActiveTerrains(m_ActiveTerrains);
+        foreach (var terrain in m_ActiveTerrains)
         {
-            terrain.drawInstanced = true;
+
+            TerrainData terrainData = terrain.terrainData;
+            if (terrain.drawInstanced == false)
+            {
+                terrain.drawInstanced = true;
+            }
+
+            GenerateTerrainLayers(terrainData);
+            m_WorldBuildingContext = WorldBuildingContext.Create(terrain);
+            m_WorldBuildingContext.TerrainLayersIndexMap = m_TerrainLayersIndexMap;
+            m_WorldBuildingContext.m_ApplyHeightmapMaterial = m_HeightmapMaterial;
+            m_WorldBuildingContext.m_ApplySplatmapMaterial = m_SplatmapMaterial;
+            m_WorldBuildingContext.m_Quad = m_Quad;
+
+            GenerateTask();
+
+            RenderTexture.active = m_WorldBuildingContext.HeightmapRenderTexture;
+            RectInt heightmapRect = new RectInt(0, 0, m_WorldBuildingContext.HeightmapRenderTexture.width,
+                m_WorldBuildingContext.HeightmapRenderTexture.height);
+            terrainData.CopyActiveRenderTextureToHeightmap(heightmapRect, heightmapRect.position,
+                TerrainHeightmapSyncControl.None);
+
+            RectInt splatmapRect = new RectInt(0, 0, terrainData.alphamapWidth,
+                terrainData.alphamapHeight);
+            int index = 0;
+            foreach (var splatRenderTexture in m_WorldBuildingContext.SplatRenderTextures)
+            {
+                RenderTexture.active = splatRenderTexture;
+                terrainData.CopyActiveRenderTextureToTexture(TerrainData.AlphamapTextureName, 0, splatmapRect,
+                    splatmapRect.position, false);
+                ++index;
+            }
+
+            m_WorldBuildingContext.Release();
         }
-        GenerateTerrainLayers(terrainData);
-        m_WorldBuildingContext = WorldBuildingContext.Create(terrain);
-        m_WorldBuildingContext.TerrainLayersIndexMap = m_TerrainLayersIndexMap;
-        m_WorldBuildingContext.m_ApplyHeightmapMaterial = m_HeightmapMaterial;
-        m_WorldBuildingContext.m_ApplySplatmapMaterial = m_SplatmapMaterial;
-        m_WorldBuildingContext.m_Quad = m_Quad;
 
-        
-        
-        
-        //await Task.Run(GenerateTask);
-        GenerateTask();
-
-        RenderTexture.active = m_WorldBuildingContext.HeightmapRenderTexture;
-        RectInt heightmapRect = new RectInt(0, 0, m_WorldBuildingContext.HeightmapRenderTexture.width,
-            m_WorldBuildingContext.HeightmapRenderTexture.height);
-        terrainData.CopyActiveRenderTextureToHeightmap(heightmapRect, heightmapRect.position, TerrainHeightmapSyncControl.None);
-
-        RectInt splatmapRect = new RectInt(0, 0, terrainData.alphamapWidth,
-            terrainData.alphamapHeight);
-        int index = 0;
-        foreach (var splatRenderTexture in m_WorldBuildingContext.SplatRenderTextures)
-        {
-            RenderTexture.active = splatRenderTexture;
-            terrainData.CopyActiveRenderTextureToTexture(TerrainData.AlphamapTextureName, 0, splatmapRect, splatmapRect.position, false);
-            ++index;
-        }
-        m_WorldBuildingContext.Release();
         m_LODUpdateDelay = 1.0f;
         m_IsGenerating = false;
     }
@@ -537,7 +384,7 @@ public class WorldBuildingSystem : MonoBehaviour
             }
         }
 
-        var terrainLayers =  Terrain.activeTerrain.terrainData.terrainLayers;
+        var terrainLayers =  terrainData.terrainLayers;
         if (terrainLayers.Length != m_TerrainLayersHashset.Count)
         {
             terrainLayers = new TerrainLayer[m_TerrainLayersHashset.Count];
