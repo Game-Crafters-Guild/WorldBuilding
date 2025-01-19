@@ -12,12 +12,11 @@ public interface IWorldBuilder
     
     public bool IsDirty { get; set; }
     
-    IReadOnlyList<Spline> Splines { get; }
+    SplineContainer SplinContainer { get; }
 
     public void ApplyHeights(WorldBuildingContext context);
     public void ApplySplatmap(WorldBuildingContext context);
     public void SpawnGameObjects(WorldBuildingContext context);
-    public void ProcessSpline(Spline spline);
     
     public Bounds WorldBounds { get; }
     public void GenerateMask(RenderTexture renderTexture);

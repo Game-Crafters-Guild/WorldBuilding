@@ -16,8 +16,8 @@ public class SplinePath : BaseWorldBuilder
     [Range(1.0f, 100.0f)]
     public float Width = 4.0f;
     [SerializeReference][HideInInspector]
-    private SplineContainer m_SplineContainer;
-    public override IReadOnlyList<Spline> Splines => m_SplineContainer.Splines;
+    internal SplineContainer m_SplineContainer;
+    public override SplineContainer SplinContainer => m_SplineContainer;
     
     // Mask Texture.
     [SerializeField] private Texture m_MaskTexture;
@@ -45,6 +45,12 @@ public class SplinePath : BaseWorldBuilder
             m_SplineToMaskMaterial = Resources.Load<Material>("Materials/Unlit");
         }
 #endif
+    }
+
+    protected override void OnEnable()
+    {
+        m_SplineContainer = GetComponent<SplineContainer>();
+        base.OnEnable();
     }
 
     public override void GenerateMask(RenderTexture renderTexture)
@@ -103,18 +109,6 @@ public class SplinePath : BaseWorldBuilder
             context.MaskFalloff = new MaskFalloff();
             splatModifier.ApplySplatmap(context, WorldBounds, m_MaskTexture);
         }
-    }
-    public override void ProcessSpline(Spline spline)
-    {
-        /*if (m_SplineContainer == null)
-        {
-            m_SplineContainer = GetComponent<SplineContainer>();
-        }
-        if (m_SplineCache == null)
-        {
-            m_SplineCache = new SplineCache();
-        }
-        m_SplineCache.BakePath(m_SplineContainer, Resolution);*/
     }
 
     public override void SpawnGameObjects(WorldBuildingContext context)

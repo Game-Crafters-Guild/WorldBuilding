@@ -17,7 +17,8 @@ public class WorldBuildingSystem : MonoBehaviour
     private List<IWorldBuilder> m_WorldBuilders = new List<IWorldBuilder>();
     private Dictionary<TerrainLayer, int> m_TerrainLayersIndexMap = new Dictionary<TerrainLayer, int>();
 
-    [SerializeField] private bool m_IsDirty;
+    [HideInInspector][SerializeField] private bool m_IsDirty;
+    [HideInInspector][SerializeField] private bool m_IsReloadingDomain;
     public float m_LODUpdateDelay = -1.0f;
 
     [Serializable]
@@ -227,8 +228,11 @@ public class WorldBuildingSystem : MonoBehaviour
         m_IsGenerating = false;
 #if UNITY_EDITOR
         UnityEditor.Splines.EditorSplineUtility.AfterSplineWasModified += AfterSplineWasModified;
-        //UnityEditor.AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
+        SplineContainer.SplineAdded += OnSplineContainerAdded;
+        SplineContainer.SplineRemoved += OnSplineContainerRemoved;
+        UnityEditor.AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
         UnityEditor.AssemblyReloadEvents.afterAssemblyReload += OnAfterAssemblyReload;
+        
 
         if (m_HeightmapMaterial == null)
         {
@@ -279,10 +283,12 @@ public class WorldBuildingSystem : MonoBehaviour
             2, 3, 1
         };
         
-        m_Quad = new Mesh();
-        m_Quad.vertices = vertices;
-        m_Quad.uv = uv;
-        m_Quad.triangles = tris;
+        m_Quad = new Mesh
+        {
+            vertices = vertices,
+            uv = uv,
+            triangles = tris
+        };
         m_Quad.UploadMeshData(true);
     }
 
@@ -290,18 +296,21 @@ public class WorldBuildingSystem : MonoBehaviour
     {
 #if UNITY_EDITOR
         UnityEditor.Splines.EditorSplineUtility.AfterSplineWasModified -= AfterSplineWasModified;
-        //UnityEditor.AssemblyReloadEvents.beforeAssemblyReload -= OnBeforeAssemblyReload;
+        SplineContainer.SplineAdded -= OnSplineContainerAdded;
+        SplineContainer.SplineRemoved -= OnSplineContainerRemoved;
+        UnityEditor.AssemblyReloadEvents.beforeAssemblyReload -= OnBeforeAssemblyReload;
         UnityEditor.AssemblyReloadEvents.afterAssemblyReload -= OnAfterAssemblyReload;
 #endif
     }
     
-    /*public void OnBeforeAssemblyReload()
+    private void OnBeforeAssemblyReload()
     {
-    }*/
+        m_IsReloadingDomain = true;
+    }
 
-    public void OnAfterAssemblyReload()
+    private void OnAfterAssemblyReload()
     {
-        m_IsDirty = false;
+        m_IsReloadingDomain = false;
     }
 
     
@@ -310,13 +319,13 @@ public class WorldBuildingSystem : MonoBehaviour
         IWorldBuilder modifiedBuilder = null;
         foreach (var builder in m_WorldBuilders)
         {
-            var splines = builder.Splines;
-            if (splines == null) continue;
-            foreach (var spline in splines)
+            var splineContainer = builder.SplinContainer;
+            if (splineContainer == null) continue;
+            foreach (var spline in splineContainer.Splines)
             {
                 if (spline == modifiedSpline)
                 {
-                    //builder.ProcessSpline(spline);
+                    builder.GenerateMask(m_MaskRenderTexture);
                     builder.IsDirty = true;
                     modifiedBuilder = builder;
                     break;
@@ -330,6 +339,38 @@ public class WorldBuildingSystem : MonoBehaviour
             return;
         }
         Generate();
+    }
+
+    private void OnSplineContainerModified(SplineContainer modifiedSplineContainer)
+    {
+        IWorldBuilder modifiedBuilder = null;
+        foreach (var builder in m_WorldBuilders)
+        {
+            if (builder.SplinContainer == modifiedSplineContainer)
+            {
+                builder.GenerateMask(m_MaskRenderTexture);
+                builder.IsDirty = true;
+                modifiedBuilder = builder;
+                break;
+            }
+        }
+
+        // If possible, update from modified builder only.
+        if (modifiedBuilder == null)
+        {
+            return;
+        }
+        Generate();
+    }
+    
+    private void OnSplineContainerAdded(SplineContainer splineContainer, int splineIndex)
+    {
+        OnSplineContainerModified(splineContainer);
+    }
+
+    private void OnSplineContainerRemoved(SplineContainer splineContainer, int splineIndex)
+    {
+        OnSplineContainerModified(splineContainer);
     }
 
     private void Update()
@@ -370,7 +411,10 @@ public class WorldBuildingSystem : MonoBehaviour
             return;
         
         m_WorldBuilders.Add(worldBuilder);
-        worldBuilder.ProcessSpline(null);
+        if (m_IsReloadingDomain)
+        {
+            return;
+        }
         m_IsDirty = true;
     }
 
@@ -389,6 +433,7 @@ public class WorldBuildingSystem : MonoBehaviour
 
     [SerializeField]
     private RenderTexture m_MaskRenderTexture;
+    
     private const int kMaskTextureWidth = 256;
     private const int kMaskTextureHeight = 256;
 
@@ -455,12 +500,6 @@ public class WorldBuildingSystem : MonoBehaviour
         foreach (var builder in m_WorldBuilders)
         {
             builder.IsDirty = false;
-            builder.GenerateMask(m_MaskRenderTexture);
-        }
-        
-        
-        foreach (var builder in m_WorldBuilders)
-        {
             m_WorldBuildingContext.CurrentTransform = builder.TransformMatrix;
             builder.ApplyHeights(m_WorldBuildingContext);
         }

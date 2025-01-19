@@ -10,6 +10,7 @@ public class SplineRegion : BaseWorldBuilder
 {
     [SerializeReference][HideInInspector]
     SplineContainer m_SplineContainer;
+    public override SplineContainer SplinContainer => m_SplineContainer;
 
     // Mask Texture.
     [SerializeField] private Texture m_MaskTexture;
@@ -84,12 +85,11 @@ public class SplineRegion : BaseWorldBuilder
 
     protected override void OnEnable()
     {
+        m_SplineContainer = GetComponent<SplineContainer>();
         base.OnEnable();
 
         FindComputeShader();
     }
-
-    public override IReadOnlyList<Spline> Splines => m_SplineContainer.Splines;
 
 
     public override void ApplyHeights(WorldBuildingContext context)
@@ -262,19 +262,6 @@ public class SplineRegion : BaseWorldBuilder
         DestroyObjects();
         SpawnObjects();
     }*/
-    
-    public override void ProcessSpline(Spline spline)
-    {
-        if (m_SplineContainer == null)
-        {
-            m_SplineContainer = GetComponent<SplineContainer>();
-        }
-        /*if (m_SplineCache == null)
-        {
-            m_SplineCache = new SplineCache();
-        }
-        m_SplineCache.BakeRegion(m_SplineContainer, Resolution);*/
-    }
 
     public override void GenerateMask(RenderTexture renderTexture)
     {

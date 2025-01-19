@@ -66,15 +66,13 @@ public abstract class BaseWorldBuilder : MonoBehaviour, IWorldBuilder
             worldBuildingSystem.RemoveWorldBuilder(this);
         }
     }
-    
+
+    public virtual SplineContainer SplinContainer => null;
     public abstract void ApplyHeights(WorldBuildingContext context);
     public abstract void ApplySplatmap(WorldBuildingContext context);
     public abstract void SpawnGameObjects(WorldBuildingContext context);
-    public abstract void ProcessSpline(Spline spline);
     public abstract Bounds WorldBounds { get; }
     public abstract void GenerateMask(RenderTexture renderTexture);
-
-    public virtual IReadOnlyList<Spline> Splines => null;
     public List<ITerrainSplatModifier> TerrainSplatModifiers => m_Modifiers.TerrainSplatModifiers;
 
     /*public void AddModifier(IWorldModifier modifier)
