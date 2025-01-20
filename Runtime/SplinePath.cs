@@ -51,8 +51,11 @@ public class SplinePath : BaseWorldBuilder
         base.OnEnable();
     }
 
-    public override void GenerateMask(RenderTexture renderTexture)
+    public override void GenerateMask()
     {
+        RenderTexture renderTexture = RenderTexture.GetTemporary(kMaskTextureWidth, kMaskTextureHeight, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+        renderTexture.enableRandomWrite = true;
+        
         FindSplineMaskMaterial();
         if (m_MaskTexture == null)
         {
@@ -89,6 +92,8 @@ public class SplinePath : BaseWorldBuilder
         
         m_MaskTexture = SDFGeneratorUtility.InvertBlackWhiteTexture(renderTexture, ref m_MaskTexture);
         m_MaskTexture = SDFGeneratorUtility.GenerateSDFTexture(m_MaskTexture, ref m_MaskTexture);
+        
+        RenderTexture.ReleaseTemporary(renderTexture);
     }
 
     public override void ApplyHeights(WorldBuildingContext context)

@@ -19,7 +19,7 @@ public interface IWorldBuilder
     public void SpawnGameObjects(WorldBuildingContext context);
     
     public Bounds WorldBounds { get; }
-    public void GenerateMask(RenderTexture renderTexture);
+    public void GenerateMask();
     
     public List<ITerrainSplatModifier> TerrainSplatModifiers { get; }
 }

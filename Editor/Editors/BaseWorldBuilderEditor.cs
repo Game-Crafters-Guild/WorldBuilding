@@ -33,7 +33,14 @@ public class BaseWorldBuilderEditor : Editor
             inspector.Add(modfiersField);
         }
         
+        inspector.TrackSerializedObjectValue(serializedObject, OnSerializedObjectChanged);
+        
         // Return the finished Inspector UI.
         return inspector;
+    }
+    
+    private void OnSerializedObjectChanged(SerializedObject obj)
+    {
+        Target.IsDirty = true;
     }
 }

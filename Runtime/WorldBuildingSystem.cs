@@ -89,12 +89,6 @@ public class WorldBuildingSystem : MonoBehaviour
 #endif
 
         CreateFullScreenQuad();
-
-        if (m_MaskRenderTexture == null)
-        {
-            m_MaskRenderTexture = new RenderTexture(kMaskTextureWidth, kMaskTextureHeight, 0, RenderTextureFormat.ARGB32);
-            m_MaskRenderTexture.enableRandomWrite = true;
-        }
     }
 
     private void CreateFullScreenQuad()
@@ -168,7 +162,7 @@ public class WorldBuildingSystem : MonoBehaviour
             {
                 if (spline == modifiedSpline)
                 {
-                    builder.GenerateMask(m_MaskRenderTexture);
+                    builder.GenerateMask();
                     builder.IsDirty = true;
                     modifiedBuilder = builder;
                     break;
@@ -191,7 +185,7 @@ public class WorldBuildingSystem : MonoBehaviour
         {
             if (builder.SplinContainer == modifiedSplineContainer)
             {
-                builder.GenerateMask(m_MaskRenderTexture);
+                builder.GenerateMask();
                 builder.IsDirty = true;
                 modifiedBuilder = builder;
                 break;
@@ -263,7 +257,7 @@ public class WorldBuildingSystem : MonoBehaviour
 
         if (worldBuilder.IsDirty)
         {
-            worldBuilder.GenerateMask(m_MaskRenderTexture);
+            worldBuilder.GenerateMask();
         }
         m_IsDirty = true;
     }
@@ -280,9 +274,6 @@ public class WorldBuildingSystem : MonoBehaviour
     private WorldBuildingContext m_WorldBuildingContext;
     [SerializeField]
     private bool m_IsGenerating;
-
-    [SerializeField]
-    private RenderTexture m_MaskRenderTexture;
     
     private const int kMaskTextureWidth = 256;
     private const int kMaskTextureHeight = 256;

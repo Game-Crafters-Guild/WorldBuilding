@@ -88,7 +88,7 @@ public abstract class BaseWorldBuilder : MonoBehaviour, IWorldBuilder
     public abstract void ApplyHeights(WorldBuildingContext context);
     public abstract void ApplySplatmap(WorldBuildingContext context);
     public abstract void SpawnGameObjects(WorldBuildingContext context);
-    public abstract void GenerateMask(RenderTexture renderTexture);
+    public abstract void GenerateMask();
     public List<ITerrainSplatModifier> TerrainSplatModifiers => m_Modifiers.TerrainSplatModifiers;
 
     /*public void AddModifier(IWorldModifier modifier)

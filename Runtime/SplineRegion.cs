@@ -259,8 +259,11 @@ public class SplineRegion : BaseWorldBuilder
         SpawnObjects();
     }*/
 
-    public override void GenerateMask(RenderTexture renderTexture)
+    public override void GenerateMask()
     {
+        RenderTexture renderTexture = RenderTexture.GetTemporary(kMaskTextureWidth, kMaskTextureHeight, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+        renderTexture.enableRandomWrite = true;
+
         CalculateWorldBounds();
         if (m_MaskTexture == null)
         {
@@ -299,6 +302,8 @@ public class SplineRegion : BaseWorldBuilder
         splinePointsComputeBuffer.Release();
 
         m_MaskTexture = SDFGeneratorUtility.GenerateSDFTexture(renderTexture, ref m_MaskTexture);
+        
+        RenderTexture.ReleaseTemporary(renderTexture);
     }
     
     private NativeArray<float3> EvaluatePointsAlongSpline(Spline spline, float resolution)
