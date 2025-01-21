@@ -26,7 +26,7 @@ public class NoiseProperties
     [Range(0.0f, 1.0f)]
     public float Persistence = 0.5f;
     [Min(1.0f)]
-    public float Lacunarity = 2.0f;
+    public float Lacunarity = 1.0f;
     [Min(0.0f)]
     public float HeightMin = 0.0f;
     //[Range(0.0f, 1.0f)]

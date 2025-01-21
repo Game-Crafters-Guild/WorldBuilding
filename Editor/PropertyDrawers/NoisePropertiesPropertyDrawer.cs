@@ -19,14 +19,8 @@ public class NoisePropertiesPropertyDrawer : PropertyDrawer
         while (!SerializedProperty.EqualContents(childProperty, endProperty))
         {
             var propertyField = new PropertyField(childProperty);
-            if (childProperty.name == "NoiseResolution")
-            {
-                property.serializedObject.ApplyModifiedProperties();
-            }
-            else
-            {
-                propertyField.RegisterValueChangeCallback(OnPropertyValueChanged);
-            }
+            propertyField.Bind(childProperty.serializedObject);
+            propertyField.TrackPropertyValue(childProperty, OnPropertyValueChanged);
 
             container.Add(propertyField);
             childProperty.NextVisible(false);
@@ -38,8 +32,12 @@ public class NoisePropertiesPropertyDrawer : PropertyDrawer
         
         return container;
         
-        void OnPropertyValueChanged(SerializedPropertyChangeEvent evt)
+        void OnPropertyValueChanged(SerializedProperty serializedProperty)
         {
+            if (serializedProperty.name == "NoiseResolution")
+            {
+                return;
+            }
             var dirtyProperty = property?.FindPropertyRelative("m_IsDirty");
             if (dirtyProperty != null)
             {
