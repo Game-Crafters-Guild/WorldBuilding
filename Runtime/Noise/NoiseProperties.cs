@@ -16,13 +16,13 @@ public class NoiseProperties
     public NoiseFunction NoiseType;
     [Range(1, 10000000)]
     public uint Seed = 1;
-    [Min(0.01f)]
+    [Range(1, 20)]
     public float NoiseScale = 10.0f;
     public Vector2 NoiseOffset;
     [Range(4, 2048)]
     public int NoiseResolution = 64;
     [Range(1, 12)]
-    public int NumOctaves = 4;
+    public int NumOctaves = 1;
     [Range(0.0f, 1.0f)]
     public float Persistence = 0.5f;
     [Min(1.0f)]

@@ -7,12 +7,13 @@ using UnityEngine;
 [Serializable]
 public class NoiseHeightModifier : ITerrainHeightModifier
 {
+    public HeightWriteMode Mode;
+    public MaskFalloff Fallof;
     [SerializeReference]
     public NoiseProperties NoiseProperties = new NoiseProperties();
     
+    [HideInInspector]
     public Texture2D NoiseTexture;
-    public HeightWriteMode Mode;
-    public MaskFalloff Fallof;
     public override string FilePath => GetFilePath();
     
     public override void ApplyHeightmap(WorldBuildingContext context, Bounds worldBounds, Texture mask)

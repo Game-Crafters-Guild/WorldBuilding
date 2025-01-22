@@ -11,7 +11,16 @@ public class NoisePropertiesPropertyDrawer : PropertyDrawer
     public override VisualElement CreatePropertyGUI(SerializedProperty property)
     {
         VisualElement container = new VisualElement();
+        
+        VisualElement imageContainer = new VisualElement();
+        imageContainer.style.alignItems = Align.Center;
+        imageContainer.style.marginBottom = imageContainer.style.marginTop = imageContainer.style.marginLeft = imageContainer.style.marginRight = 4;
+        
         Image image = new Image();
+        image.style.maxWidth = 200;
+        image.style.maxHeight = 200;
+        imageContainer.Add(image);
+        
 
         var childProperty = property.Copy();
         var endProperty = childProperty.GetEndProperty();
@@ -27,8 +36,17 @@ public class NoisePropertiesPropertyDrawer : PropertyDrawer
         }
 
         GenerateNoiseTexture(image, property);
-        container.Add(image);
-        image.RegisterCallback<GeometryChangedEvent>(OnImageGeometryChanged);
+        container.Add(imageContainer);
+        imageContainer.RegisterCallback<GeometryChangedEvent>(OnImageGeometryChanged);
+        
+        void OnImageGeometryChanged(GeometryChangedEvent evt)
+        {
+            if (Mathf.Approximately(evt.newRect.size.x, evt.newRect.size.y))
+            {
+                return;
+            }
+            image.style.height = image.style.width = evt.newRect.size.x;
+        }
         
         return container;
         
@@ -59,14 +77,5 @@ public class NoisePropertiesPropertyDrawer : PropertyDrawer
         var noiseMap = NoiseGenerator.FromNoiseProperties(properties, Allocator.Temp);
         image.image = NoiseGenerator.GenerateNoiseTexture(noiseMap, new int2(properties.NoiseResolution, properties.NoiseResolution));
         noiseMap.Dispose();
-    }
-
-    private void OnImageGeometryChanged(GeometryChangedEvent evt)
-    {
-        if (!Mathf.Approximately(evt.newRect.size.x, evt.newRect.size.y))
-        {
-            Image image = evt.target as Image;
-            image.style.height = evt.newRect.size.x;
-        }
     }
 }
