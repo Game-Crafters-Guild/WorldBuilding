@@ -26,12 +26,19 @@ public class WorldBuildingContext
     public void ApplyHeightmap(Bounds worldBounds, Texture heightmap, Texture mask, HeightWriteMode mode, float minHeight = 0.0f, float maxHeight = 10.0f)
     {
         float4 heightRangeNormalized = new float4(/*Mathf.Clamp01*/(minHeight / MaxTerrainHeight), /*Mathf.Clamp01*/(maxHeight / MaxTerrainHeight), 0.0f, 0.0f);
+        float3 scaledSplineExtents = CurrentTransform.MultiplyVector(worldBounds.extents);
 
+        float4 falloff = new Vector4(MaskFalloff.Min, MaskFalloff.Max, 0.0f, 0.0f);
+        float4 splineMeshBoundsY = new Vector4(worldBounds.center.y - scaledSplineExtents.y, worldBounds.center.y + scaledSplineExtents.y, 0.0f, 0.0f);
+        float4 terrainWorldHeightRange =
+            new float4(m_TerrainPosition.y, m_TerrainPosition.y + MaxTerrainHeight, 0.0f, 0.0f);
         MaterialPropertyBlock materialPropertyBlock = new MaterialPropertyBlock();
         materialPropertyBlock.SetTexture("_Mask", mask);
         materialPropertyBlock.SetTexture("_Data", heightmap != null ? heightmap : Texture2D.whiteTexture);
         materialPropertyBlock.SetVector("_HeightRange", heightRangeNormalized);
-        materialPropertyBlock.SetVector("_Falloff", new Vector4(MaskFalloff.Min, MaskFalloff.Max));
+        materialPropertyBlock.SetVector("_Falloff", falloff);
+        materialPropertyBlock.SetVector("_SplineMeshBoundsY", splineMeshBoundsY);
+        materialPropertyBlock.SetVector("_TerrainWorldHeightRange", terrainWorldHeightRange);
         SetBlendMode(mode, m_ApplyHeightmapMaterial);
         DrawQuad(worldBounds, HeightmapRenderTexture, m_ApplyHeightmapMaterial, materialPropertyBlock);
         
@@ -92,7 +99,7 @@ public class WorldBuildingContext
         
         Matrix4x4 transform = Matrix4x4.TRS(new Vector3(positionToTerrainSpace.x, 0.0f, positionToTerrainSpace.y),
             quaternion.identity, new Vector3(sizeToTerrainSpace.x, 1.0f, sizeToTerrainSpace.y) * aspectRatio) * worldTransform;
-        cmd.DrawMesh(m_Quad, transform, material, 0, 0, properties: materialPropertyBlock);
+        cmd.DrawMesh(m_Quad, transform, material, 0, 1, properties: materialPropertyBlock);
         Graphics.ExecuteCommandBuffer(cmd);
     }
     

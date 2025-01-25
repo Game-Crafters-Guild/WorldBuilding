@@ -46,7 +46,6 @@ void CSMain (uint3 id : SV_DispatchThreadID)
     float3 position = float3(RegionMin.x + uv.x * RegionSize.x, 0.0f, RegionMin.z + uv.y * RegionSize.z);
     bool isInSpline = IsPointInsidePolygon(position);
 
-    //Result[id.xy] = isInSpline ? float4(1.0f, 1.0f, 1.0f, 1.0f) : float4(0.0f, 0.0f, 0.0f, 0.0f);
-    Result[id.xy] = isInSpline ? float4(0.0f, 0.0f, 0.0f, 0.0f) : float4(1.0f, 1.0f, 1.0f, 1.0f);
+    Result[id.xy] = isInSpline ? float4(0.0f, 0.0f, 0.0f, 0.0f) : float4(1.0f, 1.0f, 0.0f, 1.0f);
 }
 
