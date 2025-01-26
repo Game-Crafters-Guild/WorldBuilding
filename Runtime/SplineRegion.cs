@@ -285,8 +285,15 @@ public class SplineRegion : BaseWorldBuilder
         }
 
         var splinePoints = EvaluatePointsAlongSpline(spline, 0.2f);
+        int workgroupsX = Mathf.CeilToInt(kMaskTextureWidth / 8.0f);
+        int workgroupsY = Mathf.CeilToInt(kMaskTextureHeight / 8.0f);
     
         int kernel = m_CreateSplineAreaTextureComputeShader.FindKernel("CSMain");
+        ComputeBuffer furthestDistanceBuffer = new ComputeBuffer(1, sizeof(uint));
+        NativeArray<uint> furthestDistance = new NativeArray<uint>(1, Allocator.Temp, NativeArrayOptions.ClearMemory);
+        furthestDistanceBuffer.SetData(furthestDistance);
+        furthestDistance.Dispose();
+        m_CreateSplineAreaTextureComputeShader.SetBuffer(kernel, "furthestDistance", furthestDistanceBuffer);
         m_CreateSplineAreaTextureComputeShader.SetTexture(kernel, kComputeResultId, renderTexture);
         m_CreateSplineAreaTextureComputeShader.SetVector(kComputeRegionMinId, splineBounds.min);
         m_CreateSplineAreaTextureComputeShader.SetVector(kComputeRegionSizeId, splineBounds.size);
@@ -294,14 +301,19 @@ public class SplineRegion : BaseWorldBuilder
         ComputeBuffer splinePointsComputeBuffer = new ComputeBuffer(splinePoints.Length, sizeof(float) * 3);
         splinePointsComputeBuffer.SetData(splinePoints);
         m_CreateSplineAreaTextureComputeShader.SetBuffer(kernel, kComputeSplinePositions, splinePointsComputeBuffer);
-    
-        int workgroupsX = Mathf.CeilToInt(kMaskTextureWidth / 8.0f);
-        int workgroupsY = Mathf.CeilToInt(kMaskTextureHeight / 8.0f);
         m_CreateSplineAreaTextureComputeShader.Dispatch(kernel, workgroupsX, workgroupsY, 1);
         splinePoints.Dispose();
         splinePointsComputeBuffer.Release();
-
-        m_MaskTexture = SDFGeneratorUtility.GenerateSDFTexture(renderTexture, ref m_MaskTexture);
+        
+        // Normalize the distances.
+        int normalizeDistancesKernel = m_CreateSplineAreaTextureComputeShader.FindKernel("CSCalculateNormalizedDistances");
+        m_CreateSplineAreaTextureComputeShader.SetBuffer(normalizeDistancesKernel, "furthestDistance", furthestDistanceBuffer);
+        m_CreateSplineAreaTextureComputeShader.SetTexture(normalizeDistancesKernel, kComputeResultId, renderTexture);
+        m_CreateSplineAreaTextureComputeShader.Dispatch(normalizeDistancesKernel, workgroupsX, workgroupsY, 1);
+        
+        furthestDistanceBuffer.Dispose();
+        Graphics.CopyTexture(renderTexture, m_MaskTexture);
+        //m_MaskTexture = SDFGeneratorUtility.GenerateSDFTexture(renderTexture, ref m_MaskTexture);
         
         RenderTexture.ReleaseTemporary(renderTexture);
     }

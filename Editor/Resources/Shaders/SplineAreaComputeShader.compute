@@ -1,21 +1,58 @@
 #pragma kernel CSMain
+#pragma kernel CSCalculateNormalizedDistances
 
 RWTexture2D<float4> Result;
 StructuredBuffer<float3> SplinePositions;
+RWStructuredBuffer<uint> furthestDistance;
 uniform int NumPositions;
 uniform float4 RegionMin;
 uniform float4 RegionSize;
 
-bool IsPointInsidePolygon(float3 position)
+
+float3 GetPointInSegment(float3 position, float3 p0, float3 p1)
+{
+    float3 v = p1 - p0;
+    float3 w = position - p0;
+
+    float c1 = dot(w,v);
+    if ( c1 <= 0 )   // the closest point is outside the segment and nearer to P0
+        return p0;
+
+    float c2 = dot(v,v);
+    if ( c2 <= c1 )  // the closest point is outside the segment and nearer to P1
+        return p1;
+
+    float b = c1 / c2;
+    float3 Pb = p0 + b * v;
+    return Pb;
+}
+
+uint GetDistanceToSegmentSq(float3 position, float3 p0, float3 p1)
+{
+    float3 closestPointInSegment = GetPointInSegment(position, p0, p1);
+    int2 toSample = position.xz - closestPointInSegment.xz;
+    uint distanceSq = toSample.x * toSample.x + toSample.y * toSample.y;
+    return distanceSq;
+}
+
+bool IsPointInsidePolygon(float3 position, out uint distanceSq)
 {
     uint intersections = 0;
     int vertexCount = NumPositions;
+    uint closestDistanceSq = 1000000000;
  
     // Iterate over each edge of the polygon
     for (int i = 0, j = vertexCount - 1; i < vertexCount; j = i++)
     {
         float3 vertex1 = SplinePositions[i];
         float3 vertex2 = SplinePositions[j];
+        vertex1.y = 0.0;
+        vertex2.y = 0.0;
+
+        uint distanceToSegmentSq = GetDistanceToSegmentSq(position, vertex1, vertex2);
+        if (distanceToSegmentSq < closestDistanceSq) {
+            closestDistanceSq = distanceToSegmentSq;
+        }
  
         // Check if the edge crosses the horizontal ray originating from the point
         bool crossesRay = (vertex1.z > position.z) != (vertex2.z > position.z);
@@ -33,6 +70,7 @@ bool IsPointInsidePolygon(float3 position)
         }
     }
     // Odd number of intersections means the point is inside
+    distanceSq = closestDistanceSq;
     return intersections % 2 != 0;
 }
 
@@ -44,8 +82,23 @@ void CSMain (uint3 id : SV_DispatchThreadID)
     Result.GetDimensions(outputTextureWidth, outputTextureHeight);
     float2 uv = id.xy / float2(outputTextureWidth, outputTextureHeight);
     float3 position = float3(RegionMin.x + uv.x * RegionSize.x, 0.0f, RegionMin.z + uv.y * RegionSize.z);
-    bool isInSpline = IsPointInsidePolygon(position);
+    uint distanceSq = 0.0;
+    bool isInSpline = IsPointInsidePolygon(position, distanceSq);
 
-    Result[id.xy] = isInSpline ? float4(0.0f, 0.0f, 0.0f, 0.0f) : float4(1.0f, 1.0f, 0.0f, 1.0f);
+    if (!isInSpline)
+    {
+        distanceSq = 0;
+    }
+    InterlockedMax(furthestDistance[0], distanceSq);
+    //float distance = sqrt((float)distanceSq) / sqrt((float)furthestDistance[0]);
+    float distance = saturate (sqrt((float)distanceSq) / max(RegionSize.x, RegionSize.z));
+    Result[id.xy] = isInSpline ? float4(distance, distance, 0.0f, distance) : float4(0.0f, 0.0f, 0.0f, 0.0f);
+}
+
+[numthreads(8,8,1)]
+void CSCalculateNormalizedDistances (uint3 id : SV_DispatchThreadID)
+{
+    float distance = Result[id.xy].x * max(RegionSize.x, RegionSize.z) / sqrt((float)furthestDistance[0]);
+    Result[id.xy] = float4(distance, distance, 0.0f, distance);
 }
 
