@@ -314,6 +314,13 @@ public class SplineRegion : BaseWorldBuilder
         furthestDistanceBuffer.Dispose();
         Graphics.CopyTexture(renderTexture, m_MaskTexture);
         
+        // Blur the SDF.
+        int blurSDFKernel = m_CreateSplineAreaTextureComputeShader.FindKernel("CSBlurSDF");
+        m_CreateSplineAreaTextureComputeShader.SetTexture(blurSDFKernel, kComputeResultId, renderTexture);
+        m_CreateSplineAreaTextureComputeShader.SetTexture(blurSDFKernel, "SDF", m_MaskTexture);
+        m_CreateSplineAreaTextureComputeShader.Dispatch(blurSDFKernel, workgroupsX, workgroupsY, 1);
+        
+        Graphics.CopyTexture(renderTexture, m_MaskTexture);
         RenderTexture.ReleaseTemporary(renderTexture);
     }
     

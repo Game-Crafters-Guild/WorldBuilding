@@ -1,5 +1,6 @@
 #pragma kernel CSMain
 #pragma kernel CSCalculateNormalizedDistances
+#pragma kernel CSBlurSDF
 
 RWTexture2D<float4> Result;
 StructuredBuffer<float3> SplinePositions;
@@ -30,7 +31,7 @@ float3 GetPointInSegment(float3 position, float3 p0, float3 p1)
 uint GetDistanceToSegmentSq(float3 position, float3 p0, float3 p1)
 {
     float3 closestPointInSegment = GetPointInSegment(position, p0, p1);
-    int2 toSample = position.xz - closestPointInSegment.xz;
+    float2 toSample = position.xz - closestPointInSegment.xz;
     uint distanceSq = toSample.x * toSample.x + toSample.y * toSample.y;
     return distanceSq;
 }
@@ -82,7 +83,7 @@ void CSMain (uint3 id : SV_DispatchThreadID)
     Result.GetDimensions(outputTextureWidth, outputTextureHeight);
     float2 uv = id.xy / float2(outputTextureWidth, outputTextureHeight);
     float3 position = float3(RegionMin.x + uv.x * RegionSize.x, 0.0f, RegionMin.z + uv.y * RegionSize.z);
-    uint distanceSq = 0.0;
+    uint distanceSq = 0;
     bool isInSpline = IsPointInsidePolygon(position, distanceSq);
 
     if (!isInSpline)
@@ -90,15 +91,34 @@ void CSMain (uint3 id : SV_DispatchThreadID)
         distanceSq = 0;
     }
     InterlockedMax(furthestDistance[0], distanceSq);
-    //float distance = sqrt((float)distanceSq) / sqrt((float)furthestDistance[0]);
-    float distance = saturate (sqrt((float)distanceSq) / max(RegionSize.x, RegionSize.z));
+    float distance = sqrt((float)distanceSq) / max(RegionSize.x, RegionSize.z);
     Result[id.xy] = isInSpline ? float4(distance, distance, 0.0f, distance) : float4(0.0f, 0.0f, 0.0f, 0.0f);
 }
 
 [numthreads(8,8,1)]
 void CSCalculateNormalizedDistances (uint3 id : SV_DispatchThreadID)
 {
-    float distance = Result[id.xy].x * max(RegionSize.x, RegionSize.z) / sqrt((float)furthestDistance[0]);
+    float distance = saturate((Result[id.xy].x * max(RegionSize.x, RegionSize.z)) / sqrt((float)furthestDistance[0]));
     Result[id.xy] = float4(distance, distance, 0.0f, distance);
+}
+
+Texture2D<float4> SDF;
+[numthreads(8,8,1)]
+void CSBlurSDF(uint3 id : SV_DispatchThreadID)
+{
+    const int kBlurSize = 3;
+    float total = 0.0;
+    float count = 0;
+    for (int x = -kBlurSize; x <= kBlurSize; x++)
+    {
+        for (int y = -kBlurSize; y <= kBlurSize; y++)
+        {
+            int3 pos = int3(id.x + x, id.y + y, 0);
+            total += SDF.Load(pos).x;
+            count += 1;
+        }
+    }
+    float average = total / count;
+    Result[id.xy] = float4(average, average, 0.0f, average);
 }
 
