@@ -32,14 +32,27 @@ public class BaseWorldBuilderEditor : Editor
             inspector.Remove(modfiersField);
             inspector.Add(modfiersField);
         }
+
         
-        inspector.TrackSerializedObjectValue(serializedObject, OnSerializedObjectChanged);
-        
+        inspector.RegisterCallbackOnce<GeometryChangedEvent>(evt =>
+        {
+            VisualElement target = evt.target as VisualElement;
+            target?.schedule.Execute(() =>
+            {
+                foreach (var child in inspector.Children())
+                {
+                    if (child is PropertyField propertyField)
+                    {
+                        propertyField.RegisterValueChangeCallback(OnPropertyFieldValueChanged);
+                    }
+                }
+            });
+        });
         // Return the finished Inspector UI.
         return inspector;
     }
-    
-    private void OnSerializedObjectChanged(SerializedObject obj)
+
+    private void OnPropertyFieldValueChanged(SerializedPropertyChangeEvent evt)
     {
         Target.IsDirty = true;
     }
