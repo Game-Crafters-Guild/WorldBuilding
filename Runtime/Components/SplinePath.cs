@@ -37,7 +37,7 @@ public class SplinePath : BaseWorldBuilder
 #if UNITY_EDITOR
         if (m_SplineToMaskMaterial == null)
         {
-            m_SplineToMaskMaterial = Resources.Load<Material>("Materials/Unlit");
+            m_SplineToMaskMaterial = Resources.Load<Material>("Materials/GenerateSplinePathMask");
         }
 #endif
     }

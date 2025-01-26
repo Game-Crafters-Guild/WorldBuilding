@@ -313,7 +313,6 @@ public class SplineRegion : BaseWorldBuilder
         
         furthestDistanceBuffer.Dispose();
         Graphics.CopyTexture(renderTexture, m_MaskTexture);
-        //m_MaskTexture = SDFGeneratorUtility.GenerateSDFTexture(renderTexture, ref m_MaskTexture);
         
         RenderTexture.ReleaseTemporary(renderTexture);
     }
