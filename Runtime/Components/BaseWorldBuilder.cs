@@ -54,6 +54,7 @@ public abstract class BaseWorldBuilder : MonoBehaviour, IWorldBuilder
         set => m_IsDirty = value;
     }
 
+    [HideInInspector]
     [SerializeField] private bool m_IsDirty = true;
 
     private void OnDestroy()
@@ -63,6 +64,11 @@ public abstract class BaseWorldBuilder : MonoBehaviour, IWorldBuilder
         {
             worldBuildingSystem.RemoveWorldBuilder(this);
         }
+    }
+
+    private void Awake()
+    {
+        m_Modifiers.TerrainHeightModifiers.Add(new ApplyTransformToHeightmap());
     }
 
     protected virtual void OnEnable()

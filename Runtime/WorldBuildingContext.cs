@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using Unity.Mathematics;
 using UnityEngine;
-using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 using float2 = Unity.Mathematics.float2;
 
@@ -23,12 +22,31 @@ public class WorldBuildingContext
     internal Mesh m_Quad;
     internal Material m_ApplyHeightmapMaterial;
     internal Material m_ApplySplatmapMaterial;
+
+    public void ApplyRegionTransformsToHeightmap(Bounds worldBounds, Texture mask, HeightWriteMode mode = HeightWriteMode.Replace)
+    {
+        float3 scaledSplineExtents = CurrentTransform.MultiplyVector(worldBounds.extents);
+
+        float4 falloff = new Vector4(1.0f - MaskFalloff.Max, 1.0f - MaskFalloff.Min, 0.0f, 0.0f);
+        float4 splineMeshBoundsY = new Vector4(worldBounds.center.y - scaledSplineExtents.y, worldBounds.center.y + scaledSplineExtents.y, 0.0f, 0.0f);
+        float4 terrainWorldHeightRange =
+            new float4(m_TerrainPosition.y, m_TerrainPosition.y + MaxTerrainHeight, 0.0f, 0.0f);
+        MaterialPropertyBlock materialPropertyBlock = new MaterialPropertyBlock();
+        materialPropertyBlock.SetTexture("_Mask", mask);
+        materialPropertyBlock.SetTexture("_Data", Texture2D.blackTexture);
+        materialPropertyBlock.SetVector("_HeightRange", Vector4.zero);
+        materialPropertyBlock.SetVector("_Falloff", falloff);
+        materialPropertyBlock.SetVector("_SplineMeshBoundsY", splineMeshBoundsY);
+        materialPropertyBlock.SetVector("_TerrainWorldHeightRange", terrainWorldHeightRange);
+        SetBlendMode(mode, m_ApplyHeightmapMaterial);
+        DrawQuad(worldBounds, HeightmapRenderTexture, m_ApplyHeightmapMaterial, materialPropertyBlock, 1);
+    }
     public void ApplyHeightmap(Bounds worldBounds, Texture heightmap, Texture mask, HeightWriteMode mode, float minHeight = 0.0f, float maxHeight = 10.0f)
     {
         float4 heightRangeNormalized = new float4(/*Mathf.Clamp01*/(minHeight / MaxTerrainHeight), /*Mathf.Clamp01*/(maxHeight / MaxTerrainHeight), 0.0f, 0.0f);
         float3 scaledSplineExtents = CurrentTransform.MultiplyVector(worldBounds.extents);
 
-        float4 falloff = new Vector4(MaskFalloff.Min, MaskFalloff.Max, 0.0f, 0.0f);
+        float4 falloff = new Vector4(1.0f - MaskFalloff.Max, 1.0f - MaskFalloff.Min, 0.0f, 0.0f);
         float4 splineMeshBoundsY = new Vector4(worldBounds.center.y - scaledSplineExtents.y, worldBounds.center.y + scaledSplineExtents.y, 0.0f, 0.0f);
         float4 terrainWorldHeightRange =
             new float4(m_TerrainPosition.y, m_TerrainPosition.y + MaxTerrainHeight, 0.0f, 0.0f);
@@ -73,7 +91,7 @@ public class WorldBuildingContext
         }
     }
 
-    private void DrawQuad(Bounds worldBounds, RenderTexture renderTexture, Material material, MaterialPropertyBlock materialPropertyBlock)
+    private void DrawQuad(Bounds worldBounds, RenderTexture renderTexture, Material material, MaterialPropertyBlock materialPropertyBlock, int shaderPass = 0)
     {
         float2 positionToTerrainSpace = WorldPositionToTerrainSpace(worldBounds.center) - new float2(0.5f, 0.5f);
         float2 sizeToTerrainSpace = new float2(worldBounds.size.x, worldBounds.size.z) / m_TerrainSize;
@@ -99,7 +117,7 @@ public class WorldBuildingContext
         
         Matrix4x4 transform = Matrix4x4.TRS(new Vector3(positionToTerrainSpace.x, 0.0f, positionToTerrainSpace.y),
             quaternion.identity, new Vector3(sizeToTerrainSpace.x, 1.0f, sizeToTerrainSpace.y) * aspectRatio) * worldTransform;
-        cmd.DrawMesh(m_Quad, transform, material, 0, 1, properties: materialPropertyBlock);
+        cmd.DrawMesh(m_Quad, transform, material, 0, shaderPass, properties: materialPropertyBlock);
         Graphics.ExecuteCommandBuffer(cmd);
     }
     
@@ -145,7 +163,7 @@ public class WorldBuildingContext
         float4 intensityVector = float4.zero;
         intensityVector[terrainLayerIndex % 4] = intensity;
         materialPropertyBlock.SetVector("_Intensity", intensityVector);
-        materialPropertyBlock.SetVector("_Falloff", new Vector4(MaskFalloff.Min, MaskFalloff.Max));
+        materialPropertyBlock.SetVector("_Falloff", new Vector4(1.0f - MaskFalloff.Max, 1.0f - MaskFalloff.Min));
         DrawQuadSplat(worldBounds, layerRenderTarget, m_ApplySplatmapMaterial, materialPropertyBlock);
     }
     
