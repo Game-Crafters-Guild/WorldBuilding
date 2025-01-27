@@ -71,8 +71,11 @@ public class WorldBuildingSystem : MonoBehaviour
         m_IsGenerating = false;
 #if UNITY_EDITOR
         UnityEditor.Splines.EditorSplineUtility.AfterSplineWasModified += AfterSplineWasModified;
+        UnityEditor.Splines.EditorSplineUtility.RegisterSplineDataChanged<float>(OnAfterSplineDataWasModified);
+
         SplineContainer.SplineAdded += OnSplineContainerAdded;
         SplineContainer.SplineRemoved += OnSplineContainerRemoved;
+        SplineContainer.SplineReordered += OnSplineContainerReordered;
         UnityEditor.AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
         UnityEditor.AssemblyReloadEvents.afterAssemblyReload += OnAfterAssemblyReload;
         
@@ -133,13 +136,15 @@ public class WorldBuildingSystem : MonoBehaviour
     {
 #if UNITY_EDITOR
         UnityEditor.Splines.EditorSplineUtility.AfterSplineWasModified -= AfterSplineWasModified;
+        UnityEditor.Splines.EditorSplineUtility.UnregisterSplineDataChanged<float>(OnAfterSplineDataWasModified);
         SplineContainer.SplineAdded -= OnSplineContainerAdded;
         SplineContainer.SplineRemoved -= OnSplineContainerRemoved;
+        SplineContainer.SplineReordered -= OnSplineContainerReordered;
         UnityEditor.AssemblyReloadEvents.beforeAssemblyReload -= OnBeforeAssemblyReload;
         UnityEditor.AssemblyReloadEvents.afterAssemblyReload -= OnAfterAssemblyReload;
 #endif
     }
-    
+
     private void OnBeforeAssemblyReload()
     {
         m_IsReloadingDomain = true;
@@ -150,7 +155,6 @@ public class WorldBuildingSystem : MonoBehaviour
         m_IsReloadingDomain = false;
     }
 
-    
     private void AfterSplineWasModified(Spline modifiedSpline)
     {
         IWorldBuilder modifiedBuilder = null;
@@ -174,6 +178,22 @@ public class WorldBuildingSystem : MonoBehaviour
         if (modifiedBuilder == null)
         {
             return;
+        }
+        Generate();
+    }
+    
+    void OnAfterSplineDataWasModified(SplineData<float> splineData)
+    {
+        IWorldBuilder modifiedBuilder = null;
+        foreach (var builder in m_WorldBuilders)
+        {
+            if (builder.ContainsSplineData(splineData))
+            {
+                modifiedBuilder = builder;
+                builder.GenerateMask();
+                builder.IsDirty = true;
+                break;
+            }
         }
         Generate();
     }
@@ -208,6 +228,11 @@ public class WorldBuildingSystem : MonoBehaviour
     private void OnSplineContainerRemoved(SplineContainer splineContainer, int splineIndex)
     {
         OnSplineContainerModified(splineContainer);
+    }
+    
+    void OnSplineContainerReordered(SplineContainer container, int previousIndex, int newIndex)
+    {
+        
     }
 
     private void Update()

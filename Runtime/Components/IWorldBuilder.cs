@@ -22,4 +22,5 @@ public interface IWorldBuilder
     public void GenerateMask();
     
     public List<ITerrainSplatModifier> TerrainSplatModifiers { get; }
+    public bool ContainsSplineData(SplineData<float> splineData);
 }

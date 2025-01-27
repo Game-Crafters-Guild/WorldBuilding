@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
@@ -21,6 +22,24 @@ public class SplinePath : BaseWorldBuilder
     [SerializeField] private Material m_SplineToMaskMaterial;
     private const int kMaskTextureWidth = 256;
     private const int kMaskTextureHeight = 256;
+    
+    [SerializeField]
+    List<SplineData<float>> m_Widths = new List<SplineData<float>>();
+    public List<SplineData<float>> Widths
+    {
+        get
+        {
+            foreach (var width in m_Widths)
+            {
+                if (width.DefaultValue == 0)
+                {
+                    width.DefaultValue = Width;
+                }
+            }
+
+            return m_Widths;
+        }
+    }
 
     private void OnValidate()
     {
@@ -129,15 +148,15 @@ public class SplinePath : BaseWorldBuilder
             var tangent = math.normalizesafe(math.cross(up, dir)) * new float3(1f / scale.x, 1f / scale.y, 1f / scale.z);
 
             var w = Width;
-            /*if (widthDataIndex < m_Widths.Count)
+            if (widthDataIndex < m_Widths.Count)
             {
                 w = m_Widths[widthDataIndex].DefaultValue;
                 if (m_Widths[widthDataIndex] != null && m_Widths[widthDataIndex].Count > 0)
                 {
-                    w = m_Widths[widthDataIndex].Evaluate(spline, t, PathIndexUnit.Normalized, new Interpolators.LerpFloat());
+                    w = m_Widths[widthDataIndex].Evaluate(spline, t, PathIndexUnit.Normalized, new UnityEngine.Splines.Interpolators.LerpFloat());
                     w = math.clamp(w, .001f, 10000f);
                 }
-            }*/
+            }
 
             positions.Add(pos - (tangent * w));
             positions.Add(pos + (tangent * w));
@@ -230,5 +249,10 @@ public class SplinePath : BaseWorldBuilder
     public override void SpawnGameObjects(WorldBuildingContext context)
     {
         
+    }
+    
+    public override bool ContainsSplineData(SplineData<float> splineData)
+    {
+        return Widths.Contains(splineData);
     }
 }

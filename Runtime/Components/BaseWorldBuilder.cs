@@ -96,6 +96,10 @@ public abstract class BaseWorldBuilder : MonoBehaviour, IWorldBuilder
     public abstract void SpawnGameObjects(WorldBuildingContext context);
     public abstract void GenerateMask();
     public List<ITerrainSplatModifier> TerrainSplatModifiers => m_Modifiers.TerrainSplatModifiers;
+    public virtual bool ContainsSplineData(SplineData<float> splineData)
+    {
+        return false;
+    }
 
     /*public void AddModifier(IWorldModifier modifier)
     {
