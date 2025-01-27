@@ -3,7 +3,7 @@ using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine.UIElements;
 
-[CustomEditor(typeof(BaseWorldBuilder), editorForChildClasses: false)]
+[CustomEditor(typeof(BaseWorldBuilder), editorForChildClasses: true)]
 public class BaseWorldBuilderEditor : Editor
 { 
     //public List<

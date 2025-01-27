@@ -14,6 +14,7 @@ public class SplineRegion : BaseWorldBuilder
 
     // Mask Texture.
     [SerializeField] private Texture m_MaskTexture;
+    protected override Texture MaskTexture => m_MaskTexture;
     private const int kMaskTextureWidth = 256;
     private const int kMaskTextureHeight = 256;
     
@@ -85,25 +86,6 @@ public class SplineRegion : BaseWorldBuilder
         base.OnEnable();
 
         FindComputeShader();
-    }
-
-
-    public override void ApplyHeights(WorldBuildingContext context)
-    {
-        context.MaskFalloff = new MaskFalloff();
-        foreach (var heightModifier in m_Modifiers.TerrainHeightModifiers)
-        {
-            heightModifier.ApplyHeightmap(context, this.WorldBounds, m_MaskTexture);
-        }
-    }
-
-    public override void ApplySplatmap(WorldBuildingContext context)
-    {
-        context.MaskFalloff = new MaskFalloff();
-        foreach (var splatModifier in m_Modifiers.TerrainSplatModifiers)
-        {
-            splatModifier.ApplySplatmap(context, WorldBounds, m_MaskTexture);
-        }
     }
 
     public override void SpawnGameObjects(WorldBuildingContext context)
@@ -265,11 +247,8 @@ public class SplineRegion : BaseWorldBuilder
         renderTexture.enableRandomWrite = true;
 
         CalculateWorldBounds();
-        if (m_MaskTexture == null)
-        {
-            m_MaskTexture = new Texture2D(kMaskTextureWidth, kMaskTextureHeight, TextureFormat.ARGB32, false, true);
-            m_MaskTexture.wrapMode = TextureWrapMode.Clamp;
-        }
+        m_MaskTexture = new Texture2D(kMaskTextureWidth, kMaskTextureHeight, TextureFormat.ARGB32, false, true);
+        m_MaskTexture.wrapMode = TextureWrapMode.Clamp;
 
         FindComputeShader();
 
@@ -323,7 +302,7 @@ public class SplineRegion : BaseWorldBuilder
         Graphics.CopyTexture(renderTexture, m_MaskTexture);
         RenderTexture.ReleaseTemporary(renderTexture);
     }
-    
+
     private NativeArray<float3> EvaluatePointsAlongSpline(Spline spline, float resolution)
     {
         float splineLength = spline.GetLength();

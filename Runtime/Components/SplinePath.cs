@@ -19,6 +19,7 @@ public class SplinePath : BaseWorldBuilder
     
     // Mask Texture.
     [SerializeField] private Texture m_MaskTexture;
+    protected override Texture MaskTexture => m_MaskTexture;
     [SerializeField] private Material m_SplineToMaskMaterial;
     private const int kMaskTextureWidth = 256;
     private const int kMaskTextureHeight = 256;
@@ -186,11 +187,8 @@ public class SplinePath : BaseWorldBuilder
         renderTexture.enableRandomWrite = true;
         
         FindSplineMaskMaterial();
-        if (m_MaskTexture == null)
-        {
-            m_MaskTexture = new Texture2D(kMaskTextureWidth, kMaskTextureHeight, TextureFormat.ARGB32, false, true);
-            m_MaskTexture.wrapMode = TextureWrapMode.Clamp;
-        }
+        m_MaskTexture = new Texture2D(kMaskTextureWidth, kMaskTextureHeight, TextureFormat.ARGB32, false, true);
+        m_MaskTexture.wrapMode = TextureWrapMode.Clamp;
         
         Mesh splineMesh = GenerateSplineMesh();
 
@@ -228,29 +226,6 @@ public class SplinePath : BaseWorldBuilder
         RenderTexture.ReleaseTemporary(renderTexture);
     }
 
-    public override void ApplyHeights(WorldBuildingContext context)
-    {
-        foreach (var heightModifier in m_Modifiers.TerrainHeightModifiers)
-        {
-            context.MaskFalloff = new MaskFalloff();
-            heightModifier.ApplyHeightmap(context, WorldBounds, m_MaskTexture);
-        }
-    }
-
-    public override void ApplySplatmap(WorldBuildingContext context)
-    {
-        foreach (var splatModifier in m_Modifiers.TerrainSplatModifiers)
-        {
-            context.MaskFalloff = new MaskFalloff();
-            splatModifier.ApplySplatmap(context, WorldBounds, m_MaskTexture);
-        }
-    }
-
-    public override void SpawnGameObjects(WorldBuildingContext context)
-    {
-        
-    }
-    
     public override bool ContainsSplineData(SplineData<float> splineData)
     {
         return Widths.Contains(splineData);

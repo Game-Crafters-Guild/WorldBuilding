@@ -6,8 +6,6 @@ using UnityEngine.Splines;
 public interface IWorldBuilder
 {
     public float4x4 TransformMatrix { get; set; }
-    public float3 Scale { get; set; }
-    public Quaternion Rotation { get; set; }
     public int Priority { get; }
     
     public bool IsDirty { get; set; }

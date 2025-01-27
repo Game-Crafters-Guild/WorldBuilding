@@ -8,8 +8,6 @@ using UnityEngine.Splines;
 public abstract class BaseWorldBuilder : MonoBehaviour, IWorldBuilder
 {
     public float4x4 TransformMatrix { get; set; }
-    public float3 Scale { get; set; }
-    public Quaternion Rotation { get; set; }
 
     public int Priority
     {
@@ -29,7 +27,7 @@ public abstract class BaseWorldBuilder : MonoBehaviour, IWorldBuilder
     {
         set => m_LocalBounds = value;
     }
-    public Bounds WorldBounds
+    public virtual Bounds WorldBounds
     {
         get
         {
@@ -47,8 +45,6 @@ public abstract class BaseWorldBuilder : MonoBehaviour, IWorldBuilder
             m_IsDirty = true;
             transform.hasChanged = false;
             TransformMatrix = transform.localToWorldMatrix;
-            Scale = transform.lossyScale;
-            Rotation = transform.rotation;
             return m_IsDirty;
         }
         set => m_IsDirty = value;
@@ -66,7 +62,7 @@ public abstract class BaseWorldBuilder : MonoBehaviour, IWorldBuilder
         }
     }
 
-    private void Awake()
+    protected BaseWorldBuilder()
     {
         m_Modifiers.TerrainHeightModifiers.Add(new ApplyTransformToHeightmap());
     }
@@ -91,10 +87,31 @@ public abstract class BaseWorldBuilder : MonoBehaviour, IWorldBuilder
     }
 
     public virtual SplineContainer SplinContainer => null;
-    public abstract void ApplyHeights(WorldBuildingContext context);
-    public abstract void ApplySplatmap(WorldBuildingContext context);
-    public abstract void SpawnGameObjects(WorldBuildingContext context);
+    public virtual void ApplyHeights(WorldBuildingContext context)
+    {
+        context.MaskFalloff = new MaskFalloff();
+        foreach (var heightModifier in m_Modifiers.TerrainHeightModifiers)
+        {
+            heightModifier.ApplyHeightmap(context, this.WorldBounds, MaskTexture);
+        }
+    }
+
+    public virtual void ApplySplatmap(WorldBuildingContext context)
+    {
+        context.MaskFalloff = new MaskFalloff();
+        foreach (var splatModifier in m_Modifiers.TerrainSplatModifiers)
+        {
+            splatModifier.ApplySplatmap(context, WorldBounds, MaskTexture);
+        }
+    }
+
+    public virtual void SpawnGameObjects(WorldBuildingContext context)
+    {
+        
+    }
+
     public abstract void GenerateMask();
+    protected abstract Texture MaskTexture { get; }
     public List<ITerrainSplatModifier> TerrainSplatModifiers => m_Modifiers.TerrainSplatModifiers;
     public virtual bool ContainsSplineData(SplineData<float> splineData)
     {
