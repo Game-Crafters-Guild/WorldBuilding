@@ -69,7 +69,7 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/WriteHeightmap"
                 if (mask <= 0.0005) discard;
 
                 float heightData = tex2D(_Data, i.uv).x;
-                float height = lerp(_HeightRange.x, _HeightRange.y, heightData);
+                float height = lerp(_HeightRange.x, _HeightRange.y, heightData) * 0.5;
                 return float4(height, height, height, mask);
             }
             ENDCG
