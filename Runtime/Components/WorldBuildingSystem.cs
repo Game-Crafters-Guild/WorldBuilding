@@ -352,7 +352,7 @@ public class WorldBuildingSystem : MonoBehaviour
             foreach (var splatRenderTexture in m_WorldBuildingContext.SplatRenderTextures)
             {
                 RenderTexture.active = splatRenderTexture;
-                terrainData.CopyActiveRenderTextureToTexture(TerrainData.AlphamapTextureName, 0, splatmapRect,
+                terrainData.CopyActiveRenderTextureToTexture(TerrainData.AlphamapTextureName, index, splatmapRect,
                     splatmapRect.position, false);
                 ++index;
             }
