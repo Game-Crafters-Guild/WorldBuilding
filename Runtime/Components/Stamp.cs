@@ -25,14 +25,20 @@ public class Stamp : BaseWorldBuilder
     {
         get
         {
-            Bounds bounds = new Bounds();
             if (m_ActiveTerrains == null)
             {
                 m_ActiveTerrains = new List<Terrain>();
             }
             Terrain.GetActiveTerrains(m_ActiveTerrains);
-            foreach (var terrain in m_ActiveTerrains)
+            if (m_ActiveTerrains.Count == 0)
             {
+                return new Bounds();
+            }
+            Terrain terrain = m_ActiveTerrains[0];
+            Bounds bounds = new Bounds(terrain.terrainData.bounds.center + terrain.transform.position, terrain.terrainData.bounds.size);
+            for (int i = 1; i < m_ActiveTerrains.Count; i++)
+            {
+                terrain = m_ActiveTerrains[i];
                 Bounds terrainBounds = new Bounds(terrain.terrainData.bounds.center + terrain.transform.position, terrain.terrainData.bounds.size);
                 bounds.Encapsulate(terrainBounds);
             }

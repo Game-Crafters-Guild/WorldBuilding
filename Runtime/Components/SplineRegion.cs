@@ -28,12 +28,17 @@ public class SplineRegion : BaseWorldBuilder
 
     private void CalculateWorldBounds()
     {
-        Bounds bounds = new Bounds();
-        foreach (var spline in m_SplineContainer.Splines)
+        if (m_SplineContainer.Splines.Count == 0)
         {
-            bounds.Encapsulate(spline.GetBounds());
+            LocalBounds = new Bounds();
+            return;
         }
-        LocalBounds = bounds;
+        Bounds splineBounds = m_SplineContainer.Splines[0].GetBounds();
+        for (int i = 1; i < m_SplineContainer.Splines.Count; i++)
+        {
+            splineBounds.Encapsulate(m_SplineContainer.Splines[i].GetBounds());
+        }
+        LocalBounds = splineBounds;
     }
     
     /*public float Intervals = 1.5f;

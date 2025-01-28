@@ -183,6 +183,8 @@ public class SplinePath : BaseWorldBuilder
 
     public override void GenerateMask()
     {
+        if (m_SplineContainer.Splines.Count == 0) return;
+
         RenderTexture renderTexture = RenderTexture.GetTemporary(kMaskTextureWidth, kMaskTextureHeight, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
         renderTexture.enableRandomWrite = true;
         
@@ -193,10 +195,10 @@ public class SplinePath : BaseWorldBuilder
         Mesh splineMesh = GenerateSplineMesh();
 
         Bounds meshBounds = splineMesh.bounds;
-        Bounds splineBounds = new Bounds();
-        foreach (var spline in m_SplineContainer.Splines)
+        Bounds splineBounds = m_SplineContainer.Splines[0].GetBounds();
+        for (int i = 1; i < m_SplineContainer.Splines.Count; i++)
         {
-            splineBounds.Encapsulate(spline.GetBounds());
+            splineBounds.Encapsulate(m_SplineContainer.Splines[i].GetBounds());
         }
         LocalBounds = new Bounds(new Vector3(meshBounds.center.x, splineBounds.center.y, meshBounds.center.z), new Vector3(meshBounds.size.x, splineBounds.size.y, meshBounds.size.z));
         float extentsYPlusOne = Mathf.Max(10.0f, meshBounds.extents.y + 1.0f);
