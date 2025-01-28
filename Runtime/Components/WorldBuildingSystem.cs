@@ -311,6 +311,9 @@ public class WorldBuildingSystem : MonoBehaviour
             m_IsDirty = true;
             return;
         }
+        
+        // Sort builders by priority.
+        m_WorldBuilders.Sort((worldBuilder1, worldBuilder2) => worldBuilder1.Priority.CompareTo(worldBuilder2.Priority));
 
         if (Terrain.activeTerrain == null)
         {
@@ -367,9 +370,6 @@ public class WorldBuildingSystem : MonoBehaviour
 
     private void GenerateTask()
     {
-        // Sort builders by priority.
-        m_WorldBuilders.Sort((worldBuilder1, worldBuilder2) => worldBuilder1.Priority.CompareTo(worldBuilder2.Priority));
-        
         foreach (var builder in m_WorldBuilders)
         {
             builder.IsDirty = false;
