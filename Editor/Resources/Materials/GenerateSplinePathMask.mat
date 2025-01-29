@@ -21,7 +21,7 @@ Material:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: GenerateSplinePathMask
-  m_Shader: {fileID: -6465566751694194690, guid: ee4a84776f102c749926c736867ba73e, type: 3}
+  m_Shader: {fileID: 4800000, guid: 09706791a4c20f64e88dab781fe9b482, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords: []
@@ -113,6 +113,8 @@ Material:
     - _GlossMapScale: 0
     - _Glossiness: 0
     - _GlossyReflections: 0
+    - _LocalBoundsMaxY: 0
+    - _LocalBoundsMinY: 256
     - _Metallic: 0
     - _OcclusionStrength: 1
     - _Parallax: 0.005
