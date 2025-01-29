@@ -1,13 +1,29 @@
-#pragma kernel CSMain
+#pragma kernel CSCreateSplineAreaMask
 #pragma kernel CSCalculateNormalizedDistances
 #pragma kernel CSBlurSDF
 
 RWTexture2D<float4> Result;
-StructuredBuffer<float3> SplinePositions;
+RWStructuredBuffer<float3> SplinePositions;
 RWStructuredBuffer<uint> furthestDistance;
 uniform int NumPositions;
 uniform float4 RegionMin;
 uniform float4 RegionSize;
+
+#include "Packages/com.unity.splines/Shader/Spline.cginc"
+
+#pragma kernel EvaluateSplinePositions
+
+SplineInfo info = float4(0,0,0,0);
+StructuredBuffer<BezierCurve> curves;
+StructuredBuffer<float> curveLengths;
+
+[numthreads(64,1,1)]
+void EvaluateSplinePositions (uint id : SV_DispatchThreadID)
+{
+    float curve = SplineToCurveT(info, curveLengths, id/(float)(NumPositions - 1));
+    SplinePositions[id] = EvaluatePosition(curves[floor(curve) % GetKnotCount(info)], frac(curve)); 
+}
+
 
 
 float3 GetPointInSegment(float3 position, float3 p0, float3 p1)
@@ -76,7 +92,7 @@ bool IsPointInsidePolygon(float3 position, out uint distanceSq)
 }
 
 [numthreads(8,8,1)]
-void CSMain (uint3 id : SV_DispatchThreadID)
+void CSCreateSplineAreaMask(uint3 id : SV_DispatchThreadID)
 {
     uint outputTextureWidth;
     uint outputTextureHeight;

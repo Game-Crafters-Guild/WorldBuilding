@@ -258,6 +258,10 @@ public class SplineRegion : BaseWorldBuilder
         FindComputeShader();
 
         Spline spline = m_SplineContainer.Spline;
+        if (spline.Count <= 1)
+        {
+            return;
+        }
         Bounds splineBounds = spline.GetBounds();
         if (splineBounds.size.x > splineBounds.size.z)
         {
@@ -267,12 +271,34 @@ public class SplineRegion : BaseWorldBuilder
         {
             splineBounds.size = new Vector3(splineBounds.size.z, splineBounds.size.y, splineBounds.size.z);
         }
-
-        var splinePoints = EvaluatePointsAlongSpline(spline, 0.2f);
+        
+        //
+        // Evaluate the positions on the spline.
+        //
+        int evaluateSplinePositionsKernel = m_CreateSplineAreaTextureComputeShader.FindKernel("EvaluateSplinePositions");
+        float kSplineEvaluationResolution = 0.2f;
+        float splineLength = spline.GetLength();
+        int numSplinePoints = (int)(splineLength / kSplineEvaluationResolution) + 1;
+        
+        // Create a buffer for the spline points
+        ComputeBuffer splinePointsComputeBuffer = new ComputeBuffer(numSplinePoints, sizeof(float) * 3);
+        
+        // Create the Unity Spline buffer.
+        var splineBuffers = new SplineComputeBufferScope<Spline>(spline);
+        splineBuffers.Bind(m_CreateSplineAreaTextureComputeShader, evaluateSplinePositionsKernel, "info", "curves", "curveLengths");
+        splineBuffers.Upload();
+        
+        m_CreateSplineAreaTextureComputeShader.SetInt(kComputeNumPositionsId, numSplinePoints);
+        m_CreateSplineAreaTextureComputeShader.SetBuffer(evaluateSplinePositionsKernel, kComputeSplinePositions, splinePointsComputeBuffer);
+        m_CreateSplineAreaTextureComputeShader.Dispatch(evaluateSplinePositionsKernel, Mathf.CeilToInt(numSplinePoints / 64.0f), 1, 1);
+        splineBuffers.Dispose();
+    
+        //
+        // Create the distance field.
+        //
         int workgroupsX = Mathf.CeilToInt(kMaskTextureWidth / 8.0f);
         int workgroupsY = Mathf.CeilToInt(kMaskTextureHeight / 8.0f);
-    
-        int kernel = m_CreateSplineAreaTextureComputeShader.FindKernel("CSMain");
+        int kernel = m_CreateSplineAreaTextureComputeShader.FindKernel("CSCreateSplineAreaMask");
         ComputeBuffer furthestDistanceBuffer = new ComputeBuffer(1, sizeof(uint));
         NativeArray<uint> furthestDistance = new NativeArray<uint>(1, Allocator.Temp, NativeArrayOptions.ClearMemory);
         furthestDistanceBuffer.SetData(furthestDistance);
@@ -281,12 +307,9 @@ public class SplineRegion : BaseWorldBuilder
         m_CreateSplineAreaTextureComputeShader.SetTexture(kernel, kComputeResultId, renderTexture);
         m_CreateSplineAreaTextureComputeShader.SetVector(kComputeRegionMinId, splineBounds.min);
         m_CreateSplineAreaTextureComputeShader.SetVector(kComputeRegionSizeId, splineBounds.size);
-        m_CreateSplineAreaTextureComputeShader.SetInt(kComputeNumPositionsId, splinePoints.Length);
-        ComputeBuffer splinePointsComputeBuffer = new ComputeBuffer(splinePoints.Length, sizeof(float) * 3);
-        splinePointsComputeBuffer.SetData(splinePoints);
+        m_CreateSplineAreaTextureComputeShader.SetInt(kComputeNumPositionsId, numSplinePoints);
         m_CreateSplineAreaTextureComputeShader.SetBuffer(kernel, kComputeSplinePositions, splinePointsComputeBuffer);
         m_CreateSplineAreaTextureComputeShader.Dispatch(kernel, workgroupsX, workgroupsY, 1);
-        splinePoints.Dispose();
         splinePointsComputeBuffer.Release();
         
         // Normalize the distances.
@@ -306,23 +329,5 @@ public class SplineRegion : BaseWorldBuilder
         
         Graphics.CopyTexture(renderTexture, m_MaskTexture);
         RenderTexture.ReleaseTemporary(renderTexture);
-    }
-
-    private NativeArray<float3> EvaluatePointsAlongSpline(Spline spline, float resolution)
-    {
-        float splineLength = spline.GetLength();
-        int numSegments = (int)(splineLength / resolution) + 1;
-        if (numSegments <= 1)
-        {
-            return default;
-        }
-
-        NativeArray<float3> splinePoints = new NativeArray<float3>(numSegments + 1, Allocator.Temp);
-        for (int i = 0; i <= numSegments; i++)
-        {
-            float t = i / (float)numSegments;
-            splinePoints[i] = spline.EvaluatePosition(t);
-        }
-        return splinePoints;
     }
 }
