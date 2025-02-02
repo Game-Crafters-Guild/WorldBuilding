@@ -65,8 +65,8 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/WriteHeightmap"
             {
                 // sample the texture
                 float mask = tex2D(_Mask, i.uv).x;
+                if (mask <= 0.01) discard;
                 mask = smoothstep(_Falloff.x, _Falloff.y, mask);
-                if (mask <= 0.0005) discard;
 
                 float heightData = tex2D(_Data, i.uv).x;
                 float height = lerp(_HeightRange.x, _HeightRange.y, heightData) * 0.5;
@@ -126,8 +126,8 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/WriteHeightmap"
                 // sample the texture
                 float4 sample = tex2D(_Mask, i.uv);
                 float mask = sample.x;
+                if (mask <= 0.01) discard;
                 mask = smoothstep(_Falloff.x, _Falloff.y, mask);
-                if (mask <= 0.0005) discard;
 
                 float heightData = tex2D(_Data, i.uv).x;
                 float height = lerp(_HeightRange.x, _HeightRange.y, heightData);

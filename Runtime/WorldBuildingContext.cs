@@ -26,12 +26,13 @@ namespace GameCraftersGuild.WorldBuilding
         internal Material m_ApplyHeightmapMaterial;
         internal Material m_ApplySplatmapMaterial;
 
+        private float4 FallOffVector => new Vector4(1.0f - MaskFalloff.Max, 1.0f - MaskFalloff.Min, 0.0f, 0.0f);
+
         public void ApplyRegionTransformsToHeightmap(Bounds worldBounds, Texture mask,
             HeightWriteMode mode = HeightWriteMode.Replace)
         {
             float3 scaledSplineExtents = CurrentTransform.MultiplyVector(worldBounds.extents);
 
-            float4 falloff = new Vector4(1.0f - MaskFalloff.Max, 1.0f - MaskFalloff.Min, 0.0f, 0.0f);
             float4 splineMeshBoundsY = new Vector4(worldBounds.center.y - scaledSplineExtents.y,
                 worldBounds.center.y + scaledSplineExtents.y, 0.0f, 0.0f);
             float4 terrainWorldHeightRange =
@@ -40,7 +41,7 @@ namespace GameCraftersGuild.WorldBuilding
             materialPropertyBlock.SetTexture("_Mask", mask);
             materialPropertyBlock.SetTexture("_Data", Texture2D.blackTexture);
             materialPropertyBlock.SetVector("_HeightRange", Vector4.zero);
-            materialPropertyBlock.SetVector("_Falloff", falloff);
+            materialPropertyBlock.SetVector("_Falloff", FallOffVector);
             materialPropertyBlock.SetVector("_SplineMeshBoundsY", splineMeshBoundsY);
             materialPropertyBlock.SetVector("_TerrainWorldHeightRange", terrainWorldHeightRange);
             SetBlendMode(mode, m_ApplyHeightmapMaterial);
@@ -54,7 +55,6 @@ namespace GameCraftersGuild.WorldBuilding
                 (minHeight / MaxTerrainHeight), /*Mathf.Clamp01*/(maxHeight / MaxTerrainHeight), 0.0f, 0.0f);
             float3 scaledSplineExtents = CurrentTransform.MultiplyVector(worldBounds.extents);
 
-            float4 falloff = new Vector4(1.0f - MaskFalloff.Max, 1.0f - MaskFalloff.Min, 0.0f, 0.0f);
             float4 splineMeshBoundsY = new Vector4(worldBounds.center.y - scaledSplineExtents.y,
                 worldBounds.center.y + scaledSplineExtents.y, 0.0f, 0.0f);
             float4 terrainWorldHeightRange =
@@ -63,7 +63,7 @@ namespace GameCraftersGuild.WorldBuilding
             materialPropertyBlock.SetTexture("_Mask", mask);
             materialPropertyBlock.SetTexture("_Data", heightmap != null ? heightmap : Texture2D.whiteTexture);
             materialPropertyBlock.SetVector("_HeightRange", heightRangeNormalized);
-            materialPropertyBlock.SetVector("_Falloff", falloff);
+            materialPropertyBlock.SetVector("_Falloff", FallOffVector);
             materialPropertyBlock.SetVector("_SplineMeshBoundsY", splineMeshBoundsY);
             materialPropertyBlock.SetVector("_TerrainWorldHeightRange", terrainWorldHeightRange);
             SetBlendMode(mode, m_ApplyHeightmapMaterial);
@@ -188,7 +188,7 @@ namespace GameCraftersGuild.WorldBuilding
             float4 intensityVector = float4.zero;
             intensityVector[terrainLayerIndex % 4] = intensity;
             materialPropertyBlock.SetVector("_Intensity", intensityVector);
-            materialPropertyBlock.SetVector("_Falloff", new Vector4(1.0f - MaskFalloff.Max, 1.0f - MaskFalloff.Min));
+            materialPropertyBlock.SetVector("_Falloff", FallOffVector);
             DrawQuadSplat(worldBounds, layerRenderTarget, m_ApplySplatmapMaterial, materialPropertyBlock);
         }
 
