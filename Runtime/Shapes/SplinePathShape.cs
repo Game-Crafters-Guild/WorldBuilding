@@ -10,7 +10,7 @@ namespace GameCraftersGuild.WorldBuilding
     [RequireComponent(typeof(SplineContainer))]
     public class SplinePathShape : StampShape
     {
-        [Range(1.0f, 100.0f)] public float Width = 4.0f;
+        [Range(1.0f, 100.0f)] public float Width = 2.0f;
         [SerializeReference] [HideInInspector] internal SplineContainer m_SplineContainer;
         public override SplineContainer SplineContainer => m_SplineContainer;
         public override bool MaintainMaskAspectRatio { get; } = false;
@@ -204,7 +204,7 @@ namespace GameCraftersGuild.WorldBuilding
                 var tangent = math.normalizesafe(math.cross(up, dir)) *
                               new float3(1f / scale.x, 1f / scale.y, 1f / scale.z);
 
-                var w = Width;
+                var w = Width * 0.5f;
                 if (widthDataIndex < m_Widths.Count)
                 {
                     w = m_Widths[widthDataIndex].DefaultValue;

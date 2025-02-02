@@ -10,6 +10,8 @@ namespace GameCraftersGuild.WorldBuilding.Editor
     {
         public override VisualElement CreatePropertyGUI(SerializedProperty property)
         {
+            VisualElement container = new VisualElement();
+            
             float currentMin = property.FindPropertyRelative("Min").floatValue;
             float currentMax = property.FindPropertyRelative("Max").floatValue;
             MinMaxSlider slider = new MinMaxSlider();
@@ -19,8 +21,10 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             slider.lowLimit = 0.0f;
             slider.highLimit = 1.0f;
             slider.style.paddingRight = 4;
-            slider.RegisterValueChangedCallback(OnValueChanged);
-            return slider;
+            slider.RegisterValueChangedCallback(OnValueChanged); 
+            container.Add(slider);
+            
+            return container;
 
             void OnValueChanged(ChangeEvent<Vector2> evt)
             {

@@ -93,7 +93,7 @@ namespace GameCraftersGuild.WorldBuilding
             if (m_Shape != null) return;
             if (TryGetComponent(out m_Shape) == false)
             {
-                m_Shape = gameObject.AddComponent<GlobalShape>();
+                m_Shape = gameObject.AddComponent<CircleShape>();
             }
         }
 

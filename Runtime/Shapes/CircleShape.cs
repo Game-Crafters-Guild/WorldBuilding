@@ -9,7 +9,12 @@ namespace GameCraftersGuild.WorldBuilding
 
         public override void GenerateMask()
         {
-            MaskTexture = Texture2D.whiteTexture;
+            if (MaskTexture == null)
+            {
+                MaskTexture = Resources.Load<Texture2D>($"GameCraftersGuild/WorldBuilding/CircleMask");
+            }
+            float Diameter = Radius * 2.0f;
+            LocalBounds = new Bounds(Vector3.zero, new Vector3(Diameter, 0.0f, Diameter));
         }
 
         public void OnDrawGizmosSelected()
