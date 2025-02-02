@@ -1,15 +1,18 @@
 using System;
 using UnityEngine;
 
-[Serializable]
-public class ApplyTransformToHeightmap : ITerrainHeightModifier
+namespace GameCraftersGuild.WorldBuilding
 {
-    public override string FilePath => GetFilePath();
-    public MaskFalloff Fallof;
-    
-    public override void ApplyHeightmap(WorldBuildingContext context, Bounds worldBounds, Texture mask)
+    [Serializable]
+    public class ApplyTransformToHeightmap : ITerrainHeightModifier
     {
-        context.MaskFalloff = Fallof;
-        context.ApplyRegionTransformsToHeightmap(worldBounds, mask);
+        public override string FilePath => GetFilePath();
+        public MaskFalloff Fallof;
+
+        public override void ApplyHeightmap(WorldBuildingContext context, Bounds worldBounds, Texture mask)
+        {
+            context.MaskFalloff = Fallof;
+            context.ApplyRegionTransformsToHeightmap(worldBounds, mask);
+        }
     }
 }

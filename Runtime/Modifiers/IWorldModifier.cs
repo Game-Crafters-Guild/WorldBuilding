@@ -1,11 +1,15 @@
 using System;
-using UnityEngine;
 
-[Serializable]
-public abstract class WorldModifier
+namespace GameCraftersGuild.WorldBuilding
 {
-    protected string GetFilePath([System.Runtime.CompilerServices.CallerFilePath] string path = "") =>
-        path;
+    [Serializable]
+    public abstract class WorldModifier
+    {
+        public bool Enabled = true;
 
-    public abstract string FilePath { get; }
+        protected string GetFilePath([System.Runtime.CompilerServices.CallerFilePath] string path = "") =>
+            path;
+
+        public abstract string FilePath { get; }
+    }
 }

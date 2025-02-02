@@ -1,31 +1,21 @@
 using System;
-using System.Threading.Tasks;
-using Unity.Collections;
-using Unity.Mathematics;
 using UnityEngine;
 
-[Serializable]
-public class NoiseHeightModifier : ITerrainHeightModifier
+namespace GameCraftersGuild.WorldBuilding
 {
-    public HeightWriteMode Mode;
-    public MaskFalloff Fallof;
-    [SerializeReference]
-    public NoiseProperties NoiseProperties = new NoiseProperties();
-    
-    [HideInInspector]
-    public Texture2D NoiseTexture;
-    public override string FilePath => GetFilePath();
-    
-    public override void ApplyHeightmap(WorldBuildingContext context, Bounds worldBounds, Texture mask)
+    [Serializable]
+    public class NoiseHeightModifier : ITerrainHeightModifier
     {
-        if (NoiseTexture == null || NoiseProperties.IsDirty)
+        public HeightWriteMode Mode;
+        public MaskFalloff Fallof;
+        [SerializeReference] public NoiseProperties NoiseProperties = new NoiseProperties();
+        public override string FilePath => GetFilePath();
+
+        public override void ApplyHeightmap(WorldBuildingContext context, Bounds worldBounds, Texture mask)
         {
-            NoiseProperties.IsDirty = false;
-            var noiseMap = NoiseGenerator.FromNoiseProperties(NoiseProperties, Allocator.Temp);
-            NoiseTexture = NoiseGenerator.GenerateNoiseTexture(noiseMap, new int2(NoiseProperties.NoiseResolution, NoiseProperties.NoiseResolution));
-            noiseMap.Dispose();
+            context.MaskFalloff = Fallof;
+            context.ApplyHeightmap(worldBounds, NoiseProperties.NoiseTexture, mask, Mode, NoiseProperties.HeightMin,
+                NoiseProperties.HeightMax);
         }
-        context.MaskFalloff = Fallof;
-        context.ApplyHeightmap(worldBounds, NoiseTexture, mask, Mode, NoiseProperties.HeightMin, NoiseProperties.HeightMax);
     }
 }

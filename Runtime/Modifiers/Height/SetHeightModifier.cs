@@ -4,17 +4,20 @@ using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
 
-[Serializable]
-public class SetHeightModifier : ITerrainHeightModifier
+namespace GameCraftersGuild.WorldBuilding
 {
-    public float Height = 0.0f;
-    public override string FilePath => GetFilePath();
-    public HeightWriteMode Mode;
-    public MaskFalloff Fallof;
-    
-    public override void ApplyHeightmap(WorldBuildingContext context, Bounds worldBounds, Texture mask)
+    [Serializable]
+    public class SetHeightModifier : ITerrainHeightModifier
     {
-        context.MaskFalloff = Fallof;
-        context.ApplyHeightmap(worldBounds, null, mask, Mode, 0.0f, Height);
+        public float Height = 0.0f;
+        public override string FilePath => GetFilePath();
+        public HeightWriteMode Mode;
+        public MaskFalloff Fallof;
+
+        public override void ApplyHeightmap(WorldBuildingContext context, Bounds worldBounds, Texture mask)
+        {
+            context.MaskFalloff = Fallof;
+            context.ApplyHeightmap(worldBounds, null, mask, Mode, 0.0f, Height);
+        }
     }
 }

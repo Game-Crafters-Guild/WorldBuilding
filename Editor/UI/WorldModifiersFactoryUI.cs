@@ -3,20 +3,24 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
-public class WorldModifiersFactoryUI
+namespace GameCraftersGuild.WorldBuilding.Editor
 {
-    public static void ShowWorldModifiersContextMenu<ModifierType>(Action<ModifierType> callback)
+    public class WorldModifiersFactoryUI
     {
-        var worldModifierTypes = TypeCache.GetTypesDerivedFrom<ModifierType>();
-        GenericMenu menu = new UnityEditor.GenericMenu();
-        foreach (var type in worldModifierTypes)
+        public static void ShowWorldModifiersContextMenu<ModifierType>(Action<ModifierType> callback)
         {
-            menu.AddItem(new GUIContent(ObjectNames.NicifyVariableName(type.Name)), false, data =>
+            var worldModifierTypes = TypeCache.GetTypesDerivedFrom<ModifierType>();
+            GenericMenu menu = new UnityEditor.GenericMenu();
+            foreach (var type in worldModifierTypes)
             {
-                var instance = Activator.CreateInstance(type);
-                callback?.Invoke((ModifierType)instance);
-            }, type);
+                menu.AddItem(new GUIContent(ObjectNames.NicifyVariableName(type.Name)), false, data =>
+                {
+                    var instance = Activator.CreateInstance(type);
+                    callback?.Invoke((ModifierType)instance);
+                }, type);
+            }
+
+            menu.ShowAsContext();
         }
-        menu.ShowAsContext();
     }
 }

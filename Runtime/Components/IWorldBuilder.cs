@@ -3,22 +3,25 @@ using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Splines;
 
-public interface IWorldBuilder
+namespace GameCraftersGuild.WorldBuilding
 {
-    public float4x4 TransformMatrix { get; set; }
-    public int Priority { get; }
-    
-    public bool IsDirty { get; set; }
-    
-    SplineContainer SplinContainer { get; }
+    public interface IWorldBuilder
+    {
+        public float4x4 TransformMatrix { get; set; }
+        public int Priority { get; }
 
-    public void ApplyHeights(WorldBuildingContext context);
-    public void ApplySplatmap(WorldBuildingContext context);
-    public void SpawnGameObjects(WorldBuildingContext context);
-    
-    public Bounds WorldBounds { get; }
-    public void GenerateMask();
-    
-    public List<ITerrainSplatModifier> TerrainSplatModifiers { get; }
-    public bool ContainsSplineData(SplineData<float> splineData);
+        public bool IsDirty { get; set; }
+
+        SplineContainer SplineContainer { get; }
+
+        public void ApplyHeights(WorldBuildingContext context);
+        public void ApplySplatmap(WorldBuildingContext context);
+        public void SpawnGameObjects(WorldBuildingContext context);
+
+        public Bounds WorldBounds { get; }
+        public void GenerateMask();
+
+        public List<ITerrainSplatModifier> TerrainSplatModifiers { get; }
+        public bool ContainsSplineData(SplineData<float> splineData);
+    }
 }

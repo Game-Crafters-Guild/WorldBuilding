@@ -1,50 +1,132 @@
 using System;
 using System.Collections.Generic;
+using Unity.Mathematics;
 using UnityEngine;
+using UnityEngine.Splines;
 
-[Serializable]
-public class Stamp : BaseWorldBuilder
+namespace GameCraftersGuild.WorldBuilding
 {
-    protected override Texture MaskTexture => Texture2D.whiteTexture;
-    private static List<Terrain> m_ActiveTerrains = new List<Terrain>();
-    public enum Volume
+    [Serializable, ExecuteInEditMode]
+    public class Stamp : MonoBehaviour, IWorldBuilder
     {
-        Global,
-        Circle,
-        Rect
-    }
-    [SerializeField]
-    private Volume m_Volume = Volume.Global; 
-    public Volume VolumeType { get => m_Volume; set => m_Volume = value; }
-    public override void GenerateMask()
-    {
-        
-    }
-    
-    public override Bounds WorldBounds
-    {
-        get
+        public float4x4 TransformMatrix { get; set; }
+        [SerializeField] private int m_Priority = 0;
+
+        public int Priority
         {
-            if (m_ActiveTerrains == null)
+            get => m_Priority;
+            set => m_Priority = value;
+        }
+
+        [SerializeField, HideInInspector] private bool m_IsDirty = true;
+
+        public bool IsDirty
+        {
+            get
             {
-                m_ActiveTerrains = new List<Terrain>();
+                if (!transform.hasChanged) return m_IsDirty;
+                m_IsDirty = true;
+                transform.hasChanged = false;
+                TransformMatrix = transform.localToWorldMatrix;
+                return m_IsDirty;
             }
-            Terrain.GetActiveTerrains(m_ActiveTerrains);
-            if (m_ActiveTerrains.Count == 0)
+            set => m_IsDirty = value;
+        }
+
+        [SerializeField] public WorldModifiersContainer m_Modifiers = new WorldModifiersContainer();
+        public List<ITerrainSplatModifier> TerrainSplatModifiers => m_Modifiers.TerrainSplatModifiers;
+
+        [HideInInspector] [SerializeField] private StampShape m_Shape;
+
+        public StampShape Shape
+        {
+            get => m_Shape;
+            set => m_Shape = value;
+        }
+
+        protected Texture MaskTexture => m_Shape.MaskTexture;
+        public SplineContainer SplineContainer => m_Shape.SplineContainer;
+
+        public bool ContainsSplineData(SplineData<float> splineData)
+        {
+            return m_Shape.ContainsSplineData(splineData);
+        }
+
+        public Bounds WorldBounds => m_Shape.WorldBounds;
+
+        protected Stamp()
+        {
+            m_Modifiers.TerrainHeightModifiers.Add(new ApplyTransformToHeightmap());
+        }
+
+        private void OnDestroy()
+        {
+            WorldBuildingSystem worldBuildingSystem = WorldBuildingSystem.FindSystemInScene();
+            if (worldBuildingSystem != null)
             {
-                return new Bounds();
+                worldBuildingSystem.RemoveWorldBuilder(this);
             }
-            Terrain terrain = m_ActiveTerrains[0];
-            Bounds bounds = new Bounds(terrain.terrainData.bounds.center + terrain.transform.position, terrain.terrainData.bounds.size);
-            for (int i = 1; i < m_ActiveTerrains.Count; i++)
+        }
+
+        private void OnEnable()
+        {
+            TransformMatrix = transform.localToWorldMatrix;
+            if (m_Modifiers == null)
             {
-                terrain = m_ActiveTerrains[i];
-                Bounds terrainBounds = new Bounds(terrain.terrainData.bounds.center + terrain.transform.position, terrain.terrainData.bounds.size);
-                bounds.Encapsulate(terrainBounds);
+                m_Modifiers = new WorldModifiersContainer();
             }
-            bounds.center = new Vector3(bounds.center.x, transform.position.y, bounds.center.z);
-            bounds.size = new Vector3(bounds.size.x, 0.0f, bounds.size.z);
-            return bounds;
+
+            WorldBuildingSystem.GetOrCreate().AddWorldBuilder(this);
+        }
+
+        public void OnDisable()
+        {
+            WorldBuildingSystem worldBuildingSystem = WorldBuildingSystem.FindSystemInScene();
+            if (worldBuildingSystem != null)
+            {
+                worldBuildingSystem.RemoveWorldBuilder(this);
+            }
+        }
+
+        private void Awake()
+        {
+            if (m_Shape != null) return;
+            if (TryGetComponent(out m_Shape) == false)
+            {
+                m_Shape = gameObject.AddComponent<GlobalShape>();
+            }
+        }
+
+        public void GenerateMask()
+        {
+            m_Shape.GenerateMask();
+        }
+
+        public virtual void ApplyHeights(WorldBuildingContext context)
+        {
+            context.MaskFalloff = new MaskFalloff();
+            context.MaintainMaskAspectRatio = m_Shape.MaintainMaskAspectRatio;
+            foreach (var heightModifier in m_Modifiers.TerrainHeightModifiers)
+            {
+                if (!heightModifier.Enabled) continue;
+                heightModifier.ApplyHeightmap(context, this.WorldBounds, MaskTexture);
+            }
+        }
+
+        public virtual void ApplySplatmap(WorldBuildingContext context)
+        {
+            context.MaskFalloff = new MaskFalloff();
+            context.MaintainMaskAspectRatio = m_Shape.MaintainMaskAspectRatio;
+            foreach (var splatModifier in m_Modifiers.TerrainSplatModifiers)
+            {
+                if (!splatModifier.Enabled) continue;
+                splatModifier.ApplySplatmap(context, WorldBounds, MaskTexture);
+            }
+        }
+
+        public virtual void SpawnGameObjects(WorldBuildingContext context)
+        {
+            context.MaintainMaskAspectRatio = m_Shape.MaintainMaskAspectRatio;
         }
     }
 }

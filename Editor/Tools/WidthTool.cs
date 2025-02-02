@@ -5,9 +5,9 @@ using UnityEditor.Splines;
 using UnityEngine;
 using UnityEngine.Splines;
 
-namespace GameCraftersGuild.WorldBuilding
+namespace GameCraftersGuild.WorldBuilding.Editor
 {
-    [EditorTool("Width Tool", typeof(SplinePath))]
+    [EditorTool("Width Tool", typeof(SplinePathShape))]
     public class WidthTool : SplineDataToolBase<float>, IDrawSelectedHandles
     {
         GUIContent m_IconContent;
@@ -27,7 +27,7 @@ namespace GameCraftersGuild.WorldBuilding
 
         public override void OnToolGUI(EditorWindow window)
         {
-            var splineDataTarget = target as SplinePath;
+            var splineDataTarget = target as SplinePathShape;
             if (splineDataTarget == null || splineDataTarget.m_SplineContainer == null)
                 return;
 
@@ -54,7 +54,7 @@ namespace GameCraftersGuild.WorldBuilding
 
         public void OnDrawHandles()
         {
-            var splineDataTarget = target as SplinePath;
+            var splineDataTarget = target as SplinePathShape;
             if (ToolManager.IsActiveTool(this) || splineDataTarget.m_SplineContainer == null)
                 return;
 
@@ -68,7 +68,7 @@ namespace GameCraftersGuild.WorldBuilding
             {
                 if (i < splineDataTarget.Widths.Count)
                 {
-                    var nativeSpline = new NativeSpline(splines[i], splineDataTarget.SplinContainer
+                    var nativeSpline = new NativeSpline(splines[i], splineDataTarget.SplineContainer
                         .transform.localToWorldMatrix);
                     DrawDataPoints(nativeSpline, splineDataTarget.Widths[i]);
                 }

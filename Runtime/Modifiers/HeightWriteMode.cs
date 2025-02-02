@@ -1,10 +1,13 @@
 using System;
 using UnityEngine;
 
-[Serializable]
-public enum HeightWriteMode
+namespace GameCraftersGuild.WorldBuilding
 {
-    Add,
-    Subtract,
-    Replace
+    [Serializable]
+    public enum HeightWriteMode
+    {
+        Add,
+        Subtract,
+        Replace
+    }
 }

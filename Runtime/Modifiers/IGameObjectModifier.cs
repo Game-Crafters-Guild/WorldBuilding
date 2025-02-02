@@ -1,8 +1,11 @@
 using System;
 using UnityEngine;
 
-[Serializable]
-public abstract class IGameObjectModifier : WorldModifier
+namespace GameCraftersGuild.WorldBuilding
 {
-    
+    [Serializable]
+    public abstract class IGameObjectModifier : WorldModifier
+    {
+
+    }
 }
