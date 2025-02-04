@@ -7,7 +7,7 @@ namespace GameCraftersGuild.WorldBuilding
     {
         [SerializeField, HideInInspector] private Bounds m_LocalBounds;
 
-        [SerializeField] private Texture m_MaskTexture;
+        [SerializeField, HideInInspector] private Texture m_MaskTexture;
 
         public virtual Texture MaskTexture
         {
