@@ -84,7 +84,9 @@ namespace GameCraftersGuild.WorldBuilding
             // Normalize the noise.
             for (int i = 0; i < noiseMap.Length; ++i)
             {
-                noiseMap[i] = math.unlerp(minNoiseValue, maxNoiseValue, noiseMap[i]);
+                noiseMap[i] = noiseProperties.InvertNoise ?
+                    math.unlerp(maxNoiseValue, minNoiseValue, noiseMap[i]) :
+                    math.unlerp(minNoiseValue, maxNoiseValue, noiseMap[i]);
             }
 
             return noiseMap;

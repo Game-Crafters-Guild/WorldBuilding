@@ -3,6 +3,7 @@ using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Serialization;
+using Random = UnityEngine.Random;
 
 namespace GameCraftersGuild.WorldBuilding
 {
@@ -18,7 +19,7 @@ namespace GameCraftersGuild.WorldBuilding
 
         public NoiseFunction NoiseType;
         [Range(1, 10000000)] public uint Seed = 1;
-        [Range(1, 20)] public float NoiseScale = 10.0f;
+        [Range(1, 20)] public float NoiseScale = 4.0f;
         public Vector2 NoiseOffset;
         [Range(1, 12)] public int NumOctaves = 1;
         [Range(0.0f, 1.0f)] public float Persistence = 0.5f;
@@ -27,7 +28,9 @@ namespace GameCraftersGuild.WorldBuilding
         [Min(0.0f)] public float HeightMin = 0.0f;
 
         //[Range(0.0f, 1.0f)]
-        [Min(0.0f)] public float HeightMax = 10.0f;
+        [Min(0.0f)] public float HeightMax = 6.0f;
+        [Tooltip("Invert the resulted noise map. Essentially applying (1 - NoiseValue).")]
+        public bool InvertNoise = false;
 
         [FormerlySerializedAs("NoiseResolution")]
         [Range(32, 2048)]
