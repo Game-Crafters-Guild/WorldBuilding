@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Unity.Collections;
 using Unity.Jobs;
@@ -31,7 +32,7 @@ namespace GameCraftersGuild.WorldBuilding
             newTerrainData.heightmapResolution = 2049;
             newTerrainData.baseMapResolution = 2048;
             newTerrainData.alphamapResolution = 2048;
-            newTerrainData.size = new Vector3(200, 256, 200);
+            newTerrainData.size = new Vector3(2000, 256, 2000);
             GameObject newTerrain = Terrain.CreateTerrainGameObject(newTerrainData);
             newTerrain.transform.position = Vector3.zero;
         }
@@ -62,6 +63,16 @@ namespace GameCraftersGuild.WorldBuilding
             }
 
             return worldBuildingSystem;
+        }
+
+        private void Start()
+        {
+#if UNITY_EDITOR
+            foreach (var builder in m_WorldBuilders)
+            {
+                builder.GenerateMask();
+            }
+#endif
         }
 
         private void OnEnable()
@@ -96,7 +107,7 @@ namespace GameCraftersGuild.WorldBuilding
         {
             if (m_Quad != null)
             {
-                //return;
+                return;
             }
 
             Vector3[] vertices = new Vector3[4]
