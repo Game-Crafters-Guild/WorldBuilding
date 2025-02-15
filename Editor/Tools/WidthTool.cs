@@ -105,8 +105,8 @@ namespace GameCraftersGuild.WorldBuilding.Editor
 
             var normalDirection = math.normalize(math.cross(tangent, up));
 
-            var extremity1 = position - inValue * (Vector3)normalDirection;
-            var extremity2 = position + inValue * (Vector3)normalDirection;
+            var extremity1 = position - inValue * 0.5f * (Vector3)normalDirection;
+            var extremity2 = position + inValue * 0.5f * (Vector3)normalDirection;
             Vector3 val1, val2;
             using (new Handles.DrawingScope(handleColor))
             {
@@ -121,13 +121,13 @@ namespace GameCraftersGuild.WorldBuilding.Editor
 
             if (GUIUtility.hotControl == id1 && math.abs((val1 - extremity1).magnitude) > 0)
             {
-                outValue = math.abs((val1 - position).magnitude);
+                outValue = math.abs((val1 - position).magnitude) * 2.0f;
                 return true;
             }
 
             if (GUIUtility.hotControl == id2 && math.abs((val2 - extremity2).magnitude) > 0)
             {
-                outValue = math.abs((val2 - position).magnitude);
+                outValue = math.abs((val2 - position).magnitude) * 2.0f;
                 return true;
             }
 
