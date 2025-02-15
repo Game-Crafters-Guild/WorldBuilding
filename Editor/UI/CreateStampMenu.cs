@@ -34,25 +34,25 @@ namespace GameCraftersGuild.WorldBuilding.Editor
 
         private const int kMenuPriority = 2;
         private const float kMenuSecondaryPriority = 0.5f;
-        [MenuItem("GameObject/Stamps/Circle", priority = kMenuPriority, secondaryPriority = kMenuSecondaryPriority)]
+        [MenuItem("GameObject/WorldBuilding Stamps/Circle", priority = kMenuPriority, secondaryPriority = kMenuSecondaryPriority)]
         static void CreateCircleStamp(MenuCommand menuCommand)
         {
             CreateStampGameObject("Circle Stamp", typeof(CircleShape), menuCommand);
         }
         
-        [MenuItem("GameObject/Stamps/Rectangle", priority = kMenuPriority, secondaryPriority = kMenuSecondaryPriority)]
+        [MenuItem("GameObject/WorldBuilding Stamps/Rectangle", priority = kMenuPriority, secondaryPriority = kMenuSecondaryPriority)]
         static void CreateRectangleStamp(MenuCommand menuCommand)
         {
             CreateStampGameObject("Rectangle Stamp", typeof(RectangleShape), menuCommand);
         }
         
-        [MenuItem("GameObject/Stamps/Global", priority = kMenuPriority, secondaryPriority = kMenuSecondaryPriority)]
+        [MenuItem("GameObject/WorldBuilding Stamps/Global", priority = kMenuPriority, secondaryPriority = kMenuSecondaryPriority)]
         static void CreateGlobalStamp(MenuCommand menuCommand)
         {
             CreateStampGameObject("Global Stamp", typeof(GlobalShape), menuCommand);
         }
         
-        [MenuItem("GameObject/Stamps/Spline Path", priority = kMenuPriority, secondaryPriority = kMenuSecondaryPriority)]
+        [MenuItem("GameObject/WorldBuilding Stamps/Spline Path", priority = kMenuPriority, secondaryPriority = kMenuSecondaryPriority)]
         static void CreateSplinePathStamp(MenuCommand menuCommand)
         {
             Vector3 forward = SceneView.lastActiveSceneView.rotation * Vector3.forward;
@@ -61,7 +61,7 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             CreateStampGameObject("Spline Path Stamp", typeof(SplinePathShape), menuCommand, SplineFactory.CreateLinear(new float3[] { -forward * 5.0f, Vector3.zero, forward * 5.0f }));
         }
         
-        [MenuItem("GameObject/Stamps/Spline Area", priority = kMenuPriority, secondaryPriority = kMenuSecondaryPriority)]
+        [MenuItem("GameObject/WorldBuilding Stamps/Spline Area", priority = kMenuPriority, secondaryPriority = kMenuSecondaryPriority)]
         static void CreateSplineAreaStamp(MenuCommand menuCommand)
         {
             CreateStampGameObject("Spline Path Area", typeof(SplineAreaShape), menuCommand, SplineFactory.CreateRoundedCornerSquare(10.0f, 3.0f));
