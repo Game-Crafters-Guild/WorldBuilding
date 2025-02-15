@@ -70,7 +70,8 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/WriteHeightmap"
 
                 float heightData = tex2D(_Data, i.uv).x;
                 float height = lerp(_HeightRange.x, _HeightRange.y, heightData) * 0.5;
-                return float4(height, height, height, mask);
+                float4 packedHeight = PackHeightmap(height);
+                return float4(packedHeight.x, packedHeight.y, packedHeight.z, mask);
             }
             ENDCG
         }
@@ -136,7 +137,8 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/WriteHeightmap"
                 float splineMeshWorldSpaceY = lerp(_SplineMeshBoundsY.x, _SplineMeshBoundsY.y, splineMeshHeight);
                 float splineMeshTerrainSpaceY = (splineMeshWorldSpaceY - _TerrainWorldHeightRange.x) / _TerrainWorldHeightRange.y * 0.5f;
                 height += splineMeshTerrainSpaceY;
-                return float4(height, height, height, mask);
+                float4 packedHeight = PackHeightmap(height);
+                return float4(packedHeight.x, packedHeight.y, packedHeight.z, mask);
             }
             ENDCG
         }
