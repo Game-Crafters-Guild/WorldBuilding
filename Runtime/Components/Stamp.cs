@@ -93,7 +93,21 @@ namespace GameCraftersGuild.WorldBuilding
             if (m_Shape != null) return;
             if (TryGetComponent(out m_Shape) == false)
             {
-                m_Shape = gameObject.AddComponent<CircleShape>();
+                if (TryGetComponent<SplineContainer>(out var splineContainer))
+                {
+                    if (splineContainer.Spline.Closed)
+                    {
+                        m_Shape = gameObject.AddComponent<SplineAreaShape>();    
+                    }
+                    else
+                    {
+                        m_Shape = gameObject.AddComponent<SplinePathShape>();
+                    }
+                }
+                else
+                {
+                    m_Shape = gameObject.AddComponent<CircleShape>();
+                }
             }
         }
 
