@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.Serialization;
 using Random = UnityEngine.Random;
 
 namespace GameCraftersGuild.WorldBuilding
@@ -13,29 +12,6 @@ namespace GameCraftersGuild.WorldBuilding
         {
             Tree,
             Detail
-        }
-
-        [Serializable]
-        public class VegetationConstraints
-        {
-            [Range(0f, 90f)]
-            public float MaxSlope = 45f;
-            [Range(0f, 90f)]
-            public float MinSlope = 0f;
-            public float MinHeight = 0f;
-            public float MaxHeight = 1000f;
-            public TerrainLayer[] AllowedLayers;
-            
-            [Range(0f, 5f)]
-            [Tooltip("Density of vegetation. Higher values = more vegetation.")]
-            public float Density = 1f;
-            
-            [Range(0f, 1f)]
-            public float RandomOffset = 0.1f;
-            
-            [Tooltip("Number of trees per unit at full density")]
-            [Min(0.001f)]
-            public float TreesPerUnit = 0.1f;
         }
 
         [Serializable]
@@ -76,7 +52,10 @@ namespace GameCraftersGuild.WorldBuilding
         public VegetationType Type = VegetationType.Tree;
         public List<TreeSettings> Trees = new List<TreeSettings>();
         public List<DetailSettings> Details = new List<DetailSettings>();
-        public VegetationConstraints Constraints = new VegetationConstraints();
+        
+        // Vegetation constraints
+        public VegetationConstraintsContainer ConstraintsContainer = new VegetationConstraintsContainer();
+        
         public bool UseNoise = false;
         [SerializeReference] public NoiseProperties NoiseProperties = new NoiseProperties();
 
@@ -130,6 +109,18 @@ namespace GameCraftersGuild.WorldBuilding
             return GetRandomValue() * 2f * Mathf.PI;
         }
 
+        // Create default constraints if none exist
+        private void CreateDefaultConstraints()
+        {
+            if (ConstraintsContainer.Constraints.Count == 0)
+            {
+                // Create default constraints
+                ConstraintsContainer.Constraints.Add(new HeightConstraint());
+                ConstraintsContainer.Constraints.Add(new SlopeConstraint());
+                ConstraintsContainer.Constraints.Add(new DensityConstraint());
+            }
+        }
+
         public override string FilePath => GetFilePath();
         
         public override int GetNumPrototypes()
@@ -158,7 +149,7 @@ namespace GameCraftersGuild.WorldBuilding
             else
             {
                 if (index < 0 || index >= Details.Count)
-            return null;
+                    return null;
 
                 DetailSettings detailSettings = Details[index];
                 DetailPrototype prototype = new DetailPrototype();
@@ -190,6 +181,15 @@ namespace GameCraftersGuild.WorldBuilding
 
         public override void ApplyVegetation(WorldBuildingContext context, Bounds worldBounds, Texture mask)
         {
+            // Ensure we have constraints
+            if (ConstraintsContainer.Constraints.Count == 0)
+            {
+                CreateDefaultConstraints();
+            }
+            
+            // Set random seed for all constraints
+            ConstraintsContainer.SetRandomSeed(RandomSeed);
+            
             if (Type == VegetationType.Tree)
                 ApplyTrees(context, worldBounds, mask);
             else
@@ -227,8 +227,20 @@ namespace GameCraftersGuild.WorldBuilding
                 noiseTexture = NoiseProperties.NoiseTexture;
             }
 
+            // Find the density constraint
+            DensityConstraint densityConstraint = ConstraintsContainer.FindConstraint<DensityConstraint>();
+            
             // Create random position samples within the bounds
-            int treeCount = CalculateTreeCount(terrainBounds.size.x * terrainBounds.size.z, Constraints.Density);
+            int treeCount = 0;
+            if (densityConstraint != null)
+            {
+                treeCount = densityConstraint.CalculateTreeCount(terrainBounds.size.x * terrainBounds.size.z);
+            }
+            else
+            {
+                Debug.LogWarning("No density constraint found. Using default tree count.");
+                treeCount = 10; // Default fallback
+            }
             
             // Get terrain parameters for constraints
             float[,,] alphamaps = terrainData.GetAlphamaps(0, 0, terrainData.alphamapWidth, terrainData.alphamapHeight);
@@ -253,36 +265,25 @@ namespace GameCraftersGuild.WorldBuilding
                     Mathf.RoundToInt(normZ * terrainData.heightmapResolution)
                 );
 
-                // Check height constraint
-                if (height < Constraints.MinHeight || height > Constraints.MaxHeight)
-                    continue;
-
-                // Check slope constraint
+                // Get slope at this position
                 float slope = GetTerrainSlope(terrainData, normX, normZ);
-                if (slope < Constraints.MinSlope || slope > Constraints.MaxSlope)
+                
+                // Create context for constraint checking
+                VegetationConstraintContext constraintContext = new VegetationConstraintContext
+                {
+                    TerrainHeight = height,
+                    TerrainSlope = slope,
+                    AlphaMaps = alphamaps,
+                    BoundsNormX = boundsNormX,
+                    BoundsNormZ = boundsNormZ,
+                    MaskTexture = mask,
+                    NoiseTexture = noiseTexture
+                };
+                
+                // Check all constraints
+                if (!ConstraintsContainer.CheckConstraints(terrainData, normX, normZ, constraintContext))
+                {
                     continue;
-
-                // Check terrain layer constraints if specified
-                if (Constraints.AllowedLayers != null && Constraints.AllowedLayers.Length > 0)
-                {
-                    if (!IsOnAllowedLayer(terrainData, alphamaps, normX, normZ, Constraints.AllowedLayers))
-                        continue;
-                }
-
-                // Check mask value at position (using bounds-relative coordinates)
-                if (mask != null)
-                {
-                    float maskValue = SampleTexture(mask, boundsNormX, boundsNormZ);
-                    if (maskValue < 0.1f) // Threshold for mask
-                        continue;
-                }
-
-                // Check noise constraint if using noise (using bounds-relative coordinates)
-                if (UseNoise && noiseTexture != null)
-                {
-                    float noiseValue = SampleTexture(noiseTexture, boundsNormX, boundsNormZ);
-                    if (noiseValue < 0.3f) // Threshold for noise
-                        continue;
                 }
 
                 // Select a random tree prototype
@@ -308,11 +309,11 @@ namespace GameCraftersGuild.WorldBuilding
                     lightmapColor = treeSettings.LightmapColor
                 };
 
-                // Add random offset
-                if (Constraints.RandomOffset > 0)
+                // Add random offset if the density constraint exists
+                if (densityConstraint != null && densityConstraint.RandomOffset > 0)
                 {
-                    float offsetX = (GetRandomValue() * 2 - 1) * Constraints.RandomOffset * 0.01f;
-                    float offsetZ = (GetRandomValue() * 2 - 1) * Constraints.RandomOffset * 0.01f;
+                    float offsetX = densityConstraint.GetRandomOffset();
+                    float offsetZ = densityConstraint.GetRandomOffset();
                     treeInstance.position += new Vector3(offsetX, 0, offsetZ);
                     
                     // Ensure position stays within bounds
@@ -356,6 +357,10 @@ namespace GameCraftersGuild.WorldBuilding
                 noiseTexture = NoiseProperties.NoiseTexture;
             }
 
+            // Find the density constraint for scaling
+            DensityConstraint densityConstraint = ConstraintsContainer.FindConstraint<DensityConstraint>();
+            float density = densityConstraint != null ? densityConstraint.Density : 1.0f;
+
             // Process each detail prototype
             for (int localProtoIndex = 0; localProtoIndex < Details.Count; localProtoIndex++)
             {
@@ -395,57 +400,33 @@ namespace GameCraftersGuild.WorldBuilding
                         float boundsNormZ = (float)y / height;
                         
                         // Get height and slope at position
-                        float height01 = terrainData.GetHeight(
+                        float terrainHeight = terrainData.GetHeight(
                             Mathf.RoundToInt(normX * terrainData.heightmapResolution),
                             Mathf.RoundToInt(normZ * terrainData.heightmapResolution)
-                        ) / terrainData.size.y;
+                        );
 
                         float slope = GetTerrainSlope(terrainData, normX, normZ);
                         
-                        // Check constraints
-                        bool shouldApply = true;
-                        
-                        // Height constraint
-                        if (height01 * terrainData.size.y < Constraints.MinHeight || 
-                            height01 * terrainData.size.y > Constraints.MaxHeight)
-                            shouldApply = false;
-                        
-                        // Slope constraint
-                        if (slope < Constraints.MinSlope || slope > Constraints.MaxSlope)
-                            shouldApply = false;
-                            
-                        // Layer constraint
-                        if (Constraints.AllowedLayers != null && Constraints.AllowedLayers.Length > 0)
+                        // Create constraint context
+                        VegetationConstraintContext constraintContext = new VegetationConstraintContext
                         {
-                            if (!IsOnAllowedLayer(terrainData, alphamaps, normX, normZ, Constraints.AllowedLayers))
-                                shouldApply = false;
-                        }
+                            TerrainHeight = terrainHeight,
+                            TerrainSlope = slope,
+                            AlphaMaps = alphamaps,
+                            BoundsNormX = boundsNormX,
+                            BoundsNormZ = boundsNormZ,
+                            MaskTexture = mask,
+                            NoiseTexture = noiseTexture
+                        };
                         
-                        // Mask constraint (using bounds-relative coordinates)
-                        if (mask != null)
-                        {
-                            float maskValue = SampleTexture(mask, boundsNormX, boundsNormZ);
-                            if (maskValue < 0.1f) // Threshold for mask
-                                shouldApply = false;
-                        }
+                        // Check all constraints
+                        bool shouldApply = ConstraintsContainer.CheckConstraints(terrainData, normX, normZ, constraintContext);
                         
-                        // Noise constraint (using bounds-relative coordinates)
-                        if (UseNoise && noiseTexture != null)
-                        {
-                            float noiseValue = SampleTexture(noiseTexture, boundsNormX, boundsNormZ);
-                            if (noiseValue < 0.3f) // Threshold for noise
-                                shouldApply = false;
-                        }
-                        
-                        // Random density constraint
-                        if (GetRandomValue() > Constraints.Density * 0.2f) // Scale to make density more intuitive
-                            shouldApply = false;
-                            
                         // Apply detail
                         if (shouldApply)
                         {
                             // Calculate density based on density value (1-16 range)
-                            int maxDensity = Mathf.Clamp(Mathf.RoundToInt(8 * Constraints.Density), 1, 16);
+                            int maxDensity = Mathf.Clamp(Mathf.RoundToInt(8 * density), 1, 16);
                             detailPatch[y, x] = GetRandomRange(1, maxDensity);
                         }
                         else
@@ -458,16 +439,6 @@ namespace GameCraftersGuild.WorldBuilding
                 // Add detail patch to context instead of directly to terrain
                 context.SetDetailLayer(terrainProtoIndex, startX, startY, detailPatch);
             }
-        }
-
-        private int CalculateTreeCount(float area, float density)
-        {
-            // Calculate number of trees based on area and density
-            // Use TreesPerUnit to calculate tree count
-            float baseCount = area * Constraints.TreesPerUnit;
-            
-            // Apply density (0-5 range)
-            return Mathf.RoundToInt(baseCount * density);
         }
 
         #region Helper Methods
@@ -497,57 +468,29 @@ namespace GameCraftersGuild.WorldBuilding
             // Get terrain normal
             Vector3 normal = terrainData.GetInterpolatedNormal(normX, normZ);
             
-            // Calculate slope in degrees (0 = flat, 90 = vertical)
-            return Vector3.Angle(normal, Vector3.up);
+            // Calculate angle between normal and up vector (in degrees)
+            float angle = Vector3.Angle(normal, Vector3.up);
+            return angle;
         }
-        
-        private bool IsOnAllowedLayer(TerrainData terrainData, float[,,] alphamaps, float normX, float normZ, TerrainLayer[] allowedLayers)
-        {
-            // Check if position is on any of the allowed terrain layers
-            int alphamapX = Mathf.RoundToInt(normX * (terrainData.alphamapWidth - 1));
-            int alphamapZ = Mathf.RoundToInt(normZ * (terrainData.alphamapHeight - 1));
-            
-            // Find the dominant layer at this position
-            int dominantLayerIndex = -1;
-            float dominantStrength = 0;
-            
-            for (int i = 0; i < terrainData.alphamapLayers; i++)
-            {
-                float strength = alphamaps[alphamapZ, alphamapX, i];
-                if (strength > dominantStrength)
-                {
-                    dominantStrength = strength;
-                    dominantLayerIndex = i;
-                }
-            }
-            
-            if (dominantLayerIndex < 0)
-                return false;
-                
-            TerrainLayer dominantLayer = terrainData.terrainLayers[dominantLayerIndex];
-            
-            // Check if dominant layer is in the allowed layers list
-            foreach (TerrainLayer allowedLayer in allowedLayers)
-            {
-                if (dominantLayer == allowedLayer)
-                    return true;
-            }
-            
-            return false;
-        }
-        
+
         private float SampleTexture(Texture texture, float normX, float normZ)
         {
             // Sample texture at normalized position
-            // This is a simplification; you may need to adjust based on your texture type
             if (texture is Texture2D texture2D)
             {
-                return texture2D.GetPixelBilinear(normX, normZ).grayscale;
+                int x = Mathf.FloorToInt(normX * texture2D.width);
+                int y = Mathf.FloorToInt(normZ * texture2D.height);
+                
+                x = Mathf.Clamp(x, 0, texture2D.width - 1);
+                y = Mathf.Clamp(y, 0, texture2D.height - 1);
+                
+                return texture2D.GetPixel(x, y).grayscale;
             }
             
-            return 1.0f; // Default if texture sampling isn't possible
+            // Fallback
+            return 1.0f;
         }
-        
+
         private Dictionary<int, int> GetTreePrototypeIndices(TerrainData terrainData)
         {
             Dictionary<int, int> map = new Dictionary<int, int>();
@@ -563,7 +506,9 @@ namespace GameCraftersGuild.WorldBuilding
                 // Find the matching prototype in terrain data
                 for (int terrainIndex = 0; terrainIndex < terrainData.treePrototypes.Length; terrainIndex++)
                 {
-                    if (terrainData.treePrototypes[terrainIndex].prefab == treeSettings.Prefab)
+                    TreePrototype terrainProto = terrainData.treePrototypes[terrainIndex];
+                    
+                    if (terrainProto.prefab == treeSettings.Prefab)
                     {
                         map[localIndex] = terrainIndex;
                         break;
@@ -573,7 +518,7 @@ namespace GameCraftersGuild.WorldBuilding
             
             return map;
         }
-        
+
         private Dictionary<int, int> GetDetailPrototypeIndices(TerrainData terrainData)
         {
             Dictionary<int, int> map = new Dictionary<int, int>();
