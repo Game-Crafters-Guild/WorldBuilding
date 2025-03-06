@@ -33,7 +33,10 @@ namespace GameCraftersGuild.WorldBuilding
         private List<TreeInstance> m_TreeInstances = new List<TreeInstance>();
         private Dictionary<int, int[,]> m_DetailLayers = new Dictionary<int, int[,]>();
         
-        // Tree and detail prototype indices that have been registered
+        // Tree and detail prototype collections.
+        private List<TreePrototype> m_TreePrototypes = new List<TreePrototype>();
+        private List<DetailPrototype> m_DetailPrototypes = new List<DetailPrototype>();
+
         private HashSet<int> m_RegisteredTreeIndices = new HashSet<int>();
         private HashSet<int> m_RegisteredDetailIndices = new HashSet<int>();
 
@@ -346,19 +349,32 @@ namespace GameCraftersGuild.WorldBuilding
             if (TerrainData == null)
                 return;
             
-            // Apply tree instances
+            // Apply tree prototypes and instances to the terrain
+            if (m_TreePrototypes.Count > 0)
+            {
+                TerrainData.treePrototypes = m_TreePrototypes.ToArray();
+                TerrainData.RefreshPrototypes();
+            }
+            
             if (m_TreeInstances.Count > 0)
             {
                 TerrainData.treeInstances = m_TreeInstances.ToArray();
             }
-            
-            // Apply detail layers
-            foreach (var prototypeIndex in m_RegisteredDetailIndices)
+
+            // Apply detail prototypes and layers to the terrain
+            if (m_DetailPrototypes.Count > 0)
             {
-                if (m_DetailLayers.TryGetValue(prototypeIndex, out int[,] detailLayer))
-                {
-                    TerrainData.SetDetailLayer(0, 0, prototypeIndex, detailLayer);
-                }
+                TerrainData.detailPrototypes = m_DetailPrototypes.ToArray();
+                TerrainData.RefreshPrototypes();
+            }
+
+            // Apply detail layers
+            foreach (var detailLayer in m_DetailLayers)
+            {
+                int detailIndex = detailLayer.Key;
+                int[,] detailData = detailLayer.Value;
+                
+                TerrainData.SetDetailLayer(0, 0, detailIndex, detailData);
             }
         }
         
@@ -371,6 +387,28 @@ namespace GameCraftersGuild.WorldBuilding
             m_DetailLayers.Clear();
             m_RegisteredTreeIndices.Clear();
             m_RegisteredDetailIndices.Clear();
+            m_TreePrototypes.Clear();
+            m_DetailPrototypes.Clear();
+        }
+
+        public void AddTreePrototype(TreePrototype prototype)
+        {
+            m_TreePrototypes.Add(prototype);
+        }
+
+        public void AddDetailPrototype(DetailPrototype prototype)
+        {
+            m_DetailPrototypes.Add(prototype);
+        }
+
+        public List<TreePrototype> GetTreePrototypes()
+        {
+            return m_TreePrototypes;
+        }
+
+        public List<DetailPrototype> GetDetailPrototypes()
+        {
+            return m_DetailPrototypes;
         }
     }
 }

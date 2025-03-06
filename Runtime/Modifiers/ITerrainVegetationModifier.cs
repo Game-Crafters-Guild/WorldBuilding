@@ -24,25 +24,23 @@ namespace GameCraftersGuild.WorldBuilding
                 
                 if (firstPrototype is TreePrototype)
                 {
-                    RegisterTreePrototypes(terrainData);
+                    RegisterTreePrototypes(context);
                 }
                 else if (firstPrototype is DetailPrototype)
                 {
-                    RegisterDetailPrototypes(terrainData);
+                    RegisterDetailPrototypes(context);
                 }
             }
         }
         
-        protected virtual void RegisterTreePrototypes(TerrainData terrainData)
+        protected virtual void RegisterTreePrototypes(WorldBuildingContext context)
         {
             int count = GetNumPrototypes();
             if (count <= 0)
                 return;
                 
             // Get existing prototypes to prevent duplicates
-            var existingPrototypes = new List<TreePrototype>(terrainData.treePrototypes);
-            var newPrototypes = new List<TreePrototype>();
-            bool hasChanges = false;
+            var existingPrototypes = new List<TreePrototype>(context.GetTreePrototypes());
             
             // Add new prototypes
             for (int i = 0; i < count; i++)
@@ -64,36 +62,20 @@ namespace GameCraftersGuild.WorldBuilding
                 
                 if (!exists)
                 {
-                    newPrototypes.Add(prototype);
-                    hasChanges = true;
+                    context.AddTreePrototype(prototype);
+                    existingPrototypes.Add(prototype); // Add to our local list to avoid duplicates
                 }
-            }
-            
-            // If we have new prototypes, update the terrain
-            if (hasChanges)
-            {
-                // Combine existing and new prototypes
-                var allPrototypes = new List<TreePrototype>(existingPrototypes);
-                allPrototypes.AddRange(newPrototypes);
-                
-                // Apply to terrain
-                terrainData.treePrototypes = allPrototypes.ToArray();
-                
-                // This is needed to refresh the tree database
-                terrainData.RefreshPrototypes();
             }
         }
         
-        protected virtual void RegisterDetailPrototypes(TerrainData terrainData)
+        protected virtual void RegisterDetailPrototypes(WorldBuildingContext context)
         {
             int count = GetNumPrototypes();
             if (count <= 0)
                 return;
                 
             // Get existing prototypes to prevent duplicates
-            var existingPrototypes = new List<DetailPrototype>(terrainData.detailPrototypes);
-            var newPrototypes = new List<DetailPrototype>();
-            bool hasChanges = false;
+            var existingPrototypes = new List<DetailPrototype>(context.GetDetailPrototypes());
             
             // Add new prototypes
             for (int i = 0; i < count; i++)
@@ -116,33 +98,8 @@ namespace GameCraftersGuild.WorldBuilding
                 
                 if (!exists)
                 {
-                    newPrototypes.Add(prototype);
-                    hasChanges = true;
-                }
-            }
-            
-            // If we have new prototypes, update the terrain
-            if (hasChanges)
-            {
-                // Combine existing and new prototypes
-                var allPrototypes = new List<DetailPrototype>(existingPrototypes);
-                allPrototypes.AddRange(newPrototypes);
-                
-                // Apply to terrain
-                terrainData.detailPrototypes = allPrototypes.ToArray();
-                
-                // Resize the detail maps if needed
-                if (terrainData.detailPrototypes.Length > existingPrototypes.Count)
-                {
-                    int detailWidth = terrainData.detailWidth;
-                    int detailHeight = terrainData.detailHeight;
-                    
-                    // Initialize detail layer for each new prototype
-                    for (int i = existingPrototypes.Count; i < terrainData.detailPrototypes.Length; i++)
-                    {
-                        int[,] emptyDetailMap = new int[detailWidth, detailHeight];
-                        terrainData.SetDetailLayer(0, 0, i, emptyDetailMap);
-                    }
+                    context.AddDetailPrototype(prototype);
+                    existingPrototypes.Add(prototype); // Add to our local list to avoid duplicates
                 }
             }
         }
