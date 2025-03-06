@@ -166,6 +166,8 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                 { viewDataKey = "Height-Modifiers-Tab" });
             view.Add(new ModifierTabView<ITerrainSplatModifier>(property.FindPropertyRelative("TerrainSplatModifiers"),
                 "Splat") { viewDataKey = "Splat-Modifiers-Tab" });
+            view.Add(new ModifierTabView<ITerrainVegetationModifier>(property.FindPropertyRelative("TerrainVegetationModifiers"),
+                "Vegetation") { viewDataKey = "Vegetation-Modifiers-Tab" });
             view.Add(new ModifierTabView<IGameObjectModifier>(property.FindPropertyRelative("GameObjectModifiers"),
                 "GameObject") { viewDataKey = "GameObject-Modifiers-Tab" });
             container.Add(view);

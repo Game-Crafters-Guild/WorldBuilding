@@ -15,10 +15,13 @@ namespace GameCraftersGuild.WorldBuilding
         public MaskFalloff Fallof;
         public override string FilePath => GetFilePath();
 
+        [Header("Optional custom mask texture to use instead of the shape.")]
+        public Texture2D MaskTexture;
+
         public override void ApplySplatmap(WorldBuildingContext context, Bounds worldBounds, Texture mask)
         {
             context.MaskFalloff = Fallof;
-            context.ApplySplatmap(worldBounds, TerrainLayer, mask, Intensity);
+            context.ApplySplatmap(worldBounds, TerrainLayer, MaskTexture == null ? mask : MaskTexture, Intensity);
         }
 
         public override int GetNumTerrainLayers()

@@ -396,6 +396,41 @@ namespace GameCraftersGuild.WorldBuilding
                 m_WorldBuildingContext.CurrentTransform = builder.TransformMatrix;
                 builder.ApplySplatmap(m_WorldBuildingContext);
             }
+            
+            // Register vegetation prototypes first for current terrain
+            TerrainData terrainData = m_WorldBuildingContext.TerrainData;
+            
+            // Clear existing tree instances 
+            terrainData.treeInstances = new TreeInstance[0];
+            
+            // Register all vegetation prototypes
+            foreach (var builder in m_WorldBuilders)
+            {
+                if (builder is ITerrainVegetationProvider vegetationProvider)
+                {
+                    if (vegetationProvider.TerrainVegetationModifiers == null) continue;
+                    foreach (var vegetationModifier in vegetationProvider.TerrainVegetationModifiers)
+                    {
+                        if (vegetationModifier.Enabled)
+                        {
+                            vegetationModifier.RegisterPrototypes(m_WorldBuildingContext, terrainData);
+                        }
+                    }
+                }
+            }
+            
+            // Clear existing vegetation data in the context
+            m_WorldBuildingContext.ClearVegetation();
+            
+            // Now have all modifiers generate vegetation data into the context
+            foreach (var builder in m_WorldBuilders)
+            {
+                m_WorldBuildingContext.CurrentTransform = builder.TransformMatrix;
+                builder.GenerateVegetation(m_WorldBuildingContext);
+            }
+            
+            // Apply all vegetation at once
+            m_WorldBuildingContext.ApplyVegetationToTerrain();
 
             foreach (var builder in m_WorldBuilders)
             {

@@ -8,9 +8,8 @@ namespace GameCraftersGuild.WorldBuilding
   public class WorldModifiersContainer
   {
     [SerializeReference] public List<ITerrainHeightModifier> TerrainHeightModifiers = new();
-
     [SerializeReference] public List<ITerrainSplatModifier> TerrainSplatModifiers = new();
-
+    [SerializeReference] public List<ITerrainVegetationModifier> TerrainVegetationModifiers = new();
     [SerializeReference] public List<IGameObjectModifier> GameObjectModifiers = new();
   }
 }

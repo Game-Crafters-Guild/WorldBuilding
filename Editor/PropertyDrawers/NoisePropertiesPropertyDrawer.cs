@@ -37,6 +37,10 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             }
 
             NoiseProperties properties = property.boxedValue as NoiseProperties;
+            if (properties == null)
+            {
+                return container;
+            }
             image.image = properties.NoiseTexture;
             container.Add(imageContainer);
             imageContainer.RegisterCallback<GeometryChangedEvent>(OnImageGeometryChanged);

@@ -35,6 +35,7 @@ namespace GameCraftersGuild.WorldBuilding
 
         [SerializeField] public WorldModifiersContainer m_Modifiers = new WorldModifiersContainer();
         public List<ITerrainSplatModifier> TerrainSplatModifiers => m_Modifiers.TerrainSplatModifiers;
+        public List<ITerrainVegetationModifier> TerrainVegetationModifiers => m_Modifiers.TerrainVegetationModifiers;
 
         [HideInInspector] [SerializeField] private StampShape m_Shape;
 
@@ -135,6 +136,17 @@ namespace GameCraftersGuild.WorldBuilding
             {
                 if (!splatModifier.Enabled) continue;
                 splatModifier.ApplySplatmap(context, WorldBounds, MaskTexture);
+            }
+        }
+
+        public void GenerateVegetation(WorldBuildingContext context)
+        {
+            context.MaskFalloff = new MaskFalloff();
+            context.MaintainMaskAspectRatio = m_Shape.MaintainMaskAspectRatio;
+            foreach (var vegetationModifier in m_Modifiers.TerrainVegetationModifiers)
+            {
+                if (!vegetationModifier.Enabled) continue;
+                vegetationModifier.ApplyVegetation(context, this.WorldBounds, MaskTexture);
             }
         }
 
