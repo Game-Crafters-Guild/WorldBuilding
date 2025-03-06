@@ -34,20 +34,6 @@ namespace GameCraftersGuild.WorldBuilding
         }
         
         /// <summary>
-        /// Set random seed for constraints that need it
-        /// </summary>
-        public void SetRandomSeed(int seed)
-        {
-            foreach (var constraint in Constraints)
-            {
-                if (constraint is DensityConstraint densityConstraint)
-                {
-                    densityConstraint.SetRandomSeed(seed);
-                }
-            }
-        }
-        
-        /// <summary>
         /// Find a constraint of the specified type
         /// </summary>
         public T FindConstraint<T>() where T : IVegetationConstraint

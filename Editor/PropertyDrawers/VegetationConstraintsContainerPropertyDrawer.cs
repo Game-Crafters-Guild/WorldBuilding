@@ -76,7 +76,7 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             
             if (count == 0)
             {
-                var helpBox = new HelpBox("No constraints have been added. Vegetation will not appear until you add at least one constraint.", HelpBoxMessageType.Warning);
+                var helpBox = new HelpBox("No constraints have been added.", HelpBoxMessageType.Info);
                 container.Add(helpBox);
             }
             

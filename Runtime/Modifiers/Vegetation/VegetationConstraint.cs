@@ -35,7 +35,6 @@ namespace GameCraftersGuild.WorldBuilding
         
         // Texture data
         public Texture MaskTexture { get; set; }
-        public Texture NoiseTexture { get; set; }
     }
 
     /// <summary>
@@ -152,82 +151,24 @@ namespace GameCraftersGuild.WorldBuilding
     {
         [Range(0f, 1f)]
         public float Threshold = 0.3f;
+        
+        [SerializeReference] 
+        public NoiseProperties NoiseProperties = new NoiseProperties();
 
         public bool CheckConstraint(TerrainData terrainData, float normX, float normZ, VegetationConstraintContext context)
         {
-            if (context.NoiseTexture == null)
+            var noiseTexture = NoiseProperties.NoiseTexture;
+            if (noiseTexture == null)
                 return true;
                 
             // Sample noise texture
             Color noiseColor;
-            if (context.NoiseTexture is Texture2D texture2D)
-            {
-                int x = Mathf.FloorToInt(context.BoundsNormX * texture2D.width);
-                int y = Mathf.FloorToInt(context.BoundsNormZ * texture2D.height);
-                noiseColor = texture2D.GetPixel(x, y);
-            }
-            else
-            {
-                // For other texture types, use a simpler approach
-                noiseColor = Color.white;
-            }
+            
+            int x = Mathf.FloorToInt(context.BoundsNormX * noiseTexture.width);
+            int y = Mathf.FloorToInt(context.BoundsNormZ * noiseTexture.height);
+            noiseColor = noiseTexture.GetPixel(x, y);
             
             return noiseColor.grayscale >= Threshold;
-        }
-    }
-
-    /// <summary>
-    /// Density-based vegetation constraint
-    /// </summary>
-    [Serializable]
-    public class DensityConstraint : IVegetationConstraint
-    {
-        [Range(0f, 5f)]
-        [Tooltip("Density of vegetation. Higher values = more vegetation.")]
-        public float Density = 1f;
-        
-        [Range(0f, 1f)]
-        public float RandomOffset = 0.1f;
-        
-        [Tooltip("Number of trees per unit at full density")]
-        [Min(0.001f)]
-        public float TreesPerUnit = 0.1f;
-
-        private System.Random m_Random;
-
-        public bool CheckConstraint(TerrainData terrainData, float normX, float normZ, VegetationConstraintContext context)
-        {
-            if (m_Random == null)
-                m_Random = new System.Random();
-                
-            // Use random value compared against density to determine if vegetation should be placed
-            double randomValue = m_Random.NextDouble();
-            return randomValue <= Density * 0.2f; // Scale to make density more intuitive
-        }
-        
-        public void SetRandomSeed(int seed)
-        {
-            if (seed != 0)
-                m_Random = new System.Random(seed);
-            else
-                m_Random = new System.Random();
-        }
-        
-        public float GetRandomOffset()
-        {
-            if (m_Random == null)
-                m_Random = new System.Random();
-                
-            return (float)(m_Random.NextDouble() * 2 - 1) * RandomOffset * 0.01f;
-        }
-        
-        public int CalculateTreeCount(float area)
-        {
-            // Calculate number of trees based on area and density
-            float baseCount = area * TreesPerUnit;
-            
-            // Apply density (0-5 range)
-            return Mathf.RoundToInt(baseCount * Density);
         }
     }
 } 

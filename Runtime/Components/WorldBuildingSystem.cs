@@ -419,9 +419,6 @@ namespace GameCraftersGuild.WorldBuilding
                 }
             }
             
-            // Clear existing vegetation data in the context
-            m_WorldBuildingContext.ClearVegetation();
-            
             // Now have all modifiers generate vegetation data into the context
             foreach (var builder in m_WorldBuilders)
             {

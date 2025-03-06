@@ -56,9 +56,18 @@ namespace GameCraftersGuild.WorldBuilding
         // Vegetation constraints
         public VegetationConstraintsContainer ConstraintsContainer = new VegetationConstraintsContainer();
         
-        public bool UseNoise = false;
-        [SerializeReference] public NoiseProperties NoiseProperties = new NoiseProperties();
-
+        // Density settings moved from constraint to core functionality
+        [Range(0f, 5f)]
+        [Tooltip("Density of vegetation. Higher values = more vegetation.")]
+        public float Density = 1f;
+        
+        [Range(0f, 1f)]
+        public float RandomOffset = 0.1f;
+        
+        [Tooltip("Number of trees per unit at full density")]
+        [Min(0.001f)]
+        public float TreesPerUnit = 0.1f;
+        
         // Seed for random generation
         public int RandomSeed = 0;
         private System.Random m_SeededRandom;
@@ -108,6 +117,28 @@ namespace GameCraftersGuild.WorldBuilding
         {
             return GetRandomValue() * 2f * Mathf.PI;
         }
+        
+        // Get random offset based on the defined random offset value
+        private float GetRandomOffset()
+        {
+            return (GetRandomValue() * 2 - 1) * RandomOffset * 0.01f;
+        }
+        
+        // Calculate the number of trees based on area and density
+        private int CalculateTreeCount(float area)
+        {
+            // Calculate number of trees based on area and density
+            float baseCount = area * TreesPerUnit;
+            
+            // Apply density (0-5 range)
+            return Mathf.RoundToInt(baseCount * Density);
+        }
+        
+        // Check if vegetation should be placed based on density
+        private bool CheckDensity()
+        {
+            return GetRandomValue() <= Density * 0.2f; // Scale to make density more intuitive
+        }
 
         // Create default constraints if none exist
         private void CreateDefaultConstraints()
@@ -117,7 +148,6 @@ namespace GameCraftersGuild.WorldBuilding
                 // Create default constraints
                 ConstraintsContainer.Constraints.Add(new HeightConstraint());
                 ConstraintsContainer.Constraints.Add(new SlopeConstraint());
-                ConstraintsContainer.Constraints.Add(new DensityConstraint());
             }
         }
 
@@ -182,13 +212,16 @@ namespace GameCraftersGuild.WorldBuilding
         public override void ApplyVegetation(WorldBuildingContext context, Bounds worldBounds, Texture mask)
         {
             // Ensure we have constraints
-            if (ConstraintsContainer.Constraints.Count == 0)
+            /*if (ConstraintsContainer.Constraints.Count == 0)
             {
                 CreateDefaultConstraints();
-            }
+            }*/
             
-            // Set random seed for all constraints
-            ConstraintsContainer.SetRandomSeed(RandomSeed);
+            // Initialize random if needed
+            if (RandomSeed != 0)
+            {
+                m_SeededRandom = new System.Random(RandomSeed);
+            }
             
             if (Type == VegetationType.Tree)
                 ApplyTrees(context, worldBounds, mask);
@@ -202,12 +235,6 @@ namespace GameCraftersGuild.WorldBuilding
             TerrainData terrainData = context.TerrainData;
             if (terrainData == null) return;
 
-            // Initialize seeded random if needed
-            if (RandomSeed != 0)
-            {
-                m_SeededRandom = new System.Random(RandomSeed);
-            }
-
             // Convert world bounds to terrain space
             Bounds terrainBounds = ConvertWorldBoundsToTerrainSpace(worldBounds, terrainData);
             
@@ -219,28 +246,8 @@ namespace GameCraftersGuild.WorldBuilding
                 return;
             }
             
-            // Generate/use noise map if needed
-            Texture2D noiseTexture = null;
-            if (UseNoise && NoiseProperties != null)
-            {
-                // Convert noise to 2D array.
-                noiseTexture = NoiseProperties.NoiseTexture;
-            }
-
-            // Find the density constraint
-            DensityConstraint densityConstraint = ConstraintsContainer.FindConstraint<DensityConstraint>();
-            
-            // Create random position samples within the bounds
-            int treeCount = 0;
-            if (densityConstraint != null)
-            {
-                treeCount = densityConstraint.CalculateTreeCount(terrainBounds.size.x * terrainBounds.size.z);
-            }
-            else
-            {
-                Debug.LogWarning("No density constraint found. Using default tree count.");
-                treeCount = 10; // Default fallback
-            }
+            // Calculate tree count based on area and density
+            int treeCount = CalculateTreeCount(terrainBounds.size.x * terrainBounds.size.z);
             
             // Get terrain parameters for constraints
             float[,,] alphamaps = terrainData.GetAlphamaps(0, 0, terrainData.alphamapWidth, terrainData.alphamapHeight);
@@ -276,8 +283,7 @@ namespace GameCraftersGuild.WorldBuilding
                     AlphaMaps = alphamaps,
                     BoundsNormX = boundsNormX,
                     BoundsNormZ = boundsNormZ,
-                    MaskTexture = mask,
-                    NoiseTexture = noiseTexture
+                    MaskTexture = mask
                 };
                 
                 // Check all constraints
@@ -309,11 +315,11 @@ namespace GameCraftersGuild.WorldBuilding
                     lightmapColor = treeSettings.LightmapColor
                 };
 
-                // Add random offset if the density constraint exists
-                if (densityConstraint != null && densityConstraint.RandomOffset > 0)
+                // Add random offset if enabled
+                if (RandomOffset > 0)
                 {
-                    float offsetX = densityConstraint.GetRandomOffset();
-                    float offsetZ = densityConstraint.GetRandomOffset();
+                    float offsetX = GetRandomOffset();
+                    float offsetZ = GetRandomOffset();
                     treeInstance.position += new Vector3(offsetX, 0, offsetZ);
                     
                     // Ensure position stays within bounds
@@ -332,12 +338,6 @@ namespace GameCraftersGuild.WorldBuilding
             TerrainData terrainData = context.TerrainData;
             if (terrainData == null) return;
 
-            // Initialize seeded random if needed
-            if (RandomSeed != 0)
-            {
-                m_SeededRandom = new System.Random(RandomSeed);
-            }
-
             // Convert world bounds to terrain space
             Bounds terrainBounds = ConvertWorldBoundsToTerrainSpace(worldBounds, terrainData);
             
@@ -348,18 +348,6 @@ namespace GameCraftersGuild.WorldBuilding
                 Debug.LogWarning("No detail prototypes were registered with the terrain. Make sure prototypes are registered before calling ApplyDetails.");
                 return;
             }
-
-            // Generate/use noise map if needed
-            Texture2D noiseTexture = null;
-            if (UseNoise && NoiseProperties != null)
-            {
-                // Convert noise to 2D array.
-                noiseTexture = NoiseProperties.NoiseTexture;
-            }
-
-            // Find the density constraint for scaling
-            DensityConstraint densityConstraint = ConstraintsContainer.FindConstraint<DensityConstraint>();
-            float density = densityConstraint != null ? densityConstraint.Density : 1.0f;
 
             // Process each detail prototype
             for (int localProtoIndex = 0; localProtoIndex < Details.Count; localProtoIndex++)
@@ -415,18 +403,23 @@ namespace GameCraftersGuild.WorldBuilding
                             AlphaMaps = alphamaps,
                             BoundsNormX = boundsNormX,
                             BoundsNormZ = boundsNormZ,
-                            MaskTexture = mask,
-                            NoiseTexture = noiseTexture
+                            MaskTexture = mask
                         };
                         
                         // Check all constraints
                         bool shouldApply = ConstraintsContainer.CheckConstraints(terrainData, normX, normZ, constraintContext);
                         
+                        // Check density
+                        if (shouldApply && !CheckDensity())
+                        {
+                            shouldApply = false;
+                        }
+                        
                         // Apply detail
                         if (shouldApply)
                         {
                             // Calculate density based on density value (1-16 range)
-                            int maxDensity = Mathf.Clamp(Mathf.RoundToInt(8 * density), 1, 16);
+                            int maxDensity = Mathf.Clamp(Mathf.RoundToInt(8 * Density), 1, 16);
                             detailPatch[y, x] = GetRandomRange(1, maxDensity);
                         }
                         else
