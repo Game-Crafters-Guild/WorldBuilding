@@ -15,21 +15,22 @@ namespace GameCraftersGuild.WorldBuilding
         {
             public GameObject Prefab;
             public Texture2D DetailTexture;
-            public bool UseMeshForGrass = false;
-            [Range(0f, 2f)]
+            [Range(0f, 10f)]
             public float MinWidth = 0.8f;
-            [Range(0f, 2f)]
+            [Range(0f, 10f)]
             public float MaxWidth = 1.2f;
-            [Range(0f, 2f)]
+            [Range(0f, 10f)]
             public float MinHeight = 0.8f;
-            [Range(0f, 2f)]
+            [Range(0f, 10f)]
             public float MaxHeight = 1.2f;
             public Color HealthyColor = Color.green;
             public Color DryColor = new Color(0.8f, 0.7f, 0.2f);
-            public bool AlignToGround = true;
-            public bool UseGPUInstancing = true;
+            public bool BillboardGrass = false;
+            //public bool AlignToGround = true;
             [Range(0, 10)]
             public int NoiseSpread = 3;
+            [Range(0, 5)]
+            public float Density = 1.0f;
         }
 
         public List<DetailSettings> Details = new List<DetailSettings>();
@@ -47,15 +48,18 @@ namespace GameCraftersGuild.WorldBuilding
             DetailSettings detailSettings = Details[index];
             DetailPrototype prototype = new DetailPrototype();
             
-            if (detailSettings.UseMeshForGrass && detailSettings.Prefab != null)
+            prototype.prototypeTexture = detailSettings.DetailTexture;
+            if (detailSettings.Prefab != null)
             {
                 prototype.prototype = detailSettings.Prefab;
                 prototype.usePrototypeMesh = true;
+                prototype.renderMode = DetailRenderMode.VertexLit;
+                prototype.useInstancing = true;
             }
-            else if (detailSettings.DetailTexture != null)
+            else
             {
-                prototype.prototypeTexture = detailSettings.DetailTexture;
                 prototype.usePrototypeMesh = false;
+                prototype.renderMode = detailSettings.BillboardGrass ? DetailRenderMode.GrassBillboard : DetailRenderMode.Grass;
             }
             
             prototype.minWidth = detailSettings.MinWidth;
@@ -65,8 +69,8 @@ namespace GameCraftersGuild.WorldBuilding
             prototype.healthyColor = detailSettings.HealthyColor;
             prototype.dryColor = detailSettings.DryColor;
             prototype.noiseSpread = detailSettings.NoiseSpread;
-            prototype.renderMode = detailSettings.UseGPUInstancing ? 
-                DetailRenderMode.GrassBillboard : DetailRenderMode.Grass;
+            prototype.density = detailSettings.Density;
+            //prototype.alignToGround = detailSettings.AlignToGround;
             
             return prototype;
         }
@@ -74,10 +78,10 @@ namespace GameCraftersGuild.WorldBuilding
         public override void ApplyVegetation(WorldBuildingContext context, Bounds worldBounds, Texture mask)
         {
             // Ensure we have constraints
-            if (ConstraintsContainer.Constraints.Count == 0)
+            /*if (ConstraintsContainer.Constraints.Count == 0)
             {
                 CreateDefaultConstraints();
-            }
+            }*/
             
             // Initialize random if needed
             if (RandomSeed != 0)
@@ -90,6 +94,7 @@ namespace GameCraftersGuild.WorldBuilding
 
         private void ApplyDetails(WorldBuildingContext context, Bounds worldBounds, Texture mask)
         {
+            if (Details.Count == 0) return;
             // Get terrain data and mesh for bounds
             TerrainData terrainData = context.TerrainData;
             if (terrainData == null) return;
@@ -101,7 +106,7 @@ namespace GameCraftersGuild.WorldBuilding
             Dictionary<int, int> prototypeMap = GetDetailPrototypeIndices(terrainData);
             if (prototypeMap.Count == 0)
             {
-                Debug.LogWarning("No detail prototypes were registered with the terrain. Make sure prototypes are registered before calling ApplyDetails.");
+                //Debug.LogWarning("No detail prototypes were registered with the terrain. Make sure prototypes are registered before calling ApplyDetails.");
                 return;
             }
 
@@ -151,22 +156,20 @@ namespace GameCraftersGuild.WorldBuilding
                         bool shouldApply = ConstraintsContainer.CheckConstraints(terrainData, normX, normZ, constraintContext);
                         
                         // Check density
-                        if (shouldApply && !CheckDensity())
+                        /*if (shouldApply && !CheckDensity())
                         {
                             shouldApply = false;
-                        }
+                        }*/
                         
                         // Apply detail
                         if (shouldApply)
                         {
-                            // Calculate density based on density value (1-16 range)
-                            int maxDensity = Mathf.Clamp(Mathf.RoundToInt(8 * Density), 1, 16);
-                            detailPatch[y, x] = GetRandomRange(1, maxDensity);
+                            detailPatch[y, x] = Mathf.RoundToInt(GetRandomRange(0, 255) * Density);
                         }
                         else
                         {
                             detailPatch[y, x] = 0;
-                        }
+                        };
                     }
                 }
                 

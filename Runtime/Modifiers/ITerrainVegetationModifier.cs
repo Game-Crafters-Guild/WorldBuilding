@@ -46,7 +46,7 @@ namespace GameCraftersGuild.WorldBuilding
             for (int i = 0; i < count; i++)
             {
                 var prototype = GetPrototype(i) as TreePrototype;
-                if (prototype == null)
+                if (prototype == null || prototype.prefab == null)
                     continue;
                     
                 // Check if this prototype already exists (by comparing prefab)
@@ -81,7 +81,7 @@ namespace GameCraftersGuild.WorldBuilding
             for (int i = 0; i < count; i++)
             {
                 var prototype = GetPrototype(i) as DetailPrototype;
-                if (prototype == null)
+                if (prototype == null || (prototype.prototypeTexture == null && prototype.prototype == null))
                     continue;
                     
                 // Check if this prototype already exists (by comparing prefab or texture)

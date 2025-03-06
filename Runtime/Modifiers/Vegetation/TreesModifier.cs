@@ -88,7 +88,7 @@ namespace GameCraftersGuild.WorldBuilding
             Dictionary<int, int> prototypeMap = GetTreePrototypeIndices(terrainData);
             if (prototypeMap.Count == 0)
             {
-                Debug.LogWarning("No tree prototypes were registered with the terrain. Make sure prototypes are registered before calling ApplyTrees.");
+                //Debug.LogWarning("No tree prototypes were registered with the terrain. Make sure prototypes are registered before calling ApplyTrees.");
                 return;
             }
             

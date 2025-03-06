@@ -15,7 +15,7 @@ namespace GameCraftersGuild.WorldBuilding
         public VegetationConstraintsContainer ConstraintsContainer = new VegetationConstraintsContainer();
         
         // Density settings
-        [Range(0f, 5f)]
+        [Range(0f, 1.0f)]
         [Tooltip("Density of vegetation. Higher values = more vegetation.")]
         public float Density = 1f;
         
@@ -81,7 +81,7 @@ namespace GameCraftersGuild.WorldBuilding
         // Check if vegetation should be placed based on density
         protected bool CheckDensity()
         {
-            return GetRandomValue() <= Density * 0.2f; // Scale to make density more intuitive
+            return GetRandomValue() <= Density;
         }
 
         // Create default constraints if none exist
