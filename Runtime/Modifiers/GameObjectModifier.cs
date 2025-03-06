@@ -36,6 +36,52 @@ namespace GameCraftersGuild.WorldBuilding
             
             [Range(0f, 180f)]
             public float MaxRotation = 360f;
+            
+            [Tooltip("Minimum distance between this object and other spawned objects")]
+            [Range(0f, 10f)]
+            public float MinimumDistance = 1.0f;
+        }
+
+        [Serializable]
+        public class ObjectCollisionConstraint : IVegetationConstraint
+        {
+            [Tooltip("Minimum distance between spawned objects")]
+            [Range(0f, 10f)]
+            public float MinDistance = 2.0f;
+
+            // List to store positions of placed objects
+            [NonSerialized]
+            public List<Vector3> PlacedObjectPositions = new List<Vector3>();
+
+            public bool CheckConstraint(TerrainData terrainData, float normX, float normZ, VegetationConstraintContext context)
+            {
+                if (PlacedObjectPositions.Count == 0 || MinDistance <= 0)
+                    return true;
+
+                // Convert normalized position to world space
+                Vector3 terrainPos = Terrain.activeTerrain?.transform.position ?? Vector3.zero;
+                Vector3 terrainSize = terrainData.size;
+                
+                float worldX = terrainPos.x + normX * terrainSize.x;
+                float worldZ = terrainPos.z + normZ * terrainSize.z;
+                
+                // Get height at position (use context's terrain height)
+                float worldY = context.TerrainHeight;
+                
+                Vector3 proposedPosition = new Vector3(worldX, worldY, worldZ);
+                
+                // Check distance against all placed objects
+                foreach (var existingPos in PlacedObjectPositions)
+                {
+                    float distance = Vector3.Distance(existingPos, proposedPosition);
+                    if (distance < MinDistance)
+                    {
+                        return false; // Too close to an existing object
+                    }
+                }
+                
+                return true; // No collision detected
+            }
         }
         
         // GameObject settings
@@ -59,12 +105,22 @@ namespace GameCraftersGuild.WorldBuilding
         [Tooltip("Maximum number of objects to spawn. If set to 0, there is no limit.")]
         public int MaxObjects = 0;
         
+        [Tooltip("Should objects avoid spawning too close to each other")]
+        public bool AvoidCollisions = true;
+        
+        [Tooltip("Default minimum distance between objects")]
+        [Range(0f, 10f)]
+        public float DefaultMinimumDistance = 2.0f;
+        
         // Seed for random generation
         public int RandomSeed = 0;
         protected System.Random m_SeededRandom;
         
         // Collection to track spawned objects
         private List<GameObject> m_SpawnedObjects = new List<GameObject>();
+        
+        // Collision constraint reference
+        private ObjectCollisionConstraint m_CollisionConstraint;
         
         public override string FilePath => GetFilePath();
         
@@ -129,6 +185,18 @@ namespace GameCraftersGuild.WorldBuilding
                 ConstraintsContainer.Constraints.Add(new HeightConstraint());
                 ConstraintsContainer.Constraints.Add(new SlopeConstraint());
             }
+            
+            // Add collision constraint if enabled and not already added
+            if (AvoidCollisions && m_CollisionConstraint == null)
+            {
+                m_CollisionConstraint = ConstraintsContainer.FindConstraint<ObjectCollisionConstraint>();
+                
+                if (m_CollisionConstraint == null)
+                {
+                    m_CollisionConstraint = new ObjectCollisionConstraint { MinDistance = DefaultMinimumDistance };
+                    ConstraintsContainer.Constraints.Add(m_CollisionConstraint);
+                }
+            }
         }
         
         public void ClearSpawnedObjects()
@@ -151,6 +219,12 @@ namespace GameCraftersGuild.WorldBuilding
             }
             
             m_SpawnedObjects.Clear();
+            
+            // Clear placed object positions
+            if (m_CollisionConstraint != null)
+            {
+                m_CollisionConstraint.PlacedObjectPositions.Clear();
+            }
         }
         
         public void SpawnGameObjects(WorldBuildingContext context, Bounds worldBounds, Texture mask)
@@ -159,6 +233,29 @@ namespace GameCraftersGuild.WorldBuilding
             if (ConstraintsContainer.Constraints.Count == 0)
             {
                 CreateDefaultConstraints();
+            }
+            
+            // Initialize collision constraint
+            if (AvoidCollisions)
+            {
+                if (m_CollisionConstraint == null)
+                {
+                    m_CollisionConstraint = ConstraintsContainer.FindConstraint<ObjectCollisionConstraint>();
+                    if (m_CollisionConstraint == null)
+                    {
+                        m_CollisionConstraint = new ObjectCollisionConstraint { MinDistance = DefaultMinimumDistance };
+                        ConstraintsContainer.Constraints.Add(m_CollisionConstraint);
+                    }
+                }
+                
+                // Clear positions from previous runs
+                m_CollisionConstraint.PlacedObjectPositions.Clear();
+            }
+            else if (m_CollisionConstraint != null)
+            {
+                // Remove collision constraint if it exists but is disabled
+                ConstraintsContainer.Constraints.Remove(m_CollisionConstraint);
+                m_CollisionConstraint = null;
             }
             
             // Initialize random if needed
@@ -215,102 +312,132 @@ namespace GameCraftersGuild.WorldBuilding
             // Place objects randomly within bounds
             for (int i = 0; i < numObjects; i++)
             {
-                // Choose a random position within the bounds
-                float normX = boundsMinX + GetRandomValue() * (boundsMaxX - boundsMinX);
-                float normZ = boundsMinZ + GetRandomValue() * (boundsMaxZ - boundsMinZ);
+                // Try several times to find a valid position
+                bool positionFound = false;
+                const int maxAttempts = 10;
                 
-                // Apply random offset, but make sure to stay within worldBounds
-                if (RandomOffset > 0)
+                for (int attempt = 0; attempt < maxAttempts; attempt++)
                 {
-                    // Scale the offset by the size of the bounds to keep it proportional
-                    float scaledOffsetX = RandomOffset * (boundsMaxX - boundsMinX);
-                    float scaledOffsetZ = RandomOffset * (boundsMaxZ - boundsMinZ);
+                    // Choose a random position within the bounds
+                    float normX = boundsMinX + GetRandomValue() * (boundsMaxX - boundsMinX);
+                    float normZ = boundsMinZ + GetRandomValue() * (boundsMaxZ - boundsMinZ);
                     
-                    // Apply a scaled random offset
-                    normX += (GetRandomValue() * 2 - 1) * scaledOffsetX;
-                    normZ += (GetRandomValue() * 2 - 1) * scaledOffsetZ;
+                    // Apply random offset, but make sure to stay within worldBounds
+                    if (RandomOffset > 0)
+                    {
+                        // Scale the offset by the size of the bounds to keep it proportional
+                        float scaledOffsetX = RandomOffset * (boundsMaxX - boundsMinX);
+                        float scaledOffsetZ = RandomOffset * (boundsMaxZ - boundsMinZ);
+                        
+                        // Apply a scaled random offset
+                        normX += (GetRandomValue() * 2 - 1) * scaledOffsetX;
+                        normZ += (GetRandomValue() * 2 - 1) * scaledOffsetZ;
+                        
+                        // Reclamp to worldBounds (not just terrain bounds)
+                        normX = Mathf.Clamp(normX, boundsMinX, boundsMaxX);
+                        normZ = Mathf.Clamp(normZ, boundsMinZ, boundsMaxZ);
+                    }
                     
-                    // Reclamp to worldBounds (not just terrain bounds)
-                    normX = Mathf.Clamp(normX, boundsMinX, boundsMaxX);
-                    normZ = Mathf.Clamp(normZ, boundsMinZ, boundsMaxZ);
-                }
-                
-                // Ensure we're still within terrain bounds (in case worldBounds extends beyond terrain)
-                normX = Mathf.Clamp01(normX);
-                normZ = Mathf.Clamp01(normZ);
-                
-                // Calculate normalized position within the worldBounds (0-1 relative to worldBounds, not terrain)
-                float boundsNormX = (normX - boundsMinX) / (boundsMaxX - boundsMinX);
-                float boundsNormZ = (normZ - boundsMinZ) / (boundsMaxZ - boundsMinZ);
-                
-                // Check if we're within the mask
-                if (mask != null)
-                {
-                    float maskValue = SampleTexture(mask, boundsNormX, boundsNormZ);
-                    if (maskValue < 0.1f) // Skip if outside mask
+                    // Ensure we're still within terrain bounds (in case worldBounds extends beyond terrain)
+                    normX = Mathf.Clamp01(normX);
+                    normZ = Mathf.Clamp01(normZ);
+                    
+                    // Calculate normalized position within the worldBounds (0-1 relative to worldBounds, not terrain)
+                    float boundsNormX = (normX - boundsMinX) / (boundsMaxX - boundsMinX);
+                    float boundsNormZ = (normZ - boundsMinZ) / (boundsMaxZ - boundsMinZ);
+                    
+                    // Check if we're within the mask
+                    if (mask != null)
+                    {
+                        float maskValue = SampleTexture(mask, boundsNormX, boundsNormZ);
+                        if (maskValue < 0.1f) // Skip if outside mask
+                            continue;
+                    }
+                    
+                    // Create constraint context
+                    VegetationConstraintContext constraintContext = CreateConstraintContext(
+                        terrainData, normX, normZ, 
+                        boundsNormX, boundsNormZ,
+                        alphamaps, mask);
+                    
+                    // Check constraints
+                    if (!ConstraintsContainer.CheckConstraints(terrainData, normX, normZ, constraintContext))
                         continue;
-                }
-                
-                // Create constraint context
-                VegetationConstraintContext constraintContext = CreateConstraintContext(
-                    terrainData, normX, normZ, 
-                    boundsNormX, boundsNormZ,
-                    alphamaps, mask);
-                
-                // Check constraints
-                if (!ConstraintsContainer.CheckConstraints(terrainData, normX, normZ, constraintContext))
-                    continue;
-                
-                // Choose a random game object setting
-                GameObjectSettings objectSettings = GameObjects[GetRandomRange(0, GameObjects.Count)];
-                if (objectSettings.Prefab == null)
-                    continue;
-                
-                // Convert normalized position to world space
-                float worldX = terrainPos.x + normX * terrainSize.x;
-                float worldZ = terrainPos.z + normZ * terrainSize.z;
-                
-                // Get height at position
-                float height = terrain.SampleHeight(new Vector3(worldX, 0, worldZ));
-                float worldY = height + objectSettings.YOffset;
-                
-                // Create game object
-                GameObject newObject = UnityEngine.Object.Instantiate(
-                    objectSettings.Prefab, 
-                    new Vector3(worldX, worldY, worldZ), 
-                    Quaternion.identity
-                );
-                
-                // Set scale
-                float randomScale = GetRandomRange(objectSettings.MinScale, objectSettings.MaxScale);
-                newObject.transform.localScale = Vector3.one * randomScale;
-                
-                // Set rotation
-                if (objectSettings.AlignToNormal)
-                {
-                    // Get terrain normal at position
-                    Vector3 normal = terrainData.GetInterpolatedNormal(normX, normZ);
-                    Quaternion normalRotation = Quaternion.FromToRotation(Vector3.up, normal);
                     
-                    if (objectSettings.RandomYRotation)
+                    // Choose a random game object setting
+                    GameObjectSettings objectSettings = GameObjects[GetRandomRange(0, GameObjects.Count)];
+                    if (objectSettings.Prefab == null)
+                        continue;
+                    
+                    // Convert normalized position to world space
+                    float worldX = terrainPos.x + normX * terrainSize.x;
+                    float worldZ = terrainPos.z + normZ * terrainSize.z;
+                    
+                    // Get height at position
+                    float height = terrain.SampleHeight(new Vector3(worldX, 0, worldZ));
+                    float worldY = height + objectSettings.YOffset;
+                    
+                    Vector3 position = new Vector3(worldX, worldY, worldZ);
+                    
+                    // Create game object
+                    GameObject newObject = UnityEngine.Object.Instantiate(
+                        objectSettings.Prefab, 
+                        position, 
+                        Quaternion.identity
+                    );
+                    
+                    // Set scale
+                    float randomScale = GetRandomRange(objectSettings.MinScale, objectSettings.MaxScale);
+                    newObject.transform.localScale = Vector3.one * randomScale;
+                    
+                    // Set rotation
+                    if (objectSettings.AlignToNormal)
+                    {
+                        // Get terrain normal at position
+                        Vector3 normal = terrainData.GetInterpolatedNormal(normX, normZ);
+                        Quaternion normalRotation = Quaternion.FromToRotation(Vector3.up, normal);
+                        
+                        if (objectSettings.RandomYRotation)
+                        {
+                            float yRotation = GetRandomRotation(objectSettings.MinRotation, objectSettings.MaxRotation);
+                            Quaternion yRot = Quaternion.Euler(0, yRotation, 0);
+                            newObject.transform.rotation = normalRotation * yRot;
+                        }
+                        else
+                        {
+                            newObject.transform.rotation = normalRotation;
+                        }
+                    }
+                    else if (objectSettings.RandomYRotation)
                     {
                         float yRotation = GetRandomRotation(objectSettings.MinRotation, objectSettings.MaxRotation);
-                        Quaternion yRot = Quaternion.Euler(0, yRotation, 0);
-                        newObject.transform.rotation = normalRotation * yRot;
+                        newObject.transform.rotation = Quaternion.Euler(0, yRotation, 0);
                     }
-                    else
+                    
+                    // Keep track of spawned objects
+                    m_SpawnedObjects.Add(newObject);
+                    
+                    // Add to collision tracking
+                    if (AvoidCollisions && m_CollisionConstraint != null)
                     {
-                        newObject.transform.rotation = normalRotation;
+                        // If this object has a specific minimum distance setting, update the constraint temporarily
+                        if (objectSettings.MinimumDistance > 0)
+                        {
+                            m_CollisionConstraint.MinDistance = objectSettings.MinimumDistance;
+                        }
+                        
+                        m_CollisionConstraint.PlacedObjectPositions.Add(position);
                     }
-                }
-                else if (objectSettings.RandomYRotation)
-                {
-                    float yRotation = GetRandomRotation(objectSettings.MinRotation, objectSettings.MaxRotation);
-                    newObject.transform.rotation = Quaternion.Euler(0, yRotation, 0);
+                    
+                    positionFound = true;
+                    break;
                 }
                 
-                // Keep track of spawned objects
-                m_SpawnedObjects.Add(newObject);
+                // If we can't find a valid position after several attempts, skip this object
+                if (!positionFound)
+                {
+                    continue;
+                }
             }
         }
         
