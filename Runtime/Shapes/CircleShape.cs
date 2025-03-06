@@ -1,11 +1,10 @@
-using UnityEditor;
 using UnityEngine;
 
 namespace GameCraftersGuild.WorldBuilding
 {
     public class CircleShape : StampShape
     {
-        public float Radius = 10.0f;
+        public float Radius = 50.0f;
 
         public override void GenerateMask()
         {
@@ -17,12 +16,14 @@ namespace GameCraftersGuild.WorldBuilding
             LocalBounds = new Bounds(Vector3.zero, new Vector3(Diameter, 0.0f, Diameter));
         }
 
+#if UNITY_EDITOR
         public void OnDrawGizmosSelected()
         {
-            using (new Handles.DrawingScope(Color.blue, transform.localToWorldMatrix))
+            using (new UnityEditor.Handles.DrawingScope(Color.blue, transform.localToWorldMatrix))
             {
-                Handles.DrawWireDisc(Vector3.zero, transform.up, Radius);
+                UnityEditor.Handles.DrawWireDisc(Vector3.zero, transform.up, Radius);
             }
         }
+#endif
     }
 }

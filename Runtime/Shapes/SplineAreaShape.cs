@@ -104,7 +104,8 @@ namespace GameCraftersGuild.WorldBuilding
                 m_CreateSplineAreaTextureComputeShader.FindKernel("EvaluateSplinePositions");
             float kSplineEvaluationResolution = 0.2f;
             float splineLength = spline.GetLength();
-            int numSplinePoints = (int)(splineLength / kSplineEvaluationResolution) + 1;
+            float numPointsInSplineWithFraction = splineLength / kSplineEvaluationResolution + 1;
+            int numSplinePoints = Mathf.CeilToInt(numPointsInSplineWithFraction / 64.0f) * 64;
 
             // Create a buffer for the spline points
             ComputeBuffer splinePointsComputeBuffer = new ComputeBuffer(numSplinePoints, sizeof(float) * 3);
