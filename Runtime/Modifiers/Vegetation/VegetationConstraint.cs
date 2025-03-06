@@ -35,6 +35,9 @@ namespace GameCraftersGuild.WorldBuilding
         
         // Texture data
         public Texture MaskTexture { get; set; }
+        
+        // Object placement data
+        public float MinimumDistance { get; set; }
     }
 
     /// <summary>

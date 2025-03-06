@@ -45,17 +45,24 @@ namespace GameCraftersGuild.WorldBuilding
         [Serializable]
         public class ObjectCollisionConstraint : IVegetationConstraint
         {
-            [Tooltip("Minimum distance between spawned objects")]
+            [Tooltip("Default minimum distance between objects when not specified")]
             [Range(0f, 10f)]
-            public float MinDistance = 2.0f;
+            public float DefaultMinDistance = 2.0f;
 
-            // List to store positions of placed objects
+            // Structure to store both position and distance
+            public struct PlacedObject
+            {
+                public Vector3 Position;
+                public float MinDistance;
+            }
+
+            // List to store positions and distances of placed objects
             [NonSerialized]
-            public List<Vector3> PlacedObjectPositions = new List<Vector3>();
+            public List<PlacedObject> PlacedObjects = new List<PlacedObject>();
 
             public bool CheckConstraint(TerrainData terrainData, float normX, float normZ, VegetationConstraintContext context)
             {
-                if (PlacedObjectPositions.Count == 0 || MinDistance <= 0)
+                if (PlacedObjects.Count == 0)
                     return true;
 
                 // Convert normalized position to world space
@@ -70,17 +77,37 @@ namespace GameCraftersGuild.WorldBuilding
                 
                 Vector3 proposedPosition = new Vector3(worldX, worldY, worldZ);
                 
+                // Get the minimum distance for the current object (if available in context)
+                float currentObjectMinDistance = context.MinimumDistance > 0 ? 
+                    context.MinimumDistance : DefaultMinDistance;
+                
                 // Check distance against all placed objects
-                foreach (var existingPos in PlacedObjectPositions)
+                foreach (var placedObj in PlacedObjects)
                 {
-                    float distance = Vector3.Distance(existingPos, proposedPosition);
-                    if (distance < MinDistance)
+                    // Use the maximum of the two minimum distances
+                    float requiredDistance = Mathf.Max(currentObjectMinDistance, placedObj.MinDistance);
+                    
+                    float distance = Vector3.Distance(placedObj.Position, proposedPosition);
+                    if (distance < requiredDistance)
                     {
                         return false; // Too close to an existing object
                     }
                 }
                 
                 return true; // No collision detected
+            }
+            
+            public void AddObject(Vector3 position, float minimumDistance)
+            {
+                PlacedObjects.Add(new PlacedObject { 
+                    Position = position, 
+                    MinDistance = minimumDistance > 0 ? minimumDistance : DefaultMinDistance 
+                });
+            }
+            
+            public void Clear()
+            {
+                PlacedObjects.Clear();
             }
         }
         
@@ -104,9 +131,6 @@ namespace GameCraftersGuild.WorldBuilding
         
         [Tooltip("Maximum number of objects to spawn. If set to 0, there is no limit.")]
         public int MaxObjects = 0;
-        
-        [Tooltip("Should objects avoid spawning too close to each other")]
-        public bool AvoidCollisions = true;
         
         [Tooltip("Default minimum distance between objects")]
         [Range(0f, 10f)]
@@ -184,18 +208,17 @@ namespace GameCraftersGuild.WorldBuilding
                 // Create default constraints
                 ConstraintsContainer.Constraints.Add(new HeightConstraint());
                 ConstraintsContainer.Constraints.Add(new SlopeConstraint());
-            }
-            
-            // Add collision constraint if enabled and not already added
-            if (AvoidCollisions && m_CollisionConstraint == null)
-            {
-                m_CollisionConstraint = ConstraintsContainer.FindConstraint<ObjectCollisionConstraint>();
                 
-                if (m_CollisionConstraint == null)
-                {
-                    m_CollisionConstraint = new ObjectCollisionConstraint { MinDistance = DefaultMinimumDistance };
-                    ConstraintsContainer.Constraints.Add(m_CollisionConstraint);
-                }
+                // Add default collision constraint
+                ConstraintsContainer.Constraints.Add(new ObjectCollisionConstraint { DefaultMinDistance = DefaultMinimumDistance });
+                
+                // Cache collision constraint reference for performance
+                m_CollisionConstraint = ConstraintsContainer.FindConstraint<ObjectCollisionConstraint>();
+            }
+            else if (m_CollisionConstraint == null)
+            {
+                // Try to find existing collision constraint
+                m_CollisionConstraint = ConstraintsContainer.FindConstraint<ObjectCollisionConstraint>();
             }
         }
         
@@ -220,10 +243,10 @@ namespace GameCraftersGuild.WorldBuilding
             
             m_SpawnedObjects.Clear();
             
-            // Clear placed object positions
+            // Clear placed object positions if collision constraint exists
             if (m_CollisionConstraint != null)
             {
-                m_CollisionConstraint.PlacedObjectPositions.Clear();
+                m_CollisionConstraint.Clear();
             }
         }
         
@@ -234,28 +257,13 @@ namespace GameCraftersGuild.WorldBuilding
             {
                 CreateDefaultConstraints();
             }
+            // Try to find the collision constraint if we don't have a reference yet
+            m_CollisionConstraint = ConstraintsContainer.FindConstraint<ObjectCollisionConstraint>();
             
-            // Initialize collision constraint
-            if (AvoidCollisions)
+            // Clear positions from previous runs if we have a collision constraint
+            if (m_CollisionConstraint != null)
             {
-                if (m_CollisionConstraint == null)
-                {
-                    m_CollisionConstraint = ConstraintsContainer.FindConstraint<ObjectCollisionConstraint>();
-                    if (m_CollisionConstraint == null)
-                    {
-                        m_CollisionConstraint = new ObjectCollisionConstraint { MinDistance = DefaultMinimumDistance };
-                        ConstraintsContainer.Constraints.Add(m_CollisionConstraint);
-                    }
-                }
-                
-                // Clear positions from previous runs
-                m_CollisionConstraint.PlacedObjectPositions.Clear();
-            }
-            else if (m_CollisionConstraint != null)
-            {
-                // Remove collision constraint if it exists but is disabled
-                ConstraintsContainer.Constraints.Remove(m_CollisionConstraint);
-                m_CollisionConstraint = null;
+                m_CollisionConstraint.Clear();
             }
             
             // Initialize random if needed
@@ -354,19 +362,20 @@ namespace GameCraftersGuild.WorldBuilding
                             continue;
                     }
                     
+                    // Choose a random game object setting
+                    GameObjectSettings objectSettings = GameObjects[GetRandomRange(0, GameObjects.Count)];
+                    if (objectSettings.Prefab == null)
+                        continue;
+                    
                     // Create constraint context
                     VegetationConstraintContext constraintContext = CreateConstraintContext(
                         terrainData, normX, normZ, 
                         boundsNormX, boundsNormZ,
-                        alphamaps, mask);
+                        alphamaps, mask,
+                        objectSettings.MinimumDistance);
                     
                     // Check constraints
                     if (!ConstraintsContainer.CheckConstraints(terrainData, normX, normZ, constraintContext))
-                        continue;
-                    
-                    // Choose a random game object setting
-                    GameObjectSettings objectSettings = GameObjects[GetRandomRange(0, GameObjects.Count)];
-                    if (objectSettings.Prefab == null)
                         continue;
                     
                     // Convert normalized position to world space
@@ -417,16 +426,11 @@ namespace GameCraftersGuild.WorldBuilding
                     // Keep track of spawned objects
                     m_SpawnedObjects.Add(newObject);
                     
-                    // Add to collision tracking
-                    if (AvoidCollisions && m_CollisionConstraint != null)
+                    // Add to collision tracking if constraint exists
+                    if (m_CollisionConstraint != null)
                     {
-                        // If this object has a specific minimum distance setting, update the constraint temporarily
-                        if (objectSettings.MinimumDistance > 0)
-                        {
-                            m_CollisionConstraint.MinDistance = objectSettings.MinimumDistance;
-                        }
-                        
-                        m_CollisionConstraint.PlacedObjectPositions.Add(position);
+                        // Add the object with its minimum distance
+                        m_CollisionConstraint.AddObject(position, objectSettings.MinimumDistance);
                     }
                     
                     positionFound = true;
@@ -448,7 +452,8 @@ namespace GameCraftersGuild.WorldBuilding
             float boundsNormX, 
             float boundsNormZ, 
             float[,,] alphamaps, 
-            Texture mask)
+            Texture mask,
+            float minimumDistance = 0)
         {
             // Get height at position
             float height = terrainData.GetHeight(
@@ -467,7 +472,8 @@ namespace GameCraftersGuild.WorldBuilding
                 AlphaMaps = alphamaps,
                 BoundsNormX = boundsNormX,
                 BoundsNormZ = boundsNormZ,
-                MaskTexture = mask
+                MaskTexture = mask,
+                MinimumDistance = minimumDistance
             };
         }
         
