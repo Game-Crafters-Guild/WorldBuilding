@@ -13,6 +13,9 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             GenericMenu menu = new UnityEditor.GenericMenu();
             foreach (var type in worldModifierTypes)
             {
+                if (type.IsInterface || type.IsAbstract)
+                    continue;
+
                 menu.AddItem(new GUIContent(ObjectNames.NicifyVariableName(type.Name)), false, data =>
                 {
                     var instance = Activator.CreateInstance(type);
