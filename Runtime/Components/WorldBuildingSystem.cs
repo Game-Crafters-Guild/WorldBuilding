@@ -432,7 +432,7 @@ namespace GameCraftersGuild.WorldBuilding
             foreach (var builder in m_WorldBuilders)
             {
                 m_WorldBuildingContext.CurrentTransform = builder.TransformMatrix;
-                //builder.SpawnGameObjects(this);
+                builder.SpawnGameObjects(m_WorldBuildingContext);
             }
         }
 

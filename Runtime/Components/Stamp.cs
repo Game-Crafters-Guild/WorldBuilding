@@ -36,6 +36,7 @@ namespace GameCraftersGuild.WorldBuilding
         [SerializeField] public WorldModifiersContainer m_Modifiers = new WorldModifiersContainer();
         public List<ITerrainSplatModifier> TerrainSplatModifiers => m_Modifiers.TerrainSplatModifiers;
         public List<ITerrainVegetationModifier> TerrainVegetationModifiers => m_Modifiers.TerrainVegetationModifiers;
+        public List<IGameObjectModifier> GameObjectModifiers => m_Modifiers.GameObjectModifiers;
 
         [HideInInspector] [SerializeField] private StampShape m_Shape;
 
@@ -158,6 +159,18 @@ namespace GameCraftersGuild.WorldBuilding
         public virtual void SpawnGameObjects(WorldBuildingContext context)
         {
             context.MaintainMaskAspectRatio = m_Shape.MaintainMaskAspectRatio;
+            
+            // Apply all GameObject modifiers
+            foreach (var modifier in m_Modifiers.GameObjectModifiers)
+            {
+                if (!modifier.Enabled)
+                    continue;
+                    
+                if (modifier is GameObjectModifier gameObjectModifier)
+                {
+                    gameObjectModifier.SpawnGameObjects(context, WorldBounds, MaskTexture);
+                }
+            }
         }
     }
 }

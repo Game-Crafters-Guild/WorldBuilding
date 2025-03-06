@@ -1,0 +1,384 @@
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+using Random = UnityEngine.Random;
+
+namespace GameCraftersGuild.WorldBuilding
+{
+    /// <summary>
+    /// Modifier for placing game objects on terrain
+    /// </summary>
+    [Serializable]
+    public class GameObjectModifier : IGameObjectModifier
+    {
+        [Serializable]
+        public class GameObjectSettings
+        {
+            public GameObject Prefab;
+            
+            [Range(0f, 10f)]
+            public float MinScale = 0.8f;
+            
+            [Range(0f, 10f)]
+            public float MaxScale = 1.2f;
+            
+            [Range(0f, 10f)]
+            public float YOffset = 0f;
+            
+            [Tooltip("Align rotation to terrain normal")]
+            public bool AlignToNormal = false;
+            
+            [Tooltip("Random rotation around Y axis")]
+            public bool RandomYRotation = true;
+            
+            [Range(0f, 180f)]
+            public float MinRotation = 0f;
+            
+            [Range(0f, 180f)]
+            public float MaxRotation = 360f;
+        }
+        
+        // GameObject settings
+        public List<GameObjectSettings> GameObjects = new List<GameObjectSettings>();
+        
+        // Object constraints
+        public VegetationConstraintsContainer ConstraintsContainer = new VegetationConstraintsContainer();
+        
+        // Density settings
+        [Range(0f, 1.0f)]
+        [Tooltip("Density of objects. Higher values = more objects.")]
+        public float Density = 0.1f;
+        
+        [Range(0f, 1f)]
+        public float RandomOffset = 0.1f;
+        
+        // Placement settings
+        [Range(1, 100)]
+        public int ObjectsPerSquareUnit = 1;
+        
+        [Tooltip("Maximum number of objects to spawn. If set to 0, there is no limit.")]
+        public int MaxObjects = 0;
+        
+        // Seed for random generation
+        public int RandomSeed = 0;
+        protected System.Random m_SeededRandom;
+        
+        // Collection to track spawned objects
+        private List<GameObject> m_SpawnedObjects = new List<GameObject>();
+        
+        public override string FilePath => GetFilePath();
+        
+        // Return a random value between 0 and 1 using either the seeded random or Unity's random
+        protected float GetRandomValue()
+        {
+            if (RandomSeed != 0)
+            {
+                if (m_SeededRandom == null)
+                {
+                    m_SeededRandom = new System.Random(RandomSeed);
+                }
+                return (float)m_SeededRandom.NextDouble();
+            }
+            else
+            {
+                return Random.value;
+            }
+        }
+        
+        // Return a random value in range using either the seeded random or Unity's random
+        protected float GetRandomRange(float min, float max)
+        {
+            return min + GetRandomValue() * (max - min);
+        }
+        
+        // Return a random integer in range using either the seeded random or Unity's random
+        protected int GetRandomRange(int min, int max)
+        {
+            if (RandomSeed != 0)
+            {
+                if (m_SeededRandom == null)
+                {
+                    m_SeededRandom = new System.Random(RandomSeed);
+                }
+                return m_SeededRandom.Next(min, max);
+            }
+            else
+            {
+                return Random.Range(min, max);
+            }
+        }
+        
+        // Return a random rotation around y-axis in degrees
+        protected float GetRandomRotation(float min, float max)
+        {
+            return GetRandomRange(min, max);
+        }
+        
+        // Check if object should be placed based on density
+        protected bool CheckDensity()
+        {
+            return GetRandomValue() <= Density;
+        }
+
+        // Create default constraints if none exist
+        protected void CreateDefaultConstraints()
+        {
+            if (ConstraintsContainer.Constraints.Count == 0)
+            {
+                // Create default constraints
+                ConstraintsContainer.Constraints.Add(new HeightConstraint());
+                ConstraintsContainer.Constraints.Add(new SlopeConstraint());
+            }
+        }
+        
+        public void ClearSpawnedObjects()
+        {
+            foreach (var obj in m_SpawnedObjects)
+            {
+                if (obj != null)
+                {
+                    #if UNITY_EDITOR
+                    if (Application.isEditor && !Application.isPlaying)
+                    {
+                        UnityEngine.Object.DestroyImmediate(obj);
+                    }
+                    else
+                    #endif
+                    {
+                        UnityEngine.Object.Destroy(obj);
+                    }
+                }
+            }
+            
+            m_SpawnedObjects.Clear();
+        }
+        
+        public void SpawnGameObjects(WorldBuildingContext context, Bounds worldBounds, Texture mask)
+        {
+            // Ensure we have constraints
+            if (ConstraintsContainer.Constraints.Count == 0)
+            {
+                CreateDefaultConstraints();
+            }
+            
+            // Initialize random if needed
+            if (RandomSeed != 0)
+            {
+                m_SeededRandom = new System.Random(RandomSeed);
+            }
+            
+            // First clear any previously spawned objects
+            ClearSpawnedObjects();
+            
+            // Get terrain data
+            TerrainData terrainData = context.TerrainData;
+            if (terrainData == null || GameObjects.Count == 0) 
+                return;
+                
+            // Get terrain
+            Terrain terrain = Terrain.activeTerrain;
+            if (terrain == null)
+                return;
+                
+            // Calculate bounds in terrain space
+            Vector3 terrainPos = terrain.transform.position;
+            Vector3 terrainSize = terrainData.size;
+            
+            float boundsMinX = (worldBounds.min.x - terrainPos.x) / terrainSize.x;
+            float boundsMinZ = (worldBounds.min.z - terrainPos.z) / terrainSize.z;
+            float boundsMaxX = (worldBounds.max.x - terrainPos.x) / terrainSize.x;
+            float boundsMaxZ = (worldBounds.max.z - terrainPos.z) / terrainSize.z;
+            
+            // Clamp to terrain bounds
+            boundsMinX = Mathf.Clamp01(boundsMinX);
+            boundsMinZ = Mathf.Clamp01(boundsMinZ);
+            boundsMaxX = Mathf.Clamp01(boundsMaxX);
+            boundsMaxZ = Mathf.Clamp01(boundsMaxZ);
+            
+            // Calculate the area in square units
+            float areaWidth = (boundsMaxX - boundsMinX) * terrainSize.x;
+            float areaDepth = (boundsMaxZ - boundsMinZ) * terrainSize.z;
+            float areaSize = areaWidth * areaDepth;
+            
+            // Calculate number of objects to place
+            int numObjects = Mathf.FloorToInt(areaSize * ObjectsPerSquareUnit * Density);
+            
+            // Apply max objects limit if set
+            if (MaxObjects > 0)
+            {
+                numObjects = Mathf.Min(numObjects, MaxObjects);
+            }
+            
+            // Get alphamaps for layer constraints
+            float[,,] alphamaps = terrainData.GetAlphamaps(0, 0, terrainData.alphamapWidth, terrainData.alphamapHeight);
+            
+            // Place objects randomly within bounds
+            for (int i = 0; i < numObjects; i++)
+            {
+                // Choose a random position within the bounds
+                float normX = boundsMinX + GetRandomValue() * (boundsMaxX - boundsMinX);
+                float normZ = boundsMinZ + GetRandomValue() * (boundsMaxZ - boundsMinZ);
+                
+                // Apply random offset, but make sure to stay within worldBounds
+                if (RandomOffset > 0)
+                {
+                    // Scale the offset by the size of the bounds to keep it proportional
+                    float scaledOffsetX = RandomOffset * (boundsMaxX - boundsMinX);
+                    float scaledOffsetZ = RandomOffset * (boundsMaxZ - boundsMinZ);
+                    
+                    // Apply a scaled random offset
+                    normX += (GetRandomValue() * 2 - 1) * scaledOffsetX;
+                    normZ += (GetRandomValue() * 2 - 1) * scaledOffsetZ;
+                    
+                    // Reclamp to worldBounds (not just terrain bounds)
+                    normX = Mathf.Clamp(normX, boundsMinX, boundsMaxX);
+                    normZ = Mathf.Clamp(normZ, boundsMinZ, boundsMaxZ);
+                }
+                
+                // Ensure we're still within terrain bounds (in case worldBounds extends beyond terrain)
+                normX = Mathf.Clamp01(normX);
+                normZ = Mathf.Clamp01(normZ);
+                
+                // Calculate normalized position within the worldBounds (0-1 relative to worldBounds, not terrain)
+                float boundsNormX = (normX - boundsMinX) / (boundsMaxX - boundsMinX);
+                float boundsNormZ = (normZ - boundsMinZ) / (boundsMaxZ - boundsMinZ);
+                
+                // Check if we're within the mask
+                if (mask != null)
+                {
+                    float maskValue = SampleTexture(mask, boundsNormX, boundsNormZ);
+                    if (maskValue < 0.1f) // Skip if outside mask
+                        continue;
+                }
+                
+                // Create constraint context
+                VegetationConstraintContext constraintContext = CreateConstraintContext(
+                    terrainData, normX, normZ, 
+                    boundsNormX, boundsNormZ,
+                    alphamaps, mask);
+                
+                // Check constraints
+                if (!ConstraintsContainer.CheckConstraints(terrainData, normX, normZ, constraintContext))
+                    continue;
+                
+                // Choose a random game object setting
+                GameObjectSettings objectSettings = GameObjects[GetRandomRange(0, GameObjects.Count)];
+                if (objectSettings.Prefab == null)
+                    continue;
+                
+                // Convert normalized position to world space
+                float worldX = terrainPos.x + normX * terrainSize.x;
+                float worldZ = terrainPos.z + normZ * terrainSize.z;
+                
+                // Get height at position
+                float height = terrain.SampleHeight(new Vector3(worldX, 0, worldZ));
+                float worldY = height + objectSettings.YOffset;
+                
+                // Create game object
+                GameObject newObject = UnityEngine.Object.Instantiate(
+                    objectSettings.Prefab, 
+                    new Vector3(worldX, worldY, worldZ), 
+                    Quaternion.identity
+                );
+                
+                // Set scale
+                float randomScale = GetRandomRange(objectSettings.MinScale, objectSettings.MaxScale);
+                newObject.transform.localScale = Vector3.one * randomScale;
+                
+                // Set rotation
+                if (objectSettings.AlignToNormal)
+                {
+                    // Get terrain normal at position
+                    Vector3 normal = terrainData.GetInterpolatedNormal(normX, normZ);
+                    Quaternion normalRotation = Quaternion.FromToRotation(Vector3.up, normal);
+                    
+                    if (objectSettings.RandomYRotation)
+                    {
+                        float yRotation = GetRandomRotation(objectSettings.MinRotation, objectSettings.MaxRotation);
+                        Quaternion yRot = Quaternion.Euler(0, yRotation, 0);
+                        newObject.transform.rotation = normalRotation * yRot;
+                    }
+                    else
+                    {
+                        newObject.transform.rotation = normalRotation;
+                    }
+                }
+                else if (objectSettings.RandomYRotation)
+                {
+                    float yRotation = GetRandomRotation(objectSettings.MinRotation, objectSettings.MaxRotation);
+                    newObject.transform.rotation = Quaternion.Euler(0, yRotation, 0);
+                }
+                
+                // Keep track of spawned objects
+                m_SpawnedObjects.Add(newObject);
+            }
+        }
+        
+        protected VegetationConstraintContext CreateConstraintContext(
+            TerrainData terrainData, 
+            float normX, 
+            float normZ, 
+            float boundsNormX, 
+            float boundsNormZ, 
+            float[,,] alphamaps, 
+            Texture mask)
+        {
+            // Get height at position
+            float height = terrainData.GetHeight(
+                Mathf.RoundToInt(normX * terrainData.heightmapResolution), 
+                Mathf.RoundToInt(normZ * terrainData.heightmapResolution)
+            );
+
+            // Get slope at this position
+            float slope = GetTerrainSlope(terrainData, normX, normZ);
+            
+            // Create context for constraint checking
+            return new VegetationConstraintContext
+            {
+                TerrainHeight = height,
+                TerrainSlope = slope,
+                AlphaMaps = alphamaps,
+                BoundsNormX = boundsNormX,
+                BoundsNormZ = boundsNormZ,
+                MaskTexture = mask
+            };
+        }
+        
+        protected float GetTerrainSlope(TerrainData terrainData, float normX, float normZ)
+        {
+            // Get slope at the specified normalized position
+            int heightMapX = Mathf.RoundToInt(normX * terrainData.heightmapResolution);
+            int heightMapZ = Mathf.RoundToInt(normZ * terrainData.heightmapResolution);
+            
+            // Clamp to valid range
+            heightMapX = Mathf.Clamp(heightMapX, 0, terrainData.heightmapResolution - 1);
+            heightMapZ = Mathf.Clamp(heightMapZ, 0, terrainData.heightmapResolution - 1);
+            
+            // Get terrain normal
+            Vector3 normal = terrainData.GetInterpolatedNormal(normX, normZ);
+            
+            // Calculate angle between normal and up vector (in degrees)
+            float angle = Vector3.Angle(normal, Vector3.up);
+            return angle;
+        }
+        
+        // Helper method to sample a texture at normalized coordinates
+        protected float SampleTexture(Texture texture, float normX, float normZ)
+        {
+            // Sample texture at normalized position
+            if (texture is Texture2D texture2D)
+            {
+                int x = Mathf.FloorToInt(normX * texture2D.width);
+                int y = Mathf.FloorToInt(normZ * texture2D.height);
+                
+                x = Mathf.Clamp(x, 0, texture2D.width - 1);
+                y = Mathf.Clamp(y, 0, texture2D.height - 1);
+                
+                return texture2D.GetPixel(x, y).grayscale;
+            }
+            
+            // Fallback
+            return 1.0f;
+        }
+    }
+} 
