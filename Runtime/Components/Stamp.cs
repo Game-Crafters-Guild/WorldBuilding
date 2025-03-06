@@ -112,6 +112,11 @@ namespace GameCraftersGuild.WorldBuilding
             }
         }
 
+        private void OnValidate()
+        {
+            m_Modifiers.OnValidate();
+        }
+
         public void GenerateMask()
         {
             m_Shape.GenerateMask();
