@@ -17,6 +17,7 @@ namespace GameCraftersGuild.WorldBuilding
 
         private RenderTexture m_HeightmapRenderTexture;
         private float MaxTerrainHeight { get; set; }
+        public TerrainData TerrainData { get; private set; }
         public Matrix4x4 CurrentTransform { get; internal set; }
         public Dictionary<TerrainLayer, int> TerrainLayersIndexMap { get; internal set; }
         public RenderTexture[] SplatRenderTextures { get; private set; }
@@ -27,6 +28,14 @@ namespace GameCraftersGuild.WorldBuilding
         internal Material m_ApplySplatmapMaterial;
 
         private float4 FallOffVector => new Vector4(1.0f - MaskFalloff.Max, 1.0f - MaskFalloff.Min, 0.0f, 0.0f);
+
+        // Vegetation data containers
+        private List<TreeInstance> m_TreeInstances = new List<TreeInstance>();
+        private Dictionary<int, int[,]> m_DetailLayers = new Dictionary<int, int[,]>();
+        
+        // Tree and detail prototype indices that have been registered
+        private HashSet<int> m_RegisteredTreeIndices = new HashSet<int>();
+        private HashSet<int> m_RegisteredDetailIndices = new HashSet<int>();
 
         public void ApplyRegionTransformsToHeightmap(Bounds worldBounds, Texture mask,
             HeightWriteMode mode = HeightWriteMode.Replace)
@@ -194,9 +203,9 @@ namespace GameCraftersGuild.WorldBuilding
 
         public static WorldBuildingContext Create(Terrain terrain)
         {
-            TerrainData terrainData = terrain.terrainData;
-
             WorldBuildingContext context = new WorldBuildingContext();
+            TerrainData terrainData = terrain.terrainData;
+            context.TerrainData = terrainData;
             context.m_TerrainPosition = terrain.transform.position;
             context.m_TerrainSize = new float2(terrainData.size.x, terrainData.size.z);
             context.MaxTerrainHeight = terrainData.heightmapScale.y;
@@ -241,9 +250,9 @@ namespace GameCraftersGuild.WorldBuilding
             }
 
             SplatRenderTextures = null;
+            
+            ClearVegetation();
         }
-
-
 
         float2 WorldPositionToTerrainSpace(float3 worldPosition)
         {
@@ -257,6 +266,111 @@ namespace GameCraftersGuild.WorldBuilding
         public int GetTerrainLayerIndex(TerrainLayer layer)
         {
             return TerrainLayersIndexMap.GetValueOrDefault(layer, -1);
+        }
+
+        /// <summary>
+        /// Adds a tree instance to be applied to the terrain.
+        /// </summary>
+        public void AddTreeInstance(TreeInstance treeInstance)
+        {
+            m_TreeInstances.Add(treeInstance);
+            m_RegisteredTreeIndices.Add(treeInstance.prototypeIndex);
+        }
+        
+        /// <summary>
+        /// Sets a detail density at the specified position.
+        /// </summary>
+        public void SetDetailDensity(int prototypeIndex, int x, int y, int density)
+        {
+            // Make sure we have a layer for this prototype
+            if (!m_DetailLayers.TryGetValue(prototypeIndex, out int[,] detailLayer))
+            {
+                if (TerrainData != null)
+                {
+                    detailLayer = new int[TerrainData.detailWidth, TerrainData.detailHeight];
+                    m_DetailLayers[prototypeIndex] = detailLayer;
+                }
+            }
+            
+            if (detailLayer != null && x >= 0 && y >= 0 && x < detailLayer.GetLength(1) && y < detailLayer.GetLength(0))
+            {
+                detailLayer[y, x] = density;
+                m_RegisteredDetailIndices.Add(prototypeIndex);
+            }
+        }
+        
+        /// <summary>
+        /// Sets detail densities for a region of the terrain.
+        /// </summary>
+        public void SetDetailLayer(int prototypeIndex, int xBase, int yBase, int[,] detailPatch)
+        {
+            // Make sure we have a layer for this prototype
+            if (!m_DetailLayers.TryGetValue(prototypeIndex, out int[,] detailLayer))
+            {
+                if (TerrainData != null)
+                {
+                    detailLayer = new int[TerrainData.detailWidth, TerrainData.detailHeight];
+                    m_DetailLayers[prototypeIndex] = detailLayer;
+                }
+            }
+            
+            if (detailLayer != null && detailPatch != null)
+            {
+                int patchWidth = detailPatch.GetLength(1);
+                int patchHeight = detailPatch.GetLength(0);
+                
+                // Copy patch to the main detail layer
+                for (int y = 0; y < patchHeight; y++)
+                {
+                    for (int x = 0; x < patchWidth; x++)
+                    {
+                        int targetX = xBase + x;
+                        int targetY = yBase + y;
+                        
+                        if (targetX >= 0 && targetY >= 0 && targetX < detailLayer.GetLength(1) && targetY < detailLayer.GetLength(0))
+                        {
+                            detailLayer[targetY, targetX] = detailPatch[y, x];
+                        }
+                    }
+                }
+                
+                m_RegisteredDetailIndices.Add(prototypeIndex);
+            }
+        }
+        
+        /// <summary>
+        /// Applies all collected vegetation data to the terrain.
+        /// </summary>
+        public void ApplyVegetationToTerrain()
+        {
+            if (TerrainData == null)
+                return;
+            
+            // Apply tree instances
+            if (m_TreeInstances.Count > 0)
+            {
+                TerrainData.treeInstances = m_TreeInstances.ToArray();
+            }
+            
+            // Apply detail layers
+            foreach (var prototypeIndex in m_RegisteredDetailIndices)
+            {
+                if (m_DetailLayers.TryGetValue(prototypeIndex, out int[,] detailLayer))
+                {
+                    TerrainData.SetDetailLayer(0, 0, prototypeIndex, detailLayer);
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Clears all vegetation data stored in the context.
+        /// </summary>
+        public void ClearVegetation()
+        {
+            m_TreeInstances.Clear();
+            m_DetailLayers.Clear();
+            m_RegisteredTreeIndices.Clear();
+            m_RegisteredDetailIndices.Clear();
         }
     }
 }
