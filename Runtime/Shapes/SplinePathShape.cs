@@ -10,7 +10,7 @@ namespace GameCraftersGuild.WorldBuilding
     [RequireComponent(typeof(SplineContainer))]
     public class SplinePathShape : StampShape
     {
-        [Range(1.0f, 100.0f)] public float Width = 2.0f;
+        [Range(1.0f, 100.0f)] public float Width = 5.0f;
         [SerializeReference] [HideInInspector] internal SplineContainer m_SplineContainer;
         public override SplineContainer SplineContainer => m_SplineContainer;
         public override bool MaintainMaskAspectRatio { get; } = false;
@@ -21,7 +21,7 @@ namespace GameCraftersGuild.WorldBuilding
 
         private static readonly int kMaterialColorId = Shader.PropertyToID("_Color");
 
-        [SerializeField, HideInInspector] List<SplineData<float>> m_Widths = new List<SplineData<float>>();
+        [SerializeField] List<SplineData<float>> m_Widths = new List<SplineData<float>>();
 
         public List<SplineData<float>> Widths
         {
@@ -212,7 +212,7 @@ namespace GameCraftersGuild.WorldBuilding
                     {
                         w = m_Widths[widthDataIndex].Evaluate(spline, t, PathIndexUnit.Normalized,
                             new UnityEngine.Splines.Interpolators.LerpFloat());
-                        w = math.clamp(w, .001f, 10000f);
+                        w = math.clamp(w, .001f, 10000f) * 0.5f;
                     }
                 }
 

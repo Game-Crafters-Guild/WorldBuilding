@@ -5,7 +5,7 @@ namespace GameCraftersGuild.WorldBuilding
 {
     public class GlobalShape : StampShape
     {
-        public override Texture MaskTexture => Texture2D.whiteTexture;
+        public override Texture2D MaskTexture => Texture2D.whiteTexture;
         private static List<Terrain> m_ActiveTerrains = new List<Terrain>();
 
         public override void GenerateMask()

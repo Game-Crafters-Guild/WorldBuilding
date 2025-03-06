@@ -1,14 +1,10 @@
-using Unity.Collections;
-using UnityEditor;
 using UnityEngine;
-using UnityEngine.Experimental.Rendering;
-using UnityEngine.Rendering;
 
 namespace GameCraftersGuild.WorldBuilding
 {
     public class RectangleShape : StampShape
     {
-        public Vector2 Size = new Vector2(10.0f, 10.0f);
+        public Vector2 Size = new Vector2(100.0f, 100.0f);
 
         public override void GenerateMask()
         {
@@ -19,12 +15,14 @@ namespace GameCraftersGuild.WorldBuilding
             }
         }
 
+#if UNITY_EDITOR
         public void OnDrawGizmosSelected()
         {
-            using (new Handles.DrawingScope(Color.blue, transform.localToWorldMatrix))
+            using (new UnityEditor.Handles.DrawingScope(Color.blue, transform.localToWorldMatrix))
             {
-                Handles.DrawWireCube(Vector3.zero, new Vector3(Size.x, 0.0f, Size.y));
+                UnityEditor.Handles.DrawWireCube(Vector3.zero, new Vector3(Size.x, 0.0f, Size.y));
             }
         }
+#endif
     }
 }
