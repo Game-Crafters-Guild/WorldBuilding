@@ -8,16 +8,16 @@ using GameCraftersGuild.WorldBuilding;
 
 namespace GameCraftersGuild.WorldBuilding.Editor
 {
-    [CustomPropertyDrawer(typeof(VegetationConstraintsContainer))]
-    public class VegetationConstraintsContainerPropertyDrawer : PropertyDrawer
+    [CustomPropertyDrawer(typeof(PlacementConstraintsContainer))]
+    public class PlacementConstraintsContainerPropertyDrawer : PropertyDrawer
     {
         private static readonly List<Type> s_ConstraintTypes = new List<Type>();
         private static readonly Dictionary<Type, string> s_ConstraintTypeNames = new Dictionary<Type, string>();
         
-        static VegetationConstraintsContainerPropertyDrawer()
+        static PlacementConstraintsContainerPropertyDrawer()
         {
             // Find all constraint types using TypeCache
-            var types = TypeCache.GetTypesDerivedFrom<IVegetationConstraint>();
+            var types = TypeCache.GetTypesDerivedFrom<IPlacementConstraint>();
             foreach (var type in types)
             {
                 if (type.IsInterface || type.IsAbstract)
@@ -183,7 +183,7 @@ namespace GameCraftersGuild.WorldBuilding.Editor
         {
             // Record undo
             constraintsProp.serializedObject.Update();
-            Undo.RecordObject(constraintsProp.serializedObject.targetObject, "Add Vegetation Constraint");
+            Undo.RecordObject(constraintsProp.serializedObject.targetObject, "Add Placement Constraint");
             
             // Add new constraint
             int index = constraintsProp.arraySize;
@@ -201,7 +201,7 @@ namespace GameCraftersGuild.WorldBuilding.Editor
         {
             // Record undo
             constraintsProp.serializedObject.Update();
-            Undo.RecordObject(constraintsProp.serializedObject.targetObject, "Remove Vegetation Constraint");
+            Undo.RecordObject(constraintsProp.serializedObject.targetObject, "Remove Placement Constraint");
             
             // Remove the constraint
             constraintsProp.DeleteArrayElementAtIndex(index);

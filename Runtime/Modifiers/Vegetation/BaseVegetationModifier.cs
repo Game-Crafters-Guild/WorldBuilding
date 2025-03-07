@@ -12,7 +12,7 @@ namespace GameCraftersGuild.WorldBuilding
     public abstract class BaseVegetationModifier : ITerrainVegetationModifier
     {
         // Vegetation constraints
-        public VegetationConstraintsContainer ConstraintsContainer = new VegetationConstraintsContainer();
+        public PlacementConstraintsContainer ConstraintsContainer = new PlacementConstraintsContainer();
         
         // Density settings
         [Range(0f, 1.0f)]
@@ -152,7 +152,7 @@ namespace GameCraftersGuild.WorldBuilding
             return 1.0f;
         }
         
-        protected VegetationConstraintContext CreateConstraintContext(
+        protected PlacementConstraintContext CreateConstraintContext(
             TerrainData terrainData, 
             float normX, 
             float normZ, 
@@ -171,7 +171,7 @@ namespace GameCraftersGuild.WorldBuilding
             float slope = GetTerrainSlope(terrainData, normX, normZ);
             
             // Create context for constraint checking
-            return new VegetationConstraintContext
+            return new PlacementConstraintContext
             {
                 TerrainHeight = height,
                 TerrainSlope = slope,

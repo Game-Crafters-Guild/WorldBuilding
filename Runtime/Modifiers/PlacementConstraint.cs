@@ -4,25 +4,25 @@ using UnityEngine;
 namespace GameCraftersGuild.WorldBuilding
 {
     /// <summary>
-    /// Interface for vegetation constraints that can be checked during vegetation placement
+    /// Interface for placement constraints that can be checked during object placement
     /// </summary>
-    public interface IVegetationConstraint
+    public interface IPlacementConstraint
     {
         /// <summary>
-        /// Check if the vegetation can be placed at the specified position
+        /// Check if an object can be placed at the specified position
         /// </summary>
         /// <param name="terrainData">The terrain data</param>
         /// <param name="normX">Normalized X position on terrain (0-1)</param>
         /// <param name="normZ">Normalized Z position on terrain (0-1)</param>
         /// <param name="context">Additional context data for constraint checking</param>
         /// <returns>True if the constraint is satisfied, false otherwise</returns>
-        bool CheckConstraint(TerrainData terrainData, float normX, float normZ, VegetationConstraintContext context);
+        bool CheckConstraint(TerrainData terrainData, float normX, float normZ, PlacementConstraintContext context);
     }
 
     /// <summary>
-    /// Context data for vegetation constraint checking
+    /// Context data for placement constraint checking
     /// </summary>
-    public class VegetationConstraintContext
+    public class PlacementConstraintContext
     {
         // Terrain data
         public float TerrainHeight { get; set; }
@@ -41,25 +41,25 @@ namespace GameCraftersGuild.WorldBuilding
     }
 
     /// <summary>
-    /// Height-based vegetation constraint
+    /// Height-based placement constraint
     /// </summary>
     [Serializable]
-    public class HeightConstraint : IVegetationConstraint
+    public class HeightConstraint : IPlacementConstraint
     {
         public float MinHeight = 0f;
         public float MaxHeight = 1000f;
 
-        public bool CheckConstraint(TerrainData terrainData, float normX, float normZ, VegetationConstraintContext context)
+        public bool CheckConstraint(TerrainData terrainData, float normX, float normZ, PlacementConstraintContext context)
         {
             return context.TerrainHeight >= MinHeight && context.TerrainHeight <= MaxHeight;
         }
     }
 
     /// <summary>
-    /// Slope-based vegetation constraint
+    /// Slope-based placement constraint
     /// </summary>
     [Serializable]
-    public class SlopeConstraint : IVegetationConstraint
+    public class SlopeConstraint : IPlacementConstraint
     {
         [Range(0f, 90f)]
         public float MinSlope = 0f;
@@ -67,21 +67,21 @@ namespace GameCraftersGuild.WorldBuilding
         [Range(0f, 90f)]
         public float MaxSlope = 45f;
 
-        public bool CheckConstraint(TerrainData terrainData, float normX, float normZ, VegetationConstraintContext context)
+        public bool CheckConstraint(TerrainData terrainData, float normX, float normZ, PlacementConstraintContext context)
         {
             return context.TerrainSlope >= MinSlope && context.TerrainSlope <= MaxSlope;
         }
     }
 
     /// <summary>
-    /// Layer-based vegetation constraint
+    /// Layer-based placement constraint
     /// </summary>
     [Serializable]
-    public class LayerConstraint : IVegetationConstraint
+    public class LayerConstraint : IPlacementConstraint
     {
         public TerrainLayer[] AllowedLayers;
 
-        public bool CheckConstraint(TerrainData terrainData, float normX, float normZ, VegetationConstraintContext context)
+        public bool CheckConstraint(TerrainData terrainData, float normX, float normZ, PlacementConstraintContext context)
         {
             if (AllowedLayers == null || AllowedLayers.Length == 0)
                 return true;
@@ -115,15 +115,15 @@ namespace GameCraftersGuild.WorldBuilding
     }
 
     /// <summary>
-    /// Mask-based vegetation constraint
+    /// Mask-based placement constraint
     /// </summary>
     [Serializable]
-    public class MaskConstraint : IVegetationConstraint
+    public class MaskConstraint : IPlacementConstraint
     {
         [Range(0f, 1f)]
         public float Threshold = 0.1f;
 
-        public bool CheckConstraint(TerrainData terrainData, float normX, float normZ, VegetationConstraintContext context)
+        public bool CheckConstraint(TerrainData terrainData, float normX, float normZ, PlacementConstraintContext context)
         {
             if (context.MaskTexture == null)
                 return true;
@@ -147,10 +147,10 @@ namespace GameCraftersGuild.WorldBuilding
     }
 
     /// <summary>
-    /// Noise-based vegetation constraint
+    /// Noise-based placement constraint
     /// </summary>
     [Serializable]
-    public class NoiseConstraint : IVegetationConstraint
+    public class NoiseConstraint : IPlacementConstraint
     {
         [Range(0f, 1f)]
         public float Threshold = 0.3f;
@@ -158,7 +158,7 @@ namespace GameCraftersGuild.WorldBuilding
         [SerializeReference] 
         public NoiseProperties NoiseProperties = new NoiseProperties();
 
-        public bool CheckConstraint(TerrainData terrainData, float normX, float normZ, VegetationConstraintContext context)
+        public bool CheckConstraint(TerrainData terrainData, float normX, float normZ, PlacementConstraintContext context)
         {
             var noiseTexture = NoiseProperties.NoiseTexture;
             if (noiseTexture == null)

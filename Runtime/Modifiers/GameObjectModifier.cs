@@ -43,7 +43,7 @@ namespace GameCraftersGuild.WorldBuilding
         }
 
         [Serializable]
-        public class ObjectCollisionConstraint : IVegetationConstraint
+        public class ObjectCollisionConstraint : IPlacementConstraint
         {
             [Tooltip("Default minimum distance between objects when not specified")]
             [Range(0f, 10f)]
@@ -60,7 +60,7 @@ namespace GameCraftersGuild.WorldBuilding
             [NonSerialized]
             public List<PlacedObject> PlacedObjects = new List<PlacedObject>();
 
-            public bool CheckConstraint(TerrainData terrainData, float normX, float normZ, VegetationConstraintContext context)
+            public bool CheckConstraint(TerrainData terrainData, float normX, float normZ, PlacementConstraintContext context)
             {
                 if (PlacedObjects.Count == 0)
                     return true;
@@ -115,7 +115,7 @@ namespace GameCraftersGuild.WorldBuilding
         public List<GameObjectSettings> GameObjects = new List<GameObjectSettings>();
         
         // Object constraints
-        public VegetationConstraintsContainer ConstraintsContainer = new VegetationConstraintsContainer();
+        public PlacementConstraintsContainer ConstraintsContainer = new PlacementConstraintsContainer();
         
         // Density settings
         [Range(0f, 1.0f)]
@@ -368,7 +368,7 @@ namespace GameCraftersGuild.WorldBuilding
                         continue;
                     
                     // Create constraint context
-                    VegetationConstraintContext constraintContext = CreateConstraintContext(
+                    PlacementConstraintContext constraintContext = CreateConstraintContext(
                         terrainData, normX, normZ, 
                         boundsNormX, boundsNormZ,
                         alphamaps, mask,
@@ -445,7 +445,7 @@ namespace GameCraftersGuild.WorldBuilding
             }
         }
         
-        protected VegetationConstraintContext CreateConstraintContext(
+        protected PlacementConstraintContext CreateConstraintContext(
             TerrainData terrainData, 
             float normX, 
             float normZ, 
@@ -465,7 +465,7 @@ namespace GameCraftersGuild.WorldBuilding
             float slope = GetTerrainSlope(terrainData, normX, normZ);
             
             // Create context for constraint checking
-            return new VegetationConstraintContext
+            return new PlacementConstraintContext
             {
                 TerrainHeight = height,
                 TerrainSlope = slope,
