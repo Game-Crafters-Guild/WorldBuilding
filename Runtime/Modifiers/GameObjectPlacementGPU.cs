@@ -463,42 +463,42 @@ namespace GameCraftersGuild.WorldBuilding
             {
                 ReleaseBuffer(ref heightConstraintsBuffer);
                 heightConstraintsBuffer = new ComputeBuffer(Mathf.Max(1, heightConstraints.Length), sizeof(float) * 2);
-                heightConstraintsBuffer.SetData(heightConstraints);
             }
+            heightConstraintsBuffer.SetData(heightConstraints);
             
             // Setup slope constraints buffer
             if (slopeConstraintsBuffer == null || slopeConstraintsBuffer.count != slopeConstraints.Length)
             {
                 ReleaseBuffer(ref slopeConstraintsBuffer);
                 slopeConstraintsBuffer = new ComputeBuffer(Mathf.Max(1, slopeConstraints.Length), sizeof(float) * 2);
-                slopeConstraintsBuffer.SetData(slopeConstraints);
             }
+            slopeConstraintsBuffer.SetData(slopeConstraints);
             
             // Setup noise constraints buffer
             if (noiseConstraintsBuffer == null || noiseConstraintsBuffer.count != noiseConstraints.Length)
             {
                 ReleaseBuffer(ref noiseConstraintsBuffer);
                 noiseConstraintsBuffer = new ComputeBuffer(Mathf.Max(1, noiseConstraints.Length), sizeof(float) * 4);
-                noiseConstraintsBuffer.SetData(noiseConstraints);
             }
+            noiseConstraintsBuffer.SetData(noiseConstraints);
             
             // Setup mask constraint thresholds buffer
             if (maskConstraintThresholdsBuffer == null || maskConstraintThresholdsBuffer.count != maskConstraintThresholds.Length)
             {
                 ReleaseBuffer(ref maskConstraintThresholdsBuffer);
                 maskConstraintThresholdsBuffer = new ComputeBuffer(Mathf.Max(1, maskConstraintThresholds.Length), sizeof(float));
-                maskConstraintThresholdsBuffer.SetData(maskConstraintThresholds);
             }
+            maskConstraintThresholdsBuffer.SetData(maskConstraintThresholds);
             
             // Setup placed objects buffer
             if (placedObjectsBuffer == null || placedObjectsBuffer.count != placedObjectPositions.Length)
             {
                 ReleaseBuffer(ref placedObjectsBuffer);
                 placedObjectsBuffer = new ComputeBuffer(Mathf.Max(1, placedObjectPositions.Length), sizeof(float));
-                if (placedObjectPositions.Length > 0)
-                {
-                    placedObjectsBuffer.SetData(placedObjectPositions);
-                }
+            }
+            if (placedObjectPositions.Length > 0)
+            {
+                placedObjectsBuffer.SetData(placedObjectPositions);
             }
             
             // Setup minimum distances buffer
@@ -506,10 +506,10 @@ namespace GameCraftersGuild.WorldBuilding
             {
                 ReleaseBuffer(ref minimumDistancesBuffer);
                 minimumDistancesBuffer = new ComputeBuffer(Mathf.Max(1, minimumDistances.Length), sizeof(float));
-                if (minimumDistances.Length > 0)
-                {
-                    minimumDistancesBuffer.SetData(minimumDistances);
-                }
+            }
+            if (minimumDistances.Length > 0)
+            {
+                minimumDistancesBuffer.SetData(minimumDistances);
             }
             
             // Setup prefab settings buffer
@@ -518,8 +518,8 @@ namespace GameCraftersGuild.WorldBuilding
                 ReleaseBuffer(ref prefabSettingsBuffer);
                 // 5 floats + 3 uints 
                 prefabSettingsBuffer = new ComputeBuffer(Mathf.Max(1, prefabSettings.Length), sizeof(float) * 5 + sizeof(uint) * 3);
-                prefabSettingsBuffer.SetData(prefabSettings);
             }
+            prefabSettingsBuffer.SetData(prefabSettings);
         }
         
         /// <summary>
