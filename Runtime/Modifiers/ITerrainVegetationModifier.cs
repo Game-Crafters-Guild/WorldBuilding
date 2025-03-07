@@ -8,6 +8,14 @@ namespace GameCraftersGuild.WorldBuilding
     public abstract class ITerrainVegetationModifier : WorldModifier
     {
         /// <summary>
+        /// Called when the modifier is disabled or removed to clean up vegetation
+        /// </summary>
+        public override void OnCleanup()
+        {
+            base.OnCleanup();
+        }
+        
+        /// <summary>
         /// Method for registering tree and detail prototypes with the terrain.
         /// This is called by the WorldBuildingSystem before applying vegetation.
         /// </summary>

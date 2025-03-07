@@ -63,6 +63,10 @@ namespace GameCraftersGuild.WorldBuilding
 
         private void OnDestroy()
         {
+            // Clean up all modifiers
+            m_Modifiers.CleanupAllModifiers();
+            
+            // Remove from world building system
             WorldBuildingSystem worldBuildingSystem = WorldBuildingSystem.FindSystemInScene();
             if (worldBuildingSystem != null)
             {
@@ -83,6 +87,10 @@ namespace GameCraftersGuild.WorldBuilding
 
         public void OnDisable()
         {
+            // Clean up all modifiers
+            m_Modifiers.CleanupAllModifiers();
+            
+            // Remove from world building system
             WorldBuildingSystem worldBuildingSystem = WorldBuildingSystem.FindSystemInScene();
             if (worldBuildingSystem != null)
             {
@@ -116,6 +124,15 @@ namespace GameCraftersGuild.WorldBuilding
         private void OnValidate()
         {
             m_Modifiers.OnValidate();
+            
+            // If modifiers enabled state changed, mark as dirty to trigger regeneration
+            if (m_Modifiers.HasModifiersEnabledStateChanged)
+            {
+                m_IsDirty = true;
+                
+                // Reset the changed flag after processing
+                m_Modifiers.ResetChangedFlag();
+            }
         }
 
         public void GenerateMask()

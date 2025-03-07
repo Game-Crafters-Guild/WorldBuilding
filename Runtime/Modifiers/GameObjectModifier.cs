@@ -120,7 +120,7 @@ namespace GameCraftersGuild.WorldBuilding
         // Density settings
         [Range(0f, 1.0f)]
         [Tooltip("Density of objects. Higher values = more objects.")]
-        public float Density = 0.1f;
+        public float Density = 0.005f;
         
         [Range(0f, 1f)]
         public float RandomOffset = 0.1f;
@@ -147,6 +147,42 @@ namespace GameCraftersGuild.WorldBuilding
         private ObjectCollisionConstraint m_CollisionConstraint;
         
         public override string FilePath => GetFilePath();
+
+        public GameObjectModifier()
+        {
+            CreateDefaultConstraints();
+        }
+        
+        // Override OnCleanup to remove objects when disabled or removed
+        public override void OnCleanup()
+        {
+            base.OnCleanup();
+            ClearSpawnedObjects();
+        }
+        
+        // OnEnable method to handle editor and runtime enabling
+        public void OnEnable()
+        {
+            // Nothing to do when enabled - objects will be spawned during next generation
+        }
+        
+        // OnDisable method to handle editor and runtime disabling
+        public void OnDisable()
+        {
+            // Clean up spawned objects when the modifier is disabled
+            // Only do this if Application is playing, not during editor operations
+            if (Application.isPlaying)
+            {
+                ClearSpawnedObjects();
+            }
+        }
+        
+        // Called when the object is destroyed
+        public void OnDestroy()
+        {
+            // Clean up spawned objects when the modifier is destroyed
+            ClearSpawnedObjects();
+        }
         
         // Return a random value between 0 and 1 using either the seeded random or Unity's random
         protected float GetRandomValue()
@@ -208,6 +244,7 @@ namespace GameCraftersGuild.WorldBuilding
                 // Create default constraints
                 ConstraintsContainer.Constraints.Add(new HeightConstraint());
                 ConstraintsContainer.Constraints.Add(new SlopeConstraint());
+                ConstraintsContainer.Constraints.Add(new MaskConstraint());
                 
                 // Add default collision constraint
                 ConstraintsContainer.Constraints.Add(new ObjectCollisionConstraint { DefaultMinDistance = DefaultMinimumDistance });
@@ -252,11 +289,6 @@ namespace GameCraftersGuild.WorldBuilding
         
         public void SpawnGameObjects(WorldBuildingContext context, Bounds worldBounds, Texture mask)
         {
-            // Ensure we have constraints
-            if (ConstraintsContainer.Constraints.Count == 0)
-            {
-                CreateDefaultConstraints();
-            }
             // Try to find the collision constraint if we don't have a reference yet
             m_CollisionConstraint = ConstraintsContainer.FindConstraint<ObjectCollisionConstraint>();
             

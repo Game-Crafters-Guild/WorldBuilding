@@ -48,4 +48,4 @@ namespace GameCraftersGuild.WorldBuilding
     public class VegetationConstraintsContainer : PlacementConstraintsContainer
     {
     }
-} 
+}

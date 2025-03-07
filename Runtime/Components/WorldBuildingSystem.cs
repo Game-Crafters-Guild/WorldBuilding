@@ -324,6 +324,9 @@ namespace GameCraftersGuild.WorldBuilding
                 return;
             }
 
+            // Cleanup disabled modifiers before regenerating
+            CleanupDisabledModifiers();
+
             // Sort builders by priority.
             m_WorldBuilders.Sort((worldBuilder1, worldBuilder2) =>
                 worldBuilder1.Priority.CompareTo(worldBuilder2.Priority));
@@ -509,6 +512,21 @@ namespace GameCraftersGuild.WorldBuilding
             public void Execute(int index)
             {
                 DestinationData[index] = SourceData[index];
+            }
+        }
+
+        /// <summary>
+        /// Clean up all disabled modifiers to ensure proper removal of objects
+        /// </summary>
+        private void CleanupDisabledModifiers()
+        {
+            foreach (var builder in m_WorldBuilders)
+            {
+                if (builder is Stamp stamp)
+                {
+                    // Clean up any disabled modifiers
+                    stamp.m_Modifiers.CleanupDisabledModifiers();
+                }
             }
         }
     }
