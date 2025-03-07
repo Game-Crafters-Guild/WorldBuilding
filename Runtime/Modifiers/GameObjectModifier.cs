@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Random = UnityEngine.Random;
@@ -151,6 +152,10 @@ namespace GameCraftersGuild.WorldBuilding
         public int RandomSeed = 0;
         protected System.Random m_SeededRandom;
         
+        [Header("Advanced Settings")]
+        [Tooltip("Maximum number of objects to instantiate per frame when using async instantiation")]
+        public int MaxObjectsPerFrame = 10;
+        
         // Collection to track spawned objects
         private List<GameObject> m_SpawnedObjects = new List<GameObject>();
         
@@ -158,6 +163,20 @@ namespace GameCraftersGuild.WorldBuilding
         private ObjectCollisionConstraint m_CollisionConstraint;
         
         private GameObjectPlacementGPU m_GPUPlacement;
+        
+        // Queue for async instantiation
+        private Queue<InstantiationRequest> m_InstantiationQueue = new Queue<InstantiationRequest>();
+        private bool m_ProcessingQueue = false;
+        
+        // Structure to hold pending instantiation requests
+        private struct InstantiationRequest
+        {
+            public GameObject prefab;
+            public Vector3 position;
+            public Quaternion rotation;
+            public Vector3 scale;
+            public float minimumDistance;
+        }
         
         public override string FilePath => GetFilePath();
 
@@ -357,6 +376,58 @@ namespace GameCraftersGuild.WorldBuilding
             SpawnGameObjectsCPU(context, worldBounds, mask);
         }
         
+        /// <summary>
+        /// Process the instantiation queue over multiple frames
+        /// </summary>
+        private IEnumerator ProcessInstantiationQueue()
+        {
+            m_ProcessingQueue = true;
+            
+            while (m_InstantiationQueue.Count > 0)
+            {
+                int count = 0;
+                
+                // Process a batch of instantiations
+                while (count < MaxObjectsPerFrame && m_InstantiationQueue.Count > 0)
+                {
+                    var request = m_InstantiationQueue.Dequeue();
+                    
+                    // Create the async operation
+                    AsyncInstantiateOperation asyncOp = UnityEngine.Object.InstantiateAsync(
+                        request.prefab, 
+                        request.position, 
+                        request.rotation);
+                    
+                    // We need to wait for completion to set scale and add to tracked objects
+                    asyncOp.completed += (op) => {
+                        GameObject newObject = asyncOp.Result[0] as GameObject;
+                        if (newObject != null)
+                        {
+                            // Set scale
+                            newObject.transform.localScale = request.scale;
+                            
+                            // Keep track of spawned objects
+                            m_SpawnedObjects.Add(newObject);
+                            
+                            // Add to collision tracking if constraint exists
+                            if (m_CollisionConstraint != null)
+                            {
+                                // Add the object with its minimum distance
+                                m_CollisionConstraint.AddObject(request.position, request.minimumDistance);
+                            }
+                        }
+                    };
+                    
+                    count++;
+                }
+                
+                // Wait for next frame before processing more
+                yield return null;
+            }
+            
+            m_ProcessingQueue = false;
+        }
+        
         private void SpawnGameObjectsGPU(WorldBuildingContext context, Bounds worldBounds, Texture mask)
         {
             // Initialize GPU placement if needed
@@ -369,7 +440,7 @@ namespace GameCraftersGuild.WorldBuilding
             List<GameObjectPlacementInfo> placements = m_GPUPlacement.GenerateObjectPlacements(
                 this, context, worldBounds, mask);
                 
-            // Spawn objects based on the generated placements
+            // Prepare objects for instantiation
             foreach (var placement in placements)
             {
                 if (placement.PrefabIndex < 0 || placement.PrefabIndex >= GameObjects.Count)
@@ -379,17 +450,9 @@ namespace GameCraftersGuild.WorldBuilding
                 if (objectSettings.Prefab == null)
                     continue;
                 
-                // Create game object
-                GameObject newObject = UnityEngine.Object.Instantiate(
-                    objectSettings.Prefab,
-                    placement.Position,
-                    Quaternion.identity
-                );
-                
-                // Set scale
-                newObject.transform.localScale = Vector3.one * placement.Scale;
-                
-                // Set rotation
+                // Create rotation based on settings
+                Quaternion rotation = Quaternion.identity;
+                    
                 if (objectSettings.AlignToNormal)
                 {
                     // Get terrain normal at position
@@ -405,26 +468,61 @@ namespace GameCraftersGuild.WorldBuilding
                     if (objectSettings.RandomYRotation)
                     {
                         Quaternion yRot = Quaternion.Euler(0, placement.Rotation, 0);
-                        newObject.transform.rotation = normalRotation * yRot;
+                        rotation = normalRotation * yRot;
                     }
                     else
                     {
-                        newObject.transform.rotation = normalRotation;
+                        rotation = normalRotation;
                     }
                 }
                 else if (objectSettings.RandomYRotation)
                 {
-                    newObject.transform.rotation = Quaternion.Euler(0, placement.Rotation, 0);
+                    rotation = Quaternion.Euler(0, placement.Rotation, 0);
                 }
                 
-                // Keep track of spawned objects
-                m_SpawnedObjects.Add(newObject);
-                
-                // Add to collision tracking if constraint exists
-                if (m_CollisionConstraint != null)
+                // Add to instantiation queue
+                m_InstantiationQueue.Enqueue(new InstantiationRequest {
+                    prefab = objectSettings.Prefab,
+                    position = placement.Position,
+                    rotation = rotation,
+                    scale = Vector3.one * placement.Scale,
+                    minimumDistance = objectSettings.MinimumDistance
+                });
+            }
+            
+            // Start processing the queue if not already processing
+            if (!m_ProcessingQueue && m_InstantiationQueue.Count > 0)
+            {
+                if (Application.isPlaying)
                 {
-                    // Add the object with its minimum distance
-                    m_CollisionConstraint.AddObject(placement.Position, objectSettings.MinimumDistance);
+                    MonoBehaviourHelper.Instance.StartCoroutine(ProcessInstantiationQueue());
+                }
+                else
+                {
+                    // In Edit mode, instantiate synchronously
+                    while (m_InstantiationQueue.Count > 0)
+                    {
+                        var request = m_InstantiationQueue.Dequeue();
+                        
+                        GameObject newObject = UnityEngine.Object.Instantiate(
+                            request.prefab,
+                            request.position,
+                            request.rotation
+                        );
+                        
+                        // Set scale
+                        newObject.transform.localScale = request.scale;
+                        
+                        // Keep track of spawned objects
+                        m_SpawnedObjects.Add(newObject);
+                        
+                        // Add to collision tracking if constraint exists
+                        if (m_CollisionConstraint != null)
+                        {
+                            // Add the object with its minimum distance
+                            m_CollisionConstraint.AddObject(request.position, request.minimumDistance);
+                        }
+                    }
                 }
             }
         }
@@ -660,6 +758,29 @@ namespace GameCraftersGuild.WorldBuilding
             
             // Fallback
             return 1.0f;
+        }
+    }
+    
+    /// <summary>
+    /// Helper MonoBehaviour to run coroutines even without a MonoBehaviour attached
+    /// </summary>
+    public class MonoBehaviourHelper : MonoBehaviour
+    {
+        private static MonoBehaviourHelper _instance;
+        
+        public static MonoBehaviourHelper Instance
+        {
+            get
+            {
+                if (_instance == null)
+                {
+                    GameObject go = new GameObject("MonoBehaviourHelper");
+                    go.hideFlags = HideFlags.HideAndDontSave;
+                    _instance = go.AddComponent<MonoBehaviourHelper>();
+                    DontDestroyOnLoad(go);
+                }
+                return _instance;
+            }
         }
     }
 } 

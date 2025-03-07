@@ -27,6 +27,7 @@ namespace GameCraftersGuild.WorldBuilding
         private ComputeBuffer placedObjectsBuffer;
         private ComputeBuffer minimumDistancesBuffer;
         private ComputeBuffer prefabSettingsBuffer;
+        private ComputeBuffer maskConstraintThresholdsBuffer;
         
         // Structure for results from compute shader
         private struct PlacementResult
@@ -61,6 +62,7 @@ namespace GameCraftersGuild.WorldBuilding
         private float[] placedObjectPositions;
         private float[] minimumDistances;
         private PrefabSettings[] prefabSettings;
+        private float[] maskConstraintThresholds;
         
         // Cached properties for efficient reuse
         private RenderTexture normalTexture;
@@ -99,6 +101,7 @@ namespace GameCraftersGuild.WorldBuilding
             ReleaseBuffer(ref placedObjectsBuffer);
             ReleaseBuffer(ref minimumDistancesBuffer);
             ReleaseBuffer(ref prefabSettingsBuffer);
+            ReleaseBuffer(ref maskConstraintThresholdsBuffer);
             
             // Release textures
             ReleaseTexture(ref normalTexture);
@@ -185,6 +188,17 @@ namespace GameCraftersGuild.WorldBuilding
             else
             {
                 noiseConstraints = new Vector4[1] { new Vector4(0.5f, 1f, 0f, 0f) }; // Default values
+            }
+            
+            // Setup mask constraints
+            var maskConstraint = FindConstraint<MaskConstraint>(constraints);
+            if (maskConstraint != null)
+            {
+                maskConstraintThresholds = new float[1] { maskConstraint.Threshold };
+            }
+            else
+            {
+                maskConstraintThresholds = new float[1] { 0.1f }; // Default value
             }
             
             // Get collision constraint if it exists
@@ -468,6 +482,14 @@ namespace GameCraftersGuild.WorldBuilding
                 noiseConstraintsBuffer.SetData(noiseConstraints);
             }
             
+            // Setup mask constraint thresholds buffer
+            if (maskConstraintThresholdsBuffer == null || maskConstraintThresholdsBuffer.count != maskConstraintThresholds.Length)
+            {
+                ReleaseBuffer(ref maskConstraintThresholdsBuffer);
+                maskConstraintThresholdsBuffer = new ComputeBuffer(Mathf.Max(1, maskConstraintThresholds.Length), sizeof(float));
+                maskConstraintThresholdsBuffer.SetData(maskConstraintThresholds);
+            }
+            
             // Setup placed objects buffer
             if (placedObjectsBuffer == null || placedObjectsBuffer.count != placedObjectPositions.Length)
             {
@@ -555,9 +577,9 @@ namespace GameCraftersGuild.WorldBuilding
             {
                 placementComputeShader.SetTexture(generatePositionsKernelId, "_MaskTexture", mask);
             }
-            else if (context.m_MaskRenderTexture != null)
+            else if (context.MaskRenderTexture != null)
             {
-                placementComputeShader.SetTexture(generatePositionsKernelId, "_MaskTexture", context.m_MaskRenderTexture);
+                placementComputeShader.SetTexture(generatePositionsKernelId, "_MaskTexture", context.MaskRenderTexture);
             }
             else
             {
@@ -570,6 +592,7 @@ namespace GameCraftersGuild.WorldBuilding
             placementComputeShader.SetBuffer(generatePositionsKernelId, "_HeightConstraints", heightConstraintsBuffer);
             placementComputeShader.SetBuffer(generatePositionsKernelId, "_SlopeConstraints", slopeConstraintsBuffer);
             placementComputeShader.SetBuffer(generatePositionsKernelId, "_NoiseConstraints", noiseConstraintsBuffer);
+            placementComputeShader.SetBuffer(generatePositionsKernelId, "_MaskConstraintThresholds", maskConstraintThresholdsBuffer);
             placementComputeShader.SetBuffer(generatePositionsKernelId, "_PlacedObjectPositions", placedObjectsBuffer);
             placementComputeShader.SetBuffer(generatePositionsKernelId, "_MinimumDistances", minimumDistancesBuffer);
             placementComputeShader.SetBuffer(generatePositionsKernelId, "_PrefabSettings", prefabSettingsBuffer);
