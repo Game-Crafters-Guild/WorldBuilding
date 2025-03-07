@@ -112,11 +112,11 @@ namespace GameCraftersGuild.WorldBuilding
             }
         }
         
-        [Header("Game Objects")]
+        //[Header("Game Objects")]
         [Tooltip("List of game objects to spawn")]
         public List<GameObjectSettings> GameObjects = new List<GameObjectSettings>();
         
-        [Header("Placement Constraints")]
+        //[Header("Placement Constraints")]
         [Tooltip("Container for all placement constraints")]
         public PlacementConstraintsContainer ConstraintsContainer = new PlacementConstraintsContainer();
         

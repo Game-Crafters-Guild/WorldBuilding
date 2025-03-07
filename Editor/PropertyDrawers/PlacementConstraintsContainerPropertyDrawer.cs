@@ -39,11 +39,21 @@ namespace GameCraftersGuild.WorldBuilding.Editor
         
         public override VisualElement CreatePropertyGUI(SerializedProperty property)
         {
-            var container = new VisualElement();
-            
+            var container = new VisualElement
+            {
+                style =
+                {
+                    marginLeft = 12
+                }
+            };
+
             // Create a foldout for the property
-            var foldout = new Foldout { text = property.displayName };
-            foldout.value = property.isExpanded;
+            var foldout = new Foldout
+            {
+                //text = property.displayName,
+                text = "Placement Constraints",
+                value = property.isExpanded
+            };
             foldout.RegisterValueChangedCallback(evt => property.isExpanded = evt.newValue);
             container.Add(foldout);
             
@@ -129,10 +139,25 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                 boxContainer.Add(header);
                 
                 // Constraint property fields
-                var constraintFields = new PropertyField(elementProp);
+                /*var constraintFields = new PropertyField(elementProp);
                 constraintFields.Bind(constraintsProp.serializedObject);
-                boxContainer.Add(constraintFields);
+                boxContainer.Add(constraintFields);*/
                 
+                VisualElement fieldsContainer = new VisualElement();
+                //fieldsContainer.style.paddingLeft = 2;
+                //fieldsContainer.style.paddingRight = 2;
+                boxContainer.Add(fieldsContainer);
+
+                var childProperty = elementProp.Copy();
+                var endProperty = childProperty.GetEndProperty();
+                childProperty.NextVisible(true);
+                while (!SerializedProperty.EqualContents(childProperty, endProperty))
+                {
+                    var propertyField = new PropertyField(childProperty);
+                    propertyField.Bind(childProperty.serializedObject);
+                    fieldsContainer.Add(propertyField);
+                    childProperty.NextVisible(false);
+                }
                 container.Add(boxContainer);
             }
         }
