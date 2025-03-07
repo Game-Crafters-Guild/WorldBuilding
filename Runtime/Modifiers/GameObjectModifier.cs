@@ -29,7 +29,7 @@ namespace GameCraftersGuild.WorldBuilding
             public bool AlignToNormal = false;
             
             [Tooltip("Random rotation around Y axis")]
-            public bool RandomYRotation = true;
+            public bool RandomYRotation = false;
             
             [Range(0f, 180f)]
             public float MinRotation = 0f;
@@ -39,7 +39,7 @@ namespace GameCraftersGuild.WorldBuilding
             
             [Tooltip("Minimum distance between this object and other spawned objects")]
             [Range(0f, 10f)]
-            public float MinimumDistance = 1.0f;
+            public float MinimumDistance = 0f;
         }
 
         [Serializable]
@@ -111,32 +111,43 @@ namespace GameCraftersGuild.WorldBuilding
             }
         }
         
-        // GameObject settings
+        [Header("Game Objects")]
+        [Tooltip("List of game objects to spawn")]
         public List<GameObjectSettings> GameObjects = new List<GameObjectSettings>();
         
-        // Object constraints
+        [Header("Placement Constraints")]
+        [Tooltip("Container for all placement constraints")]
         public PlacementConstraintsContainer ConstraintsContainer = new PlacementConstraintsContainer();
         
-        // Density settings
+        [Header("Placement Settings")]
+        [Tooltip("Overall density factor for object placement")]
         [Range(0f, 1.0f)]
-        [Tooltip("Density of objects. Higher values = more objects.")]
-        public float Density = 0.005f;
+        public float Density = 1.0f;
         
+        [Tooltip("Random position offset factor")]
         [Range(0f, 1f)]
-        public float RandomOffset = 0.1f;
+        public float RandomOffset = 0.0f;
         
-        // Placement settings
+        [Tooltip("Base number of objects per square unit")]
         [Range(1, 100)]
-        public int ObjectsPerSquareUnit = 1;
+        public int ObjectsPerSquareUnit = 10;
         
         [Tooltip("Maximum number of objects to spawn. If set to 0, there is no limit.")]
         public int MaxObjects = 0;
         
         [Tooltip("Default minimum distance between objects")]
         [Range(0f, 10f)]
-        public float DefaultMinimumDistance = 2.0f;
+        public float DefaultMinDistance = 2.0f;
         
-        // Seed for random generation
+        [Header("GPU Placement")]
+        [Tooltip("Use GPU-based placement for better performance")]
+        public bool UseGPUPlacement = false;
+        
+        [Tooltip("Compute shader for GPU-based placement")]
+        public ComputeShader PlacementComputeShader;
+        
+        [Header("Randomization")]
+        [Tooltip("Random seed for deterministic generation. 0 for random.")]
         public int RandomSeed = 0;
         protected System.Random m_SeededRandom;
         
@@ -145,6 +156,8 @@ namespace GameCraftersGuild.WorldBuilding
         
         // Collision constraint reference
         private ObjectCollisionConstraint m_CollisionConstraint;
+        
+        private GameObjectPlacementGPU m_GPUPlacement;
         
         public override string FilePath => GetFilePath();
 
@@ -163,24 +176,40 @@ namespace GameCraftersGuild.WorldBuilding
         // OnEnable method to handle editor and runtime enabling
         public void OnEnable()
         {
-            // Nothing to do when enabled - objects will be spawned during next generation
+            // Make sure we have a collision constraint
+            if (m_CollisionConstraint == null)
+            {
+                m_CollisionConstraint = ConstraintsContainer.FindConstraint<ObjectCollisionConstraint>();
+            }
+            
+            // Initialize GPU placement if needed
+            if (UseGPUPlacement && PlacementComputeShader != null && m_GPUPlacement == null)
+            {
+                m_GPUPlacement = new GameObjectPlacementGPU(PlacementComputeShader);
+            }
         }
         
         // OnDisable method to handle editor and runtime disabling
         public void OnDisable()
         {
-            // Clean up spawned objects when the modifier is disabled
-            // Only do this if Application is playing, not during editor operations
-            if (Application.isPlaying)
+            // Clean up GPU resources
+            if (m_GPUPlacement != null)
             {
-                ClearSpawnedObjects();
+                m_GPUPlacement.Release();
+                m_GPUPlacement = null;
             }
         }
         
         // Called when the object is destroyed
         public void OnDestroy()
         {
-            // Clean up spawned objects when the modifier is destroyed
+            // Make sure to clean up GPU resources
+            if (m_GPUPlacement != null)
+            {
+                m_GPUPlacement.Release();
+                m_GPUPlacement = null;
+            }
+            
             ClearSpawnedObjects();
         }
         
@@ -247,7 +276,7 @@ namespace GameCraftersGuild.WorldBuilding
                 ConstraintsContainer.Constraints.Add(new MaskConstraint());
                 
                 // Add default collision constraint
-                ConstraintsContainer.Constraints.Add(new ObjectCollisionConstraint { DefaultMinDistance = DefaultMinimumDistance });
+                ConstraintsContainer.Constraints.Add(new ObjectCollisionConstraint { DefaultMinDistance = DefaultMinDistance });
                 
                 // Cache collision constraint reference for performance
                 m_CollisionConstraint = ConstraintsContainer.FindConstraint<ObjectCollisionConstraint>();
@@ -317,7 +346,94 @@ namespace GameCraftersGuild.WorldBuilding
             if (terrain == null)
                 return;
                 
+            // Use GPU-based placement if enabled and available
+            if (UseGPUPlacement && PlacementComputeShader != null)
+            {
+                SpawnGameObjectsGPU(context, worldBounds, mask);
+                return;
+            }
+            
+            // Otherwise use CPU-based placement
+            SpawnGameObjectsCPU(context, worldBounds, mask);
+        }
+        
+        private void SpawnGameObjectsGPU(WorldBuildingContext context, Bounds worldBounds, Texture mask)
+        {
+            // Initialize GPU placement if needed
+            if (m_GPUPlacement == null)
+            {
+                m_GPUPlacement = new GameObjectPlacementGPU(PlacementComputeShader);
+            }
+            
+            // Generate placements on GPU
+            List<GameObjectPlacementInfo> placements = m_GPUPlacement.GenerateObjectPlacements(
+                this, context, worldBounds, mask);
+                
+            // Spawn objects based on the generated placements
+            foreach (var placement in placements)
+            {
+                if (placement.PrefabIndex < 0 || placement.PrefabIndex >= GameObjects.Count)
+                    continue;
+                    
+                GameObjectSettings objectSettings = GameObjects[placement.PrefabIndex];
+                if (objectSettings.Prefab == null)
+                    continue;
+                
+                // Create game object
+                GameObject newObject = UnityEngine.Object.Instantiate(
+                    objectSettings.Prefab,
+                    placement.Position,
+                    Quaternion.identity
+                );
+                
+                // Set scale
+                newObject.transform.localScale = Vector3.one * placement.Scale;
+                
+                // Set rotation
+                if (objectSettings.AlignToNormal)
+                {
+                    // Get terrain normal at position
+                    Vector3 terrainPosition = context.TerrainPosition;
+                    Vector3 terrainSize = context.TerrainData.size;
+                    
+                    Vector3 normal = context.TerrainData.GetInterpolatedNormal(
+                        (placement.Position.x - terrainPosition.x) / terrainSize.x,
+                        (placement.Position.z - terrainPosition.z) / terrainSize.z
+                    );
+                    Quaternion normalRotation = Quaternion.FromToRotation(Vector3.up, normal);
+                    
+                    if (objectSettings.RandomYRotation)
+                    {
+                        Quaternion yRot = Quaternion.Euler(0, placement.Rotation, 0);
+                        newObject.transform.rotation = normalRotation * yRot;
+                    }
+                    else
+                    {
+                        newObject.transform.rotation = normalRotation;
+                    }
+                }
+                else if (objectSettings.RandomYRotation)
+                {
+                    newObject.transform.rotation = Quaternion.Euler(0, placement.Rotation, 0);
+                }
+                
+                // Keep track of spawned objects
+                m_SpawnedObjects.Add(newObject);
+                
+                // Add to collision tracking if constraint exists
+                if (m_CollisionConstraint != null)
+                {
+                    // Add the object with its minimum distance
+                    m_CollisionConstraint.AddObject(placement.Position, objectSettings.MinimumDistance);
+                }
+            }
+        }
+        
+        private void SpawnGameObjectsCPU(WorldBuildingContext context, Bounds worldBounds, Texture mask)
+        {
             // Calculate bounds in terrain space
+            TerrainData terrainData = context.TerrainData;
+            Terrain terrain = Terrain.activeTerrain;
             Vector3 terrainPos = terrain.transform.position;
             Vector3 terrainSize = terrainData.size;
             

@@ -1,0 +1,268 @@
+// Compute shader for game object placement with constraints
+#pragma kernel GeneratePositions
+
+// Input terrain parameters
+float4 _TerrainParams; // x: width, y: height, z: length, w: unused
+float4 _TerrainPosition; // x, y, z position of terrain 
+float2 _HeightmapResolution; // x: width, y: height
+
+// Bounds parameters
+float4 _BoundsMin; // x, z: normalized bounds min, y, w: unused
+float4 _BoundsMax; // x, z: normalized bounds max, y, w: unused
+
+// Object placement parameters
+float _Density;
+uint _MaxObjectCount;
+uint _NumberOfGameObjects;
+uint _RandomSeed;
+float _RandomOffset;
+
+// Prefab-specific settings
+struct PrefabSettings
+{
+    float minScale;
+    float maxScale;
+    float yOffset;
+    uint alignToNormal;
+    uint randomYRotation;
+    float minRotation;
+    float maxRotation;
+    float minimumDistance;
+};
+StructuredBuffer<PrefabSettings> _PrefabSettings;
+
+// Buffers for constraints
+StructuredBuffer<float2> _HeightConstraints; // x: min height, y: max height
+StructuredBuffer<float2> _SlopeConstraints; // x: min angle, y: max angle
+StructuredBuffer<float4> _NoiseConstraints; // x: threshold, y: scale, z: offset, w: unused
+StructuredBuffer<float> _PlacedObjectPositions; // xyz positions of already placed objects
+StructuredBuffer<float> _MinimumDistances; // Minimum distance for each placed object
+uint _PlacedObjectCount;
+float _DefaultMinDistance;
+
+// Texture samplers
+Texture2D<float4> _AlphamapTexture;
+SamplerState sampler_AlphamapTexture;
+Texture2D<float4> _MaskTexture;
+SamplerState sampler_MaskTexture;
+Texture2D<float> _HeightmapTexture;
+SamplerState sampler_HeightmapTexture;
+Texture2D<float4> _NormalTexture;
+SamplerState sampler_NormalTexture;
+
+// Output buffer for positions
+struct PlacementResult 
+{
+    float3 position;    // x, y, z world space position
+    float scale;        // uniform scale factor
+    float rotation;     // rotation around Y axis in degrees
+    uint prefabIndex;   // index of the prefab to spawn
+    uint isValid;       // 1 if valid position, 0 if not
+};
+
+RWStructuredBuffer<PlacementResult> _Results;
+
+// Helper functions
+float GetRandomFloat(uint id, uint seed)
+{
+    // Simple hash function
+    uint state = id ^ seed;
+    state = state * 747796405 + 2891336453;
+    state = ((state >> ((state >> 28) + 4)) ^ state) * 277803737;
+    state = (state >> 22) ^ state;
+    return frac(state / 4294967296.0);
+}
+
+float2 GetRandomPosition(uint id)
+{
+    float2 randomValues;
+    randomValues.x = GetRandomFloat(id * 2, _RandomSeed);
+    randomValues.y = GetRandomFloat(id * 2 + 1, _RandomSeed);
+    
+    // Generate position within bounds
+    float2 position;
+    position.x = lerp(_BoundsMin.x, _BoundsMax.x, randomValues.x);
+    position.y = lerp(_BoundsMin.z, _BoundsMax.z, randomValues.y);
+    
+    // Apply random offset if needed
+    if (_RandomOffset > 0)
+    {
+        float2 offsetScale = float2(_BoundsMax.x - _BoundsMin.x, _BoundsMax.z - _BoundsMin.z) * _RandomOffset;
+        float2 offset;
+        offset.x = (GetRandomFloat(id * 4 + 2, _RandomSeed) * 2 - 1) * offsetScale.x;
+        offset.y = (GetRandomFloat(id * 4 + 3, _RandomSeed) * 2 - 1) * offsetScale.y;
+        
+        position += offset;
+        
+        // Clamp to bounds
+        position.x = clamp(position.x, _BoundsMin.x, _BoundsMax.x);
+        position.y = clamp(position.y, _BoundsMin.z, _BoundsMax.z);
+    }
+    
+    // Ensure we're within terrain bounds (0-1)
+    position.x = clamp(position.x, 0, 1);
+    position.y = clamp(position.y, 0, 1);
+    
+    return position;
+}
+
+float GetTerrainHeight(float2 normPos)
+{
+    return _HeightmapTexture.SampleLevel(sampler_HeightmapTexture, normPos, 0).r * _TerrainParams.y * 2.0;
+}
+
+float3 GetTerrainNormal(float2 normPos)
+{
+    float3 normal = _NormalTexture.SampleLevel(sampler_NormalTexture, normPos, 0).xyz;
+    return normalize(normal * 2 - 1); // Convert from 0-1 to -1-1 range
+}
+
+float GetTerrainSlope(float2 normPos)
+{
+    float3 normal = GetTerrainNormal(normPos);
+    return degrees(acos(dot(normal, float3(0, 1, 0))));
+}
+
+bool CheckHeightConstraint(float height, uint constraintIndex)
+{
+    float2 constraint = _HeightConstraints[constraintIndex];
+    return height >= constraint.x && height <= constraint.y;
+}
+
+bool CheckSlopeConstraint(float slope, uint constraintIndex)
+{
+    float2 constraint = _SlopeConstraints[constraintIndex];
+    return slope >= constraint.x && slope <= constraint.y;
+}
+
+bool CheckMaskConstraint(float2 boundsNorm)
+{
+    float mask = _MaskTexture.SampleLevel(sampler_MaskTexture, boundsNorm, 0).r;
+    return mask >= 0.1;
+}
+
+bool CheckCollisionConstraint(float3 worldPos, float currentMinDistance)
+{
+    // If no placed objects, constraint is satisfied
+    if (_PlacedObjectCount == 0)
+        return true;
+    
+    // Use default if not specified
+    float minDist = currentMinDistance > 0 ? currentMinDistance : _DefaultMinDistance;
+    
+    // Check against all placed objects
+    for (uint i = 0; i < _PlacedObjectCount; i++)
+    {
+        float3 objPos = float3(_PlacedObjectPositions[i*3], _PlacedObjectPositions[i*3+1], _PlacedObjectPositions[i*3+2]);
+        float objMinDist = _MinimumDistances[i];
+        
+        // Use maximum of the two distances
+        float requiredDist = max(minDist, objMinDist);
+        
+        float dist = distance(worldPos, objPos);
+        if (dist < requiredDist)
+            return false;
+    }
+    
+    return true;
+}
+
+bool CheckLayerConstraint(float2 normPos)
+{
+    // Sample alphamap at position
+    float4 alphamap = _AlphamapTexture.SampleLevel(sampler_AlphamapTexture, normPos, 0);
+    
+    // For now, we'll assume the first channel must be dominant (can be expanded)
+    return alphamap.r > 0.5;
+}
+
+bool CheckAllConstraints(float2 normPos, float2 boundsNorm, float height, float slope, float3 worldPos, float minDistance)
+{
+    // Check mask constraint if texture provided
+    if (!CheckMaskConstraint(boundsNorm))
+        return false;
+    
+    // Check height constraints
+    for (uint i = 0; i < 1; i++) // Assuming 1 height constraint for now
+    {
+        if (!CheckHeightConstraint(height, i))
+            return false;
+    }
+    
+    // Check slope constraints
+    for (uint i = 0; i < 1; i++) // Assuming 1 slope constraint for now
+    {
+        if (!CheckSlopeConstraint(slope, i))
+            return false;
+    }
+    
+    // Check layer constraint
+    if (!CheckLayerConstraint(normPos))
+        return false;
+    
+    // Check collision constraint
+    if (!CheckCollisionConstraint(worldPos, minDistance))
+        return false;
+    
+    return true;
+}
+
+[numthreads(64,1,1)]
+void GeneratePositions(uint3 id : SV_DispatchThreadID)
+{
+    uint index = id.x;
+    
+    // Initialize result as invalid
+    _Results[index].isValid = 0;
+    
+    // Skip if beyond the maximum number of objects
+    if (_MaxObjectCount > 0 && index >= _MaxObjectCount)
+        return;
+    
+    // Generate random position
+    float2 normPos = GetRandomPosition(index);
+    
+    // Calculate position within bounds (0-1 relative to bounds, not terrain)
+    float2 boundsNorm;
+    boundsNorm.x = (normPos.x - _BoundsMin.x) / (_BoundsMax.x - _BoundsMin.x);
+    boundsNorm.y = (normPos.y - _BoundsMin.z) / (_BoundsMax.z - _BoundsMin.z);
+    
+    // Get terrain height and slope
+    float height = GetTerrainHeight(normPos);
+    float slope = GetTerrainSlope(normPos);
+    
+    // Choose prefab index
+    uint prefabIndex = floor(GetRandomFloat(index * 7 + 5, _RandomSeed) * _NumberOfGameObjects);
+    if (prefabIndex >= _NumberOfGameObjects)
+        prefabIndex = _NumberOfGameObjects - 1;
+    
+    // Get prefab-specific settings
+    PrefabSettings settings = _PrefabSettings[prefabIndex];
+    
+    // Convert normalized to world position with Y offset
+    float3 worldPos;
+    worldPos.x = _TerrainPosition.x + normPos.x * _TerrainParams.x;
+    worldPos.y = height + settings.yOffset;
+    worldPos.z = _TerrainPosition.z + normPos.y * _TerrainParams.z;
+    
+    // Check all constraints with object-specific minimum distance
+    if (CheckAllConstraints(normPos, boundsNorm, height, slope, worldPos, settings.minimumDistance))
+    {
+        // Calculate random scale based on prefab settings
+        float scale = lerp(settings.minScale, settings.maxScale, GetRandomFloat(index * 9 + 6, _RandomSeed));
+        
+        // Calculate random rotation based on prefab settings
+        float rotation = 0;
+        if (settings.randomYRotation > 0)
+        {
+            rotation = lerp(settings.minRotation, settings.maxRotation, GetRandomFloat(index * 11 + 7, _RandomSeed));
+        }
+        
+        // Store valid result
+        _Results[index].position = worldPos;
+        _Results[index].scale = scale;
+        _Results[index].rotation = rotation;
+        _Results[index].prefabIndex = prefabIndex;
+        _Results[index].isValid = 1;
+    }
+} 

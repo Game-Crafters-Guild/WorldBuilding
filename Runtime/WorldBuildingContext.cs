@@ -6,8 +6,13 @@ using float2 = Unity.Mathematics.float2;
 
 namespace GameCraftersGuild.WorldBuilding
 {
+    /// <summary>
+    /// Context data for world generation operations
+    /// </summary>
     public class WorldBuildingContext
     {
+        // Making mask render texture public to allow access from GPU placement code
+        public RenderTexture MaskRenderTexture => m_MaskRenderTexture;
         internal RenderTexture m_MaskRenderTexture;
 
         private float3 m_TerrainPosition;
@@ -28,6 +33,8 @@ namespace GameCraftersGuild.WorldBuilding
         internal Material m_ApplySplatmapMaterial;
 
         private float4 FallOffVector => new Vector4(1.0f - MaskFalloff.Max, 1.0f - MaskFalloff.Min, 0.0f, 0.0f);
+        public float3 TerrainPosition => m_TerrainPosition;
+        public float2 TerrainSize => m_TerrainSize;
 
         // Vegetation data containers
         private List<TreeInstance> m_TreeInstances = new List<TreeInstance>();
