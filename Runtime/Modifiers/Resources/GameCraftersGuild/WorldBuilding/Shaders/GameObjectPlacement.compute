@@ -231,8 +231,35 @@ void GeneratePositions(uint3 id : SV_DispatchThreadID)
     
     // Calculate position within bounds (0-1 relative to bounds, not terrain)
     float2 boundsNorm;
-    boundsNorm.x = (normPos.x - _BoundsMin.x) / (_BoundsMax.x - _BoundsMin.x);
-    boundsNorm.y = (normPos.y - _BoundsMin.z) / (_BoundsMax.z - _BoundsMin.z);
+    
+    // Calculate the aspect ratio of the bounds
+    float boundsWidth = _BoundsMax.x - _BoundsMin.x;
+    float boundsDepth = _BoundsMax.z - _BoundsMin.z;
+    
+    // Adjust for square aspect ratio (matching SplineAreaShape's adjustment)
+    if (boundsWidth > boundsDepth)
+    {
+        // X is dominant, so we need to scale Z to match
+        float center = (_BoundsMin.z + _BoundsMax.z) * 0.5;
+        float halfSize = boundsWidth * 0.5;
+        
+        // Map Y (Z) coordinate properly to match the square aspect in the mask
+        boundsNorm.x = (normPos.x - _BoundsMin.x) / boundsWidth;
+        boundsNorm.y = (normPos.y - (center - halfSize)) / boundsWidth;
+    }
+    else
+    {
+        // Z is dominant, so we need to scale X to match
+        float center = (_BoundsMin.x + _BoundsMax.x) * 0.5;
+        float halfSize = boundsDepth * 0.5;
+        
+        // Map X coordinate properly to match the square aspect in the mask
+        boundsNorm.x = (normPos.x - (center - halfSize)) / boundsDepth;
+        boundsNorm.y = (normPos.y - _BoundsMin.z) / boundsDepth;
+    }
+    
+    // Clamp to 0-1 range to ensure valid texture coordinates
+    boundsNorm = clamp(boundsNorm, 0.0, 1.0);
     
     // Get terrain height and slope
     float height = GetTerrainHeight(normPos);

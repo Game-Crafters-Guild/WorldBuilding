@@ -626,8 +626,36 @@ namespace GameCraftersGuild.WorldBuilding
                     normZ = Mathf.Clamp01(normZ);
                     
                     // Calculate normalized position within the worldBounds (0-1 relative to worldBounds, not terrain)
-                    float boundsNormX = (normX - boundsMinX) / (boundsMaxX - boundsMinX);
-                    float boundsNormZ = (normZ - boundsMinZ) / (boundsMaxZ - boundsMinZ);
+                    float boundsNormX, boundsNormZ;
+                    
+                    // Calculate the aspect ratio of the bounds, matching SplineAreaShape's adjustment
+                    float boundsWidth = (boundsMaxX - boundsMinX) * terrainSize.x;
+                    float boundsDepth = (boundsMaxZ - boundsMinZ) * terrainSize.z;
+                    
+                    if (boundsWidth > boundsDepth)
+                    {
+                        // X is dominant, so we need to scale Z to match
+                        float center = (boundsMinZ + boundsMaxZ) * 0.5f;
+                        float halfSize = (boundsWidth / terrainSize.x) * 0.5f;
+                        
+                        // Map coordinates properly to match the square aspect in the mask
+                        boundsNormX = (normX - boundsMinX) / (boundsMaxX - boundsMinX);
+                        boundsNormZ = (normZ - (center - halfSize)) / (boundsWidth / terrainSize.x);
+                    }
+                    else
+                    {
+                        // Z is dominant, so we need to scale X to match
+                        float center = (boundsMinX + boundsMaxX) * 0.5f;
+                        float halfSize = (boundsDepth / terrainSize.z) * 0.5f;
+                        
+                        // Map coordinates properly to match the square aspect in the mask
+                        boundsNormX = (normX - (center - halfSize)) / (boundsDepth / terrainSize.z);
+                        boundsNormZ = (normZ - boundsMinZ) / (boundsMaxZ - boundsMinZ);
+                    }
+                    
+                    // Clamp to 0-1 range to ensure valid texture coordinates
+                    boundsNormX = Mathf.Clamp01(boundsNormX);
+                    boundsNormZ = Mathf.Clamp01(boundsNormZ);
                     
                     // Check if we're within the mask
                     if (mask != null)
