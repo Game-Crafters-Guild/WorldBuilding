@@ -36,6 +36,8 @@ StructuredBuffer<float2> _HeightConstraints; // x: min height, y: max height
 StructuredBuffer<float2> _SlopeConstraints; // x: min angle, y: max angle
 StructuredBuffer<float4> _NoiseConstraints; // x: threshold, y: scale, z: offset, w: unused
 StructuredBuffer<float> _MaskConstraintThresholds; // threshold values for mask constraints
+StructuredBuffer<int> _LayerConstraintIndices; // Indices of allowed terrain layers
+uint _LayerConstraintCount; // Number of allowed terrain layers (0 means no constraint)
 StructuredBuffer<float> _PlacedObjectPositions; // xyz positions of already placed objects
 StructuredBuffer<float> _MinimumDistances; // Minimum distance for each placed object
 uint _PlacedObjectCount;
@@ -215,14 +217,44 @@ bool CheckCollisionConstraint(float3 worldPos, float currentMinDistance)
 
 bool CheckLayerConstraint(float2 normPos)
 {
+    // If no layer constraints are specified, always return true
+    if (_LayerConstraintCount == 0)
+        return true;
+    
+    // Special case: if we have one entry and it's -1, it means the user specified
+    // layer constraints but none of those layers were found in the terrain.
+    // In this case, we should always fail the constraint
+    if (_LayerConstraintCount == 1 && _LayerConstraintIndices[0] == -1)
+        return false;
+    
     // Sample alphamap at position
     float4 alphamap = _AlphamapTexture.SampleLevel(sampler_AlphamapTexture, normPos, 0);
     
-    // Always return true to disable this constraint for testing
-    return true;
+    // Find the dominant layer index (0-3 for RGBA channels)
+    int dominantLayerIndex = 0;
+    float maxWeight = alphamap.r;
     
-    // Comment out the actual check for now
-    // return alphamap.r > 0.5;
+    if (alphamap.g > maxWeight) { 
+        dominantLayerIndex = 1; 
+        maxWeight = alphamap.g; 
+    }
+    if (alphamap.b > maxWeight) { 
+        dominantLayerIndex = 2; 
+        maxWeight = alphamap.b; 
+    }
+    if (alphamap.a > maxWeight) { 
+        dominantLayerIndex = 3; 
+        maxWeight = alphamap.a; 
+    }
+    
+    // Check if the dominant layer is in our allowed layers
+    for (uint i = 0; i < _LayerConstraintCount; i++)
+    {
+        if (_LayerConstraintIndices[i] == dominantLayerIndex)
+            return true;
+    }
+    
+    return false;
 }
 
 bool CheckAllConstraints(float2 normPos, float2 boundsNorm, float height, float slope, float3 worldPos, float minDistance)

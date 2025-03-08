@@ -28,6 +28,7 @@ namespace GameCraftersGuild.WorldBuilding
         private ComputeBuffer minimumDistancesBuffer;
         private ComputeBuffer prefabSettingsBuffer;
         private ComputeBuffer maskConstraintThresholdsBuffer;
+        private ComputeBuffer layerConstraintIndicesBuffer;
         
         // Add field for noise texture
         private Texture2D noiseTexture;
@@ -66,6 +67,7 @@ namespace GameCraftersGuild.WorldBuilding
         private float[] minimumDistances;
         private PrefabSettings[] prefabSettings;
         private float[] maskConstraintThresholds;
+        private int[] layerConstraintIndices;
         
         // Cached properties for efficient reuse
         private RenderTexture normalTexture;
@@ -105,6 +107,7 @@ namespace GameCraftersGuild.WorldBuilding
             ReleaseBuffer(ref minimumDistancesBuffer);
             ReleaseBuffer(ref prefabSettingsBuffer);
             ReleaseBuffer(ref maskConstraintThresholdsBuffer);
+            ReleaseBuffer(ref layerConstraintIndicesBuffer);
             
             // Release textures
             ReleaseTexture(ref normalTexture);
@@ -232,6 +235,65 @@ namespace GameCraftersGuild.WorldBuilding
             else
             {
                 maskConstraintThresholds = new float[1] { 0.1f }; // Default value
+            }
+            
+            // Setup layer constraints
+            var layerConstraint = FindConstraint<LayerConstraint>(constraints);
+            if (layerConstraint != null && layerConstraint.AllowedLayers != null && layerConstraint.AllowedLayers.Length > 0)
+            {
+                // Convert TerrainLayers to indices (0-3 for the first 4 terrain layers that can fit in RGBA channels)
+                TerrainData terrainData = UnityEngine.Terrain.activeTerrain?.terrainData;
+                if (terrainData != null && terrainData.terrainLayers != null)
+                {
+                    List<int> indices = new List<int>();
+                    
+                    // Find the index of each allowed layer in the terrain's layer array
+                    for (int i = 0; i < Mathf.Min(terrainData.terrainLayers.Length, 4); i++)
+                    {
+                        foreach (var allowedLayer in layerConstraint.AllowedLayers)
+                        {
+                            if (terrainData.terrainLayers[i] == allowedLayer)
+                            {
+                                indices.Add(i);
+                                Debug.Log($"Layer constraint: Found matching layer at index {i} - {allowedLayer.name}");
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // If no matching layers were found, add a special "fail" value (-1)
+                    // This will cause the constraint to fail rather than be skipped
+                    if (indices.Count == 0)
+                    {
+                        indices.Add(-1); // Special value to indicate "always fail"
+                        Debug.LogWarning("Layer constraint: No matching layers found in terrain. The constraint will always fail.");
+                        
+                        // Debug output to help identify the issue
+                        foreach (var allowedLayer in layerConstraint.AllowedLayers)
+                        {
+                            Debug.LogWarning($"Looking for layer: {allowedLayer?.name ?? "null"}");
+                        }
+                        
+                        for (int i = 0; i < terrainData.terrainLayers.Length; i++)
+                        {
+                            Debug.LogWarning($"Terrain has layer {i}: {terrainData.terrainLayers[i]?.name ?? "null"}");
+                        }
+                    }
+                    
+                    // Store the indices
+                    layerConstraintIndices = indices.ToArray();
+                }
+                else
+                {
+                    // No terrain data or layers available, but constraint exists
+                    // Set special "fail" value since we can't satisfy the constraint
+                    layerConstraintIndices = new int[] { -1 };
+                }
+            }
+            else
+            {
+                // No layer constraints
+                layerConstraintIndices = new int[0];
             }
             
             // Get collision constraint if it exists
@@ -517,6 +579,17 @@ namespace GameCraftersGuild.WorldBuilding
             }
             maskConstraintThresholdsBuffer.SetData(maskConstraintThresholds);
             
+            // Setup layer constraint indices buffer
+            if (layerConstraintIndicesBuffer == null || layerConstraintIndicesBuffer.count != layerConstraintIndices.Length)
+            {
+                ReleaseBuffer(ref layerConstraintIndicesBuffer);
+                layerConstraintIndicesBuffer = new ComputeBuffer(Mathf.Max(1, layerConstraintIndices.Length), sizeof(int));
+            }
+            if (layerConstraintIndices.Length > 0)
+            {
+                layerConstraintIndicesBuffer.SetData(layerConstraintIndices);
+            }
+            
             // Setup placed objects buffer
             if (placedObjectsBuffer == null || placedObjectsBuffer.count != placedObjectPositions.Length)
             {
@@ -612,6 +685,8 @@ namespace GameCraftersGuild.WorldBuilding
             placementComputeShader.SetBuffer(generatePositionsKernelId, "_SlopeConstraints", slopeConstraintsBuffer);
             placementComputeShader.SetBuffer(generatePositionsKernelId, "_NoiseConstraints", noiseConstraintsBuffer);
             placementComputeShader.SetBuffer(generatePositionsKernelId, "_MaskConstraintThresholds", maskConstraintThresholdsBuffer);
+            placementComputeShader.SetBuffer(generatePositionsKernelId, "_LayerConstraintIndices", layerConstraintIndicesBuffer);
+            placementComputeShader.SetInt("_LayerConstraintCount", layerConstraintIndices.Length);
             placementComputeShader.SetBuffer(generatePositionsKernelId, "_PlacedObjectPositions", placedObjectsBuffer);
             placementComputeShader.SetBuffer(generatePositionsKernelId, "_MinimumDistances", minimumDistancesBuffer);
             placementComputeShader.SetBuffer(generatePositionsKernelId, "_PrefabSettings", prefabSettingsBuffer);
