@@ -201,17 +201,28 @@ bool CheckCollisionConstraint(float3 worldPos, float currentMinDistance)
     // Check against all placed objects
     for (uint i = 0; i < _PlacedObjectCount; i++)
     {
-        float3 objPos = float3(_PlacedObjectPositions[i*3], _PlacedObjectPositions[i*3+1], _PlacedObjectPositions[i*3+2]);
+        // Get position from flattened array
+        float3 objPos = float3(
+            _PlacedObjectPositions[i*3],
+            _PlacedObjectPositions[i*3+1],
+            _PlacedObjectPositions[i*3+2]
+        );
+        
+        // Get minimum distance for this object
         float objMinDist = _MinimumDistances[i];
         
         // Use maximum of the two distances
         float requiredDist = max(minDist, objMinDist);
         
+        // Calculate distance between points
         float dist = distance(worldPos, objPos);
+        
+        // If too close, fail the constraint
         if (dist < requiredDist)
             return false;
     }
     
+    // All checks passed
     return true;
 }
 
