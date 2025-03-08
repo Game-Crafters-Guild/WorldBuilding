@@ -140,9 +140,15 @@ bool CheckMaskConstraint(float2 boundsNorm)
 {
     float4 maskColor = _MaskTexture.SampleLevel(sampler_MaskTexture, boundsNorm, 0);
     
-    // Check if we're inside the spline area (non-zero mask value)
-    // Based on user testing, this is the correct check
-    return dot(maskColor, float4(1,1,1,1)) > 0.001f;
+    // Use the actual threshold from MaskConstraint
+    // Get mask value across all relevant channels
+    //float maskValue = dot(maskColor, float4(1,1,1,1));
+
+    // Use the actual threshold from MaskConstraint.
+    float maskValue = maskColor.r;
+    
+    // Compare with the threshold from the constraint
+    return maskValue > _MaskConstraintThresholds[0];
 }
 
 bool CheckCollisionConstraint(float3 worldPos, float currentMinDistance)

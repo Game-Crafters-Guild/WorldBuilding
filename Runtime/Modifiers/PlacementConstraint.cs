@@ -142,7 +142,7 @@ namespace GameCraftersGuild.WorldBuilding
                 maskColor = Color.white;
             }
             
-            return maskColor.grayscale >= Threshold;
+            return maskColor.r >= Threshold;
         }
     }
 

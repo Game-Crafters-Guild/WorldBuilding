@@ -662,8 +662,18 @@ namespace GameCraftersGuild.WorldBuilding
                     {
                         float maskValue = SampleTexture(mask, boundsNormX, boundsNormZ);
                         
-                        // Use the original logic but with a very low threshold
-                        if (maskValue < 0.001f) // Skip if outside mask with very low threshold
+                        // Try to get the threshold from any MaskConstraint
+                        float threshold = 0.001f; // Default very low threshold
+                        
+                        // Look for a MaskConstraint to get its threshold
+                        var maskConstraint = ConstraintsContainer.FindConstraint<MaskConstraint>();
+                        if (maskConstraint != null)
+                        {
+                            threshold = maskConstraint.Threshold;
+                        }
+                        
+                        // Skip if below threshold
+                        if (maskValue < threshold)
                             continue;
                     }
                     
@@ -806,17 +816,8 @@ namespace GameCraftersGuild.WorldBuilding
             // Sample texture at normalized position
             if (texture is Texture2D texture2D)
             {
-                int x = Mathf.FloorToInt(normX * texture2D.width);
-                int y = Mathf.FloorToInt(normZ * texture2D.height);
-                
-                x = Mathf.Clamp(x, 0, texture2D.width - 1);
-                y = Mathf.Clamp(y, 0, texture2D.height - 1);
-                
-                Color color = texture2D.GetPixel(x, y);
-                
-                // Consider all channels, not just grayscale
-                // This matches what we're doing in the compute shader
-                return Mathf.Max(Mathf.Max(color.r, color.g), color.a);
+                Color color = texture2D.GetPixelBilinear(normX, normZ);
+                return color.r;
             }
             
             // Fallback
