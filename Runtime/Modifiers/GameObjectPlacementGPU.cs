@@ -494,14 +494,31 @@ namespace GameCraftersGuild.WorldBuilding
             float areaDepth = (boundsMaxZ - boundsMinZ) * terrainSize.z;
             float areaSize = areaWidth * areaDepth;
             
-            // Calculate number of objects to place
-            int numObjects = Mathf.FloorToInt(areaSize * modifier.ObjectsPerSquareUnit * modifier.Density);
+            // Calculate density/fillness factor - density 1.0 means objects are placed at a distance of their minimum distance apart
+            // This is approximately the maximum possible density
+            float defaultDistance = modifier.DefaultMinDistance > 0f ? modifier.DefaultMinDistance : 2.0f;
+            
+            // Calculate theoretical maximum number of objects that could be placed based on minimum distances
+            // For a grid of objects with spacing = defaultDistance, we get approximately:
+            float maxPossibleObjects = areaSize / (defaultDistance * defaultDistance);
+            
+            // Now use Density as a direct scaling factor from 0 to maximum
+            int numObjects = Mathf.FloorToInt(maxPossibleObjects * modifier.Density);
             
             // Apply max objects limit if set
             if (modifier.MaxObjects > 0)
             {
                 numObjects = Mathf.Min(numObjects, modifier.MaxObjects);
             }
+            
+            // Make sure we at least try to place 1 object if density > 0
+            if (modifier.Density > 0 && numObjects == 0)
+            {
+                numObjects = 1;
+            }
+            
+            Debug.Log($"GPU Placement: Area size={areaSize:F2}, Max possible objects={maxPossibleObjects:F2}, " +
+                     $"Density={modifier.Density:F2}, Objects to place={numObjects}");
             
             // Limit the number of parallel calculations for performance
             int numThreads = Mathf.Min(maxAttempts, 1000000);
