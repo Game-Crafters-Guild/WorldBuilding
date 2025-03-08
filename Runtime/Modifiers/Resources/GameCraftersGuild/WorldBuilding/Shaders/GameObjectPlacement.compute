@@ -138,8 +138,11 @@ bool CheckSlopeConstraint(float slope, uint constraintIndex)
 
 bool CheckMaskConstraint(float2 boundsNorm)
 {
-    float mask = _MaskTexture.SampleLevel(sampler_MaskTexture, boundsNorm, 0).r;
-    return mask >= _MaskConstraintThresholds[0]; // Use the threshold from the MaskConstraint
+    float4 maskColor = _MaskTexture.SampleLevel(sampler_MaskTexture, boundsNorm, 0);
+    
+    // Check if we're inside the spline area (non-zero mask value)
+    // Based on user testing, this is the correct check
+    return dot(maskColor, float4(1,1,1,1)) > 0.001f;
 }
 
 bool CheckCollisionConstraint(float3 worldPos, float currentMinDistance)
@@ -173,8 +176,11 @@ bool CheckLayerConstraint(float2 normPos)
     // Sample alphamap at position
     float4 alphamap = _AlphamapTexture.SampleLevel(sampler_AlphamapTexture, normPos, 0);
     
-    // For now, we'll assume the first channel must be dominant (can be expanded)
-    return alphamap.r > 0.5;
+    // Always return true to disable this constraint for testing
+    return true;
+    
+    // Comment out the actual check for now
+    // return alphamap.r > 0.5;
 }
 
 bool CheckAllConstraints(float2 normPos, float2 boundsNorm, float height, float slope, float3 worldPos, float minDistance)

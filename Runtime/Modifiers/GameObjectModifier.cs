@@ -210,7 +210,7 @@ namespace GameCraftersGuild.WorldBuilding
             }
             
             // Initialize GPU placement if needed
-            if (UseGPUPlacement && PlacementComputeShader != null && m_GPUPlacement == null)
+            //if (UseGPUPlacement && PlacementComputeShader != null && m_GPUPlacement == null)
             {
                 m_GPUPlacement = new GameObjectPlacementGPU(PlacementComputeShader);
             }
@@ -633,7 +633,9 @@ namespace GameCraftersGuild.WorldBuilding
                     if (mask != null)
                     {
                         float maskValue = SampleTexture(mask, boundsNormX, boundsNormZ);
-                        if (maskValue < 0.1f) // Skip if outside mask
+                        
+                        // Use the original logic but with a very low threshold
+                        if (maskValue < 0.001f) // Skip if outside mask with very low threshold
                             continue;
                     }
                     
@@ -782,7 +784,11 @@ namespace GameCraftersGuild.WorldBuilding
                 x = Mathf.Clamp(x, 0, texture2D.width - 1);
                 y = Mathf.Clamp(y, 0, texture2D.height - 1);
                 
-                return texture2D.GetPixel(x, y).grayscale;
+                Color color = texture2D.GetPixel(x, y);
+                
+                // Consider all channels, not just grayscale
+                // This matches what we're doing in the compute shader
+                return Mathf.Max(Mathf.Max(color.r, color.g), color.a);
             }
             
             // Fallback

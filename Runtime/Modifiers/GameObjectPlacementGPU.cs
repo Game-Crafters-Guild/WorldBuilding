@@ -326,14 +326,7 @@ namespace GameCraftersGuild.WorldBuilding
         /// </summary>
         private Texture GetWhiteTexture()
         {
-            if (tempWhiteTexture == null)
-            {
-                tempWhiteTexture = new Texture2D(1, 1);
-                tempWhiteTexture.SetPixel(0, 0, Color.white);
-                tempWhiteTexture.Apply();
-            }
-            
-            return tempWhiteTexture;
+            return Texture2D.whiteTexture;
         }
         
         /// <summary>
@@ -574,19 +567,7 @@ namespace GameCraftersGuild.WorldBuilding
             placementComputeShader.SetTexture(generatePositionsKernelId, "_NormalTexture", normalTexture);
             
             // Set mask texture - use context mask if available
-            if (mask != null)
-            {
-                placementComputeShader.SetTexture(generatePositionsKernelId, "_MaskTexture", mask);
-            }
-            else if (context.MaskRenderTexture != null)
-            {
-                placementComputeShader.SetTexture(generatePositionsKernelId, "_MaskTexture", context.MaskRenderTexture);
-            }
-            else
-            {
-                // Create a white texture if no mask is provided
-                placementComputeShader.SetTexture(generatePositionsKernelId, "_MaskTexture", GetWhiteTexture());
-            }
+            placementComputeShader.SetTexture(generatePositionsKernelId, "_MaskTexture", mask == null ? Texture2D.whiteTexture : mask);
             
             // Set buffers
             placementComputeShader.SetBuffer(generatePositionsKernelId, "_Results", resultsBuffer);
