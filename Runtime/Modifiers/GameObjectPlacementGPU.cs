@@ -29,6 +29,9 @@ namespace GameCraftersGuild.WorldBuilding
         private ComputeBuffer prefabSettingsBuffer;
         private ComputeBuffer maskConstraintThresholdsBuffer;
         
+        // Add field for noise texture
+        private Texture2D noiseTexture;
+        
         // Structure for results from compute shader
         private struct PlacementResult
         {
@@ -183,11 +186,41 @@ namespace GameCraftersGuild.WorldBuilding
             var noiseConstraint = FindConstraint<NoiseConstraint>(constraints);
             if (noiseConstraint != null)
             {
-                noiseConstraints = new Vector4[1] { new Vector4(noiseConstraint.Threshold, 1f, 0f, 0f) };
+                // Pack noise parameters into a Vector4
+                // x: threshold
+                // y: scale (normalized from NoiseScale)
+                // z: offset seed (normalized from Seed)
+                // w: unused for now
+                
+                float scale = noiseConstraint.NoiseProperties != null ? 
+                    Mathf.Clamp(noiseConstraint.NoiseProperties.NoiseScale / 10f, 0.1f, 10f) : 1f;
+                
+                float offset = noiseConstraint.NoiseProperties != null ? 
+                    (noiseConstraint.NoiseProperties.Seed % 1000) / 1000f : 0f;
+                
+                noiseConstraints = new Vector4[1] { 
+                    new Vector4(
+                        noiseConstraint.Threshold,  // Threshold
+                        scale,                      // Scale
+                        offset,                     // Offset/seed
+                        0f                          // Reserved
+                    ) 
+                };
+                
+                // Get the noise texture from NoiseProperties 
+                if (noiseConstraint.NoiseProperties != null)
+                {
+                    noiseTexture = noiseConstraint.NoiseProperties.NoiseTexture;
+                }
+                else
+                {
+                    noiseTexture = null;
+                }
             }
             else
             {
                 noiseConstraints = new Vector4[1] { new Vector4(0.5f, 1f, 0f, 0f) }; // Default values
+                noiseTexture = null;
             }
             
             // Setup mask constraints
@@ -568,6 +601,10 @@ namespace GameCraftersGuild.WorldBuilding
             
             // Set mask texture - use context mask if available
             placementComputeShader.SetTexture(generatePositionsKernelId, "_MaskTexture", mask == null ? Texture2D.whiteTexture : mask);
+            
+            // Set noise texture if available
+            placementComputeShader.SetTexture(generatePositionsKernelId, "_NoiseTexture", 
+                noiseTexture != null ? noiseTexture : Texture2D.whiteTexture);
             
             // Set buffers
             placementComputeShader.SetBuffer(generatePositionsKernelId, "_Results", resultsBuffer);

@@ -50,6 +50,8 @@ Texture2D<float> _HeightmapTexture;
 SamplerState sampler_HeightmapTexture;
 Texture2D<float4> _NormalTexture;
 SamplerState sampler_NormalTexture;
+Texture2D<float4> _NoiseTexture;
+SamplerState sampler_NoiseTexture;
 
 // Output buffer for positions
 struct PlacementResult 
@@ -151,6 +153,40 @@ bool CheckMaskConstraint(float2 boundsNorm)
     return maskValue > _MaskConstraintThresholds[0];
 }
 
+bool CheckNoiseConstraint(float2 boundsNorm)
+{
+    // Get noise parameters
+    float4 noiseParams = _NoiseConstraints[0]; // x: threshold, y: scale, z: offset, w: unused
+    
+    // Sample the noise texture
+    float4 noiseColor = _NoiseTexture.SampleLevel(sampler_NoiseTexture, boundsNorm, 0);
+    
+    // Use grayscale value for comparison (average of RGB)
+    float noiseValue = (noiseColor.r + noiseColor.g + noiseColor.b) / 3.0;
+    
+    // Fall back to procedural noise if the texture returns a zero value (might be a default white texture)
+    if (noiseValue < 0.001f)
+    {
+        // Simple Perlin-like noise as fallback
+        float2 scaledPos = boundsNorm * noiseParams.y + float2(noiseParams.z, noiseParams.z);
+        float2 i = floor(scaledPos);
+        float2 f = frac(scaledPos);
+        float2 u = f * f * (3.0 - 2.0 * f); // Smoothstep
+        
+        float n00 = frac(sin(dot(i, float2(127.1, 311.7))) * 43758.5453);
+        float n01 = frac(sin(dot(i + float2(0, 1), float2(127.1, 311.7))) * 43758.5453);
+        float n10 = frac(sin(dot(i + float2(1, 0), float2(127.1, 311.7))) * 43758.5453);
+        float n11 = frac(sin(dot(i + float2(1, 1), float2(127.1, 311.7))) * 43758.5453);
+        
+        float nx0 = lerp(n00, n10, u.x);
+        float nx1 = lerp(n01, n11, u.x);
+        noiseValue = lerp(nx0, nx1, u.y);
+    }
+    
+    // Check against threshold
+    return noiseValue >= noiseParams.x;
+}
+
 bool CheckCollisionConstraint(float3 worldPos, float currentMinDistance)
 {
     // If no placed objects, constraint is satisfied
@@ -208,6 +244,10 @@ bool CheckAllConstraints(float2 normPos, float2 boundsNorm, float height, float 
         if (!CheckSlopeConstraint(slope, i))
             return false;
     }
+    
+    // Check noise constraints
+    if (!CheckNoiseConstraint(boundsNorm))
+        return false;
     
     // Check layer constraint
     if (!CheckLayerConstraint(normPos))

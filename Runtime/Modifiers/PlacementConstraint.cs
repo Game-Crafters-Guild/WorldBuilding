@@ -1,4 +1,5 @@
 using System;
+using Unity.Mathematics;
 using UnityEngine;
 
 namespace GameCraftersGuild.WorldBuilding
@@ -160,15 +161,51 @@ namespace GameCraftersGuild.WorldBuilding
 
         public bool CheckConstraint(TerrainData terrainData, float normX, float normZ, PlacementConstraintContext context)
         {
-            var noiseTexture = NoiseProperties.NoiseTexture;
+            // Try to get or generate the noise texture
+            var noiseTexture = NoiseProperties?.NoiseTexture;
             if (noiseTexture == null)
-                return true;
+            {
+                // Generate procedural noise if texture isn't available
+                // This matching the GPU implementation
+                float2 position = new float2(context.BoundsNormX, context.BoundsNormZ);
+                float scale = NoiseProperties != null ? Mathf.Clamp(NoiseProperties.NoiseScale / 10f, 0.1f, 10f) : 1f;
+                float offset = NoiseProperties != null ? (NoiseProperties.Seed % 1000) / 1000f : 0f;
+                
+                // Simple Perlin-like noise that matches GPU implementation
+                Vector2 scaledPos = new Vector2(
+                    position.x * scale + offset,
+                    position.y * scale + offset
+                );
+                
+                Vector2 i = new Vector2(Mathf.Floor(scaledPos.x), Mathf.Floor(scaledPos.y));
+                Vector2 f = new Vector2(scaledPos.x - i.x, scaledPos.y - i.y);
+                Vector2 u = new Vector2(
+                    f.x * f.x * (3.0f - 2.0f * f.x),
+                    f.y * f.y * (3.0f - 2.0f * f.y)
+                );
+                
+                float n00 = Mathf.Repeat(Mathf.Sin(Vector2.Dot(i, new Vector2(127.1f, 311.7f))) * 43758.5453f, 1f);
+                float n01 = Mathf.Repeat(Mathf.Sin(Vector2.Dot(i + new Vector2(0, 1), new Vector2(127.1f, 311.7f))) * 43758.5453f, 1f);
+                float n10 = Mathf.Repeat(Mathf.Sin(Vector2.Dot(i + new Vector2(1, 0), new Vector2(127.1f, 311.7f))) * 43758.5453f, 1f);
+                float n11 = Mathf.Repeat(Mathf.Sin(Vector2.Dot(i + new Vector2(1, 1), new Vector2(127.1f, 311.7f))) * 43758.5453f, 1f);
+                
+                float nx0 = Mathf.Lerp(n00, n10, u.x);
+                float nx1 = Mathf.Lerp(n01, n11, u.x);
+                float noiseValue = Mathf.Lerp(nx0, nx1, u.y);
+                
+                return noiseValue >= Threshold;
+            }
                 
             // Sample noise texture
             Color noiseColor;
             
             int x = Mathf.FloorToInt(context.BoundsNormX * noiseTexture.width);
             int y = Mathf.FloorToInt(context.BoundsNormZ * noiseTexture.height);
+            
+            // Clamp to valid range
+            x = Mathf.Clamp(x, 0, noiseTexture.width - 1);
+            y = Mathf.Clamp(y, 0, noiseTexture.height - 1);
+            
             noiseColor = noiseTexture.GetPixel(x, y);
             
             return noiseColor.grayscale >= Threshold;
