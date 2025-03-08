@@ -112,9 +112,17 @@ namespace GameCraftersGuild.WorldBuilding
             }
         }
         
-        //[Header("Game Objects")]
+        [Header("Game Objects")]
         [Tooltip("List of game objects to spawn")]
-        public List<GameObjectSettings> GameObjects = new List<GameObjectSettings>();
+        public GameObjectSettingsContainer GameObjectsContainer = new GameObjectSettingsContainer();
+        
+        /// <summary>
+        /// Backward compatibility method to access the GameObjects list
+        /// </summary>
+        public List<GameObjectSettings> GameObjects
+        {
+            get { return GameObjectsContainer.GameObjects; }
+        }
         
         //[Header("Placement Constraints")]
         [Tooltip("Container for all placement constraints")]
@@ -123,7 +131,7 @@ namespace GameCraftersGuild.WorldBuilding
         [Header("Placement Settings")]
         [Tooltip("Overall density factor for object placement")]
         [Range(0f, 1.0f)]
-        public float Density = 1.0f;
+        public float Density = 0.005f;
         
         [Tooltip("Random position offset factor")]
         [Range(0f, 1f)]
@@ -134,7 +142,7 @@ namespace GameCraftersGuild.WorldBuilding
         public int ObjectsPerSquareUnit = 10;
         
         [Tooltip("Maximum number of objects to spawn. If set to 0, there is no limit.")]
-        public int MaxObjects = 0;
+        public int MaxObjects = 1000;
         
         [Tooltip("Default minimum distance between objects")]
         [Range(0f, 10f)]
@@ -142,7 +150,7 @@ namespace GameCraftersGuild.WorldBuilding
         
         [Header("GPU Placement")]
         [Tooltip("Use GPU-based placement for better performance")]
-        public bool UseGPUPlacement = false;
+        public bool UseGPUPlacement = true;
         
         [Tooltip("Compute shader for GPU-based placement")]
         public ComputeShader PlacementComputeShader;
@@ -357,8 +365,19 @@ namespace GameCraftersGuild.WorldBuilding
             
             // Get terrain data
             TerrainData terrainData = context.TerrainData;
-            if (terrainData == null || GameObjects.Count == 0) 
+            if (terrainData == null || GameObjectsContainer.GameObjects.Count == 0) 
                 return;
+
+            bool hasPrefabsToSpawn = false;
+            foreach (var item in GameObjectsContainer.GameObjects)
+            {
+                if (item.Prefab != null)
+                {
+                    hasPrefabsToSpawn = true;
+                    break;
+                }
+            }
+            if (!hasPrefabsToSpawn) return;
                 
             // Get terrain
             Terrain terrain = Terrain.activeTerrain;
@@ -366,14 +385,24 @@ namespace GameCraftersGuild.WorldBuilding
                 return;
                 
             // Use GPU-based placement if enabled and available
-            if (UseGPUPlacement && PlacementComputeShader != null)
-            {
+            if (UseGPUPlacement && HasPlacementShader())
+            {                
                 SpawnGameObjectsGPU(context, worldBounds, mask);
                 return;
             }
             
             // Otherwise use CPU-based placement
             SpawnGameObjectsCPU(context, worldBounds, mask);
+        }
+
+        private bool HasPlacementShader()
+        {
+            if (PlacementComputeShader == null)
+            {
+                PlacementComputeShader =
+                    Resources.Load<ComputeShader>("GameCraftersGuild/WorldBuilding/Shaders/GameObjectPlacement");
+            }
+            return PlacementComputeShader != null;
         }
         
         /// <summary>
@@ -443,10 +472,10 @@ namespace GameCraftersGuild.WorldBuilding
             // Prepare objects for instantiation
             foreach (var placement in placements)
             {
-                if (placement.PrefabIndex < 0 || placement.PrefabIndex >= GameObjects.Count)
+                if (placement.PrefabIndex < 0 || placement.PrefabIndex >= GameObjectsContainer.GameObjects.Count)
                     continue;
                     
-                GameObjectSettings objectSettings = GameObjects[placement.PrefabIndex];
+                GameObjectSettings objectSettings = GameObjectsContainer.GameObjects[placement.PrefabIndex];
                 if (objectSettings.Prefab == null)
                     continue;
                 
@@ -609,7 +638,7 @@ namespace GameCraftersGuild.WorldBuilding
                     }
                     
                     // Choose a random game object setting
-                    GameObjectSettings objectSettings = GameObjects[GetRandomRange(0, GameObjects.Count)];
+                    GameObjectSettings objectSettings = GameObjectsContainer.GameObjects[GetRandomRange(0, GameObjectsContainer.GameObjects.Count)];
                     if (objectSettings.Prefab == null)
                         continue;
                     

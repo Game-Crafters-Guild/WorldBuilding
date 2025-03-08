@@ -346,6 +346,7 @@ namespace GameCraftersGuild.WorldBuilding
             Texture mask,
             int maxAttempts = 1000000)
         {
+            placementComputeShader = modifier.PlacementComputeShader;
             if (placementComputeShader == null)
             {
                 Debug.LogError("GPU Placement: Compute shader is missing!");
