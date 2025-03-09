@@ -176,6 +176,9 @@ namespace GameCraftersGuild.WorldBuilding
         private Queue<InstantiationRequest> m_InstantiationQueue = new Queue<InstantiationRequest>();
         private bool m_ProcessingQueue = false;
         
+        // Add a reference for the container GameObject
+        private GameObject m_ObjectContainer;
+        
         // Structure to hold pending instantiation requests
         private struct InstantiationRequest
         {
@@ -336,6 +339,23 @@ namespace GameCraftersGuild.WorldBuilding
             
             m_SpawnedObjects.Clear();
             
+            // Destroy the container GameObject if it exists
+            if (m_ObjectContainer != null)
+            {
+                #if UNITY_EDITOR
+                if (Application.isEditor && !Application.isPlaying)
+                {
+                    UnityEngine.Object.DestroyImmediate(m_ObjectContainer);
+                }
+                else
+                #endif
+                {
+                    UnityEngine.Object.Destroy(m_ObjectContainer);
+                }
+                
+                m_ObjectContainer = null;
+            }
+            
             // Clear placed object positions if collision constraint exists
             if (m_CollisionConstraint != null)
             {
@@ -343,7 +363,7 @@ namespace GameCraftersGuild.WorldBuilding
             }
         }
         
-        public void SpawnGameObjects(WorldBuildingContext context, Bounds worldBounds, Texture mask)
+        public void SpawnGameObjects(WorldBuildingContext context, Bounds worldBounds, Texture mask, Transform parent)
         {
             // Try to find the collision constraint if we don't have a reference yet
             m_CollisionConstraint = ConstraintsContainer.FindConstraint<ObjectCollisionConstraint>();
@@ -362,6 +382,20 @@ namespace GameCraftersGuild.WorldBuilding
             
             // First clear any previously spawned objects
             ClearSpawnedObjects();
+            
+            // Create a container for spawned objects if needed
+            string containerName = "SpawnedObjects";
+            if (parent != null)
+            {
+                containerName = $"{parent.gameObject.name}_Objects";
+            }
+            m_ObjectContainer = new GameObject(containerName);
+            
+            // Parent the container to the Stamp if available
+            if (parent != null)
+            {
+                m_ObjectContainer.transform.SetParent(parent.transform);
+            }
             
             // Get terrain data
             TerrainData terrainData = context.TerrainData;
@@ -434,6 +468,12 @@ namespace GameCraftersGuild.WorldBuilding
                         {
                             // Set scale
                             newObject.transform.localScale = request.scale;
+                            
+                            // Parent to container if available
+                            if (m_ObjectContainer != null)
+                            {
+                                newObject.transform.SetParent(m_ObjectContainer.transform, true);
+                            }
                             
                             // Keep track of spawned objects
                             m_SpawnedObjects.Add(newObject);
@@ -541,6 +581,12 @@ namespace GameCraftersGuild.WorldBuilding
                         
                         // Set scale
                         newObject.transform.localScale = request.scale;
+                        
+                        // Parent to container if available
+                        if (m_ObjectContainer != null)
+                        {
+                            newObject.transform.SetParent(m_ObjectContainer.transform, true);
+                        }
                         
                         // Keep track of spawned objects
                         m_SpawnedObjects.Add(newObject);
