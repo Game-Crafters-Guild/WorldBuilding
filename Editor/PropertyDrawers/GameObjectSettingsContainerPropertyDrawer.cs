@@ -72,16 +72,6 @@ namespace GameCraftersGuild.WorldBuilding.Editor
 
                 var itemElement = CreateListItem(elementProp);
                 listContainer.Add(itemElement);
-                /*continue;
-                var boxContainer = new Box();
-                boxContainer.style.marginTop = 5;
-                boxContainer.style.marginBottom = 5;
-                
-                // Header with constraint type and remove button
-                var header = new VisualElement();
-                header.style.flexDirection = FlexDirection.Row;
-                header.style.justifyContent = Justify.SpaceBetween;*/
-                
                 
                 int index = i; // Capture index for closure
                 var removeBtn = new Button(() => RemoveItem(index, listContainer))
@@ -104,7 +94,13 @@ namespace GameCraftersGuild.WorldBuilding.Editor
 
         private VisualElement CreateListItem(SerializedProperty property)
         {
-            VisualElement container = new VisualElement();
+            VisualElement container = new Box();
+            container.style.borderBottomColor = container.style.borderTopColor =
+                container.style.borderLeftColor = container.style.borderRightColor = Color.black;
+            container.style.borderBottomWidth = container.style.borderTopWidth =
+                container.style.borderLeftWidth = container.style.borderRightWidth = 1.0f;
+            container.style.paddingBottom = container.style.paddingTop = container.style.paddingLeft = container.style.paddingRight = 4.0f;
+            container.style.marginTop = container.style.marginBottom = 5.0f;
             var childProperty = property.Copy();
             var endProperty = childProperty.GetEndProperty();
             childProperty.NextVisible(true);

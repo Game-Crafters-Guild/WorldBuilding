@@ -15,6 +15,12 @@ namespace GameCraftersGuild.WorldBuilding
     {
         // Compute shader reference
         [SerializeField] private ComputeShader placementComputeShader;
+
+        public ComputeShader PlacementComputeShader
+        {
+            set => placementComputeShader = value;
+            get => placementComputeShader;
+        }
         
         // References to kernel IDs
         private int generatePositionsKernelId;
@@ -255,7 +261,7 @@ namespace GameCraftersGuild.WorldBuilding
                             if (terrainData.terrainLayers[i] == allowedLayer)
                             {
                                 indices.Add(i);
-                                Debug.Log($"Layer constraint: Found matching layer at index {i} - {allowedLayer.name}");
+                                //Debug.Log($"Layer constraint: Found matching layer at index {i} - {allowedLayer.name}");
                                 break;
                             }
                         }
@@ -304,7 +310,7 @@ namespace GameCraftersGuild.WorldBuilding
                 placedObjectPositions = new float[collisionConstraint.PlacedObjects.Count * 3];
                 minimumDistances = new float[collisionConstraint.PlacedObjects.Count];
                 
-                Debug.Log($"GPU Placement: Using {collisionConstraint.PlacedObjects.Count} placed objects for collision constraint");
+                //Debug.Log($"GPU Placement: Using {collisionConstraint.PlacedObjects.Count} placed objects for collision constraint");
                 
                 for (int i = 0; i < collisionConstraint.PlacedObjects.Count; i++)
                 {
@@ -313,12 +319,6 @@ namespace GameCraftersGuild.WorldBuilding
                     placedObjectPositions[i * 3 + 1] = obj.Position.y;
                     placedObjectPositions[i * 3 + 2] = obj.Position.z;
                     minimumDistances[i] = obj.MinDistance;
-                    
-                    // Debug the first few placed objects
-                    if (i < 5)
-                    {
-                        Debug.Log($"Placed object {i}: Position={obj.Position}, MinDistance={obj.MinDistance}");
-                    }
                 }
             }
             else
@@ -327,14 +327,14 @@ namespace GameCraftersGuild.WorldBuilding
                 placedObjectPositions = new float[0];
                 minimumDistances = new float[0];
                 
-                if (collisionConstraint != null)
+                /*if (collisionConstraint != null)
                 {
                     Debug.Log("GPU Placement: CollisionConstraint exists but has no placed objects");
                 }
                 else
                 {
                     Debug.Log("GPU Placement: No CollisionConstraint found");
-                }
+                }*/
             }
             
             // Setup prefab settings
@@ -434,14 +434,6 @@ namespace GameCraftersGuild.WorldBuilding
         }
         
         /// <summary>
-        /// Gets a white texture to use as a default mask
-        /// </summary>
-        private Texture GetWhiteTexture()
-        {
-            return Texture2D.whiteTexture;
-        }
-        
-        /// <summary>
         /// Main method to spawn game objects using the GPU
         /// </summary>
         public List<GameObjectPlacementInfo> GenerateObjectPlacements(
@@ -517,8 +509,8 @@ namespace GameCraftersGuild.WorldBuilding
                 numObjects = 1;
             }
             
-            Debug.Log($"GPU Placement: Area size={areaSize:F2}, Max possible objects={maxPossibleObjects:F2}, " +
-                     $"Density={modifier.Density:F2}, Objects to place={numObjects}");
+            //Debug.Log($"GPU Placement: Area size={areaSize:F2}, Max possible objects={maxPossibleObjects:F2}, " +
+                     //$"Density={modifier.Density:F2}, Objects to place={numObjects}");
             
             // Limit the number of parallel calculations for performance
             int numThreads = Mathf.Min(maxAttempts, 1000000);
@@ -567,7 +559,7 @@ namespace GameCraftersGuild.WorldBuilding
                 }
             }
             
-            Debug.Log($"GPU returned {validGPUResults.Count} valid positions before collision filtering");
+            //Debug.Log($"GPU returned {validGPUResults.Count} valid positions before collision filtering");
             
             // Second pass: CPU-side collision detection between objects generated in this batch
             // Get existing collision constraint
@@ -636,18 +628,18 @@ namespace GameCraftersGuild.WorldBuilding
                     // Debug - only for the first few objects
                     if (placements.Count <= 5)
                     {
-                        Debug.Log($"Added object {placements.Count-1} to collision constraint: Position={info.Position}, MinDistance={minimumDistance}");
+                        //Debug.Log($"Added object {placements.Count-1} to collision constraint: Position={info.Position}, MinDistance={minimumDistance}");
                     }
                     
                     // Log total count periodically
                     if (placements.Count % 50 == 0)
                     {
-                        Debug.Log($"Collision constraint now has {collisionConstraint.PlacedObjects.Count} objects");
+                        //Debug.Log($"Collision constraint now has {collisionConstraint.PlacedObjects.Count} objects");
                     }
                 }
             }
             
-            Debug.Log($"GPU Placement: Generated {placements.Count} valid placements after CPU-side collision filtering (rejected {validGPUResults.Count - placements.Count})");
+            //Debug.Log($"GPU Placement: Generated {placements.Count} valid placements after CPU-side collision filtering (rejected {validGPUResults.Count - placements.Count})");
             
             return placements;
         }
@@ -715,56 +707,7 @@ namespace GameCraftersGuild.WorldBuilding
             {
                 ReleaseBuffer(ref placedObjectsBuffer);
                 placedObjectsBuffer = new ComputeBuffer(requiredElementCount, sizeof(float));
-                Debug.Log($"Created placedObjectsBuffer with {requiredElementCount} elements (for {requiredElementCount/3} objects), stride={sizeof(float)}");
-            }
-            
-            if (placedObjectPositions.Length > 0)
-            {
-                Debug.Log("Buffer contents before SetData:");
-                for (int i = 0; i < Math.Min(9, placedObjectPositions.Length); i++)
-                {
-                    Debug.Log($"  placedObjectPositions[{i}] = {placedObjectPositions[i]}");
-                }
-                
-                // Create a temporary host-side buffer to verify data
-                float[] debugBuffer = new float[placedObjectPositions.Length];
-                Array.Copy(placedObjectPositions, debugBuffer, placedObjectPositions.Length);
-                
-                // Set the data to the GPU buffer
-                placedObjectsBuffer.SetData(placedObjectPositions);
-                
-                // For debugging, read back the data
-                float[] readbackData = new float[placedObjectPositions.Length];
-                placedObjectsBuffer.GetData(readbackData);
-                
-                // Verify the data matches
-                bool dataMatches = true;
-                for (int i = 0; i < placedObjectPositions.Length; i++)
-                {
-                    if (Math.Abs(debugBuffer[i] - readbackData[i]) > 0.0001f)
-                    {
-                        Debug.LogError($"Data mismatch at index {i}: {debugBuffer[i]} vs {readbackData[i]}");
-                        dataMatches = false;
-                        break;
-                    }
-                }
-                
-                if (dataMatches)
-                {
-                    Debug.Log("Buffer data verification successful!");
-                }
-                else
-                {
-                    Debug.LogError("Buffer data verification failed!");
-                }
-                
-                Debug.Log($"Set placedObjectsBuffer data with {placedObjectPositions.Length} elements (for {placedObjectPositions.Length/3} objects)");
-                
-                // Debug some values
-                if (placedObjectPositions.Length >= 3)
-                {
-                    Debug.Log($"First object position: ({placedObjectPositions[0]}, {placedObjectPositions[1]}, {placedObjectPositions[2]})");
-                }
+                //Debug.Log($"Created placedObjectsBuffer with {requiredElementCount} elements (for {requiredElementCount/3} objects), stride={sizeof(float)}");
             }
             
             // Setup minimum distances buffer - for each object we need 1 float
@@ -774,18 +717,18 @@ namespace GameCraftersGuild.WorldBuilding
             {
                 ReleaseBuffer(ref minimumDistancesBuffer);
                 minimumDistancesBuffer = new ComputeBuffer(minDistancesCount, sizeof(float));
-                Debug.Log($"Created minimumDistancesBuffer with {minDistancesCount} elements, stride={sizeof(float)}");
+                //Debug.Log($"Created minimumDistancesBuffer with {minDistancesCount} elements, stride={sizeof(float)}");
             }
             if (minimumDistances.Length > 0)
             {
                 minimumDistancesBuffer.SetData(minimumDistances);
-                Debug.Log($"Set minimumDistancesBuffer data with {minimumDistances.Length} elements");
+                /*Debug.Log($"Set minimumDistancesBuffer data with {minimumDistances.Length} elements");
                 
                 // Debug some values
                 if (minimumDistances.Length >= 1)
                 {
                     Debug.Log($"First minimum distance: {minimumDistances[0]}");
-                }
+                }*/
             }
             
             // Setup prefab settings buffer
@@ -839,8 +782,8 @@ namespace GameCraftersGuild.WorldBuilding
             placementComputeShader.SetFloat("_DefaultMinDistance", defaultMinDistance);
             
             // Debug logging
-            Debug.Log($"GPU Placement: _PlacedObjectCount={objectCount}, _DefaultMinDistance={defaultMinDistance}");
-            Debug.Log($"GPU Placement: Using buffers - placedObjectsBuffer.count={placedObjectsBuffer.count}, minimumDistancesBuffer.count={minimumDistancesBuffer.count}");
+            //Debug.Log($"GPU Placement: _PlacedObjectCount={objectCount}, _DefaultMinDistance={defaultMinDistance}");
+            //Debug.Log($"GPU Placement: Using buffers - placedObjectsBuffer.count={placedObjectsBuffer.count}, minimumDistancesBuffer.count={minimumDistancesBuffer.count}");
             
             // Set texture samplers - use the context render textures directly
             placementComputeShader.SetTexture(generatePositionsKernelId, "_HeightmapTexture", context.HeightmapRenderTexture);

@@ -30,12 +30,12 @@ namespace GameCraftersGuild.WorldBuilding
             public bool AlignToNormal = false;
             
             [Tooltip("Random rotation around Y axis")]
-            public bool RandomYRotation = false;
+            public bool RandomYRotation = true;
             
             [Range(0f, 180f)]
             public float MinRotation = 0f;
             
-            [Range(0f, 180f)]
+            [Range(0f, 360f)]
             public float MaxRotation = 360f;
             
             [Tooltip("Minimum distance between this object and other spawned objects")]
@@ -112,7 +112,7 @@ namespace GameCraftersGuild.WorldBuilding
             }
         }
         
-        [Header("Game Objects")]
+        //[Header("Game Objects")]
         [Tooltip("List of game objects to spawn")]
         public GameObjectSettingsContainer GameObjectsContainer = new GameObjectSettingsContainer();
         
@@ -148,9 +148,9 @@ namespace GameCraftersGuild.WorldBuilding
         [Range(0f, 10f)]
         public float DefaultMinDistance = 2.0f;
         
-        [Header("GPU Placement")]
+        /*[Header("GPU Placement")]
         [Tooltip("Use GPU-based placement for better performance")]
-        public bool UseGPUPlacement = true;
+        public bool UseGPUPlacement = true;*/
         
         [Tooltip("Compute shader for GPU-based placement")]
         public ComputeShader PlacementComputeShader;
@@ -213,7 +213,7 @@ namespace GameCraftersGuild.WorldBuilding
             }
             
             // Initialize GPU placement if needed
-            //if (UseGPUPlacement && PlacementComputeShader != null && m_GPUPlacement == null)
+            if (PlacementComputeShader != null && m_GPUPlacement == null)
             {
                 m_GPUPlacement = new GameObjectPlacementGPU(PlacementComputeShader);
             }
@@ -419,7 +419,7 @@ namespace GameCraftersGuild.WorldBuilding
                 return;
                 
             // Use GPU-based placement if enabled and available
-            if (UseGPUPlacement && HasPlacementShader())
+            if (HasPlacementShader())
             {                
                 SpawnGameObjectsGPU(context, worldBounds, mask);
                 return;
@@ -504,6 +504,7 @@ namespace GameCraftersGuild.WorldBuilding
             {
                 m_GPUPlacement = new GameObjectPlacementGPU(PlacementComputeShader);
             }
+            m_GPUPlacement.PlacementComputeShader = PlacementComputeShader;
             
             // Generate placements on GPU
             List<GameObjectPlacementInfo> placements = m_GPUPlacement.GenerateObjectPlacements(
@@ -642,7 +643,6 @@ namespace GameCraftersGuild.WorldBuilding
             for (int i = 0; i < numObjects; i++)
             {
                 // Try several times to find a valid position
-                bool positionFound = false;
                 const int maxAttempts = 10;
                 
                 for (int attempt = 0; attempt < maxAttempts; attempt++)
@@ -793,15 +793,7 @@ namespace GameCraftersGuild.WorldBuilding
                         // Add the object with its minimum distance
                         m_CollisionConstraint.AddObject(position, objectSettings.MinimumDistance);
                     }
-                    
-                    positionFound = true;
                     break;
-                }
-                
-                // If we can't find a valid position after several attempts, skip this object
-                if (!positionFound)
-                {
-                    continue;
                 }
             }
         }

@@ -98,6 +98,11 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                 var boxContainer = new Box();
                 boxContainer.style.marginTop = 5;
                 boxContainer.style.marginBottom = 5;
+                boxContainer.style.borderBottomColor = boxContainer.style.borderTopColor =
+                    boxContainer.style.borderLeftColor = boxContainer.style.borderRightColor = Color.black;
+                boxContainer.style.borderBottomWidth = boxContainer.style.borderTopWidth =
+                    boxContainer.style.borderLeftWidth = boxContainer.style.borderRightWidth = 1.0f;
+                boxContainer.style.paddingBottom = boxContainer.style.paddingTop = boxContainer.style.paddingLeft = boxContainer.style.paddingRight = 4.0f;
                 
                 // Header with constraint type and remove button
                 var header = new VisualElement();
