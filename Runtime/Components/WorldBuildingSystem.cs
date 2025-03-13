@@ -27,6 +27,10 @@ namespace GameCraftersGuild.WorldBuilding
         private HashSet<TerrainLayer> m_TerrainLayersHashset = new HashSet<TerrainLayer>();
         // Pre-allocated list for relevant world builders to avoid GC allocations
         private List<IWorldBuilder> m_RelevantWorldBuilders = new List<IWorldBuilder>();
+        // Collection to store dirty world builders and their bounds
+        private List<IWorldBuilder> m_DirtyWorldBuilders = new List<IWorldBuilder>();
+        // Dictionary to track previous bounds of builders
+        private Dictionary<IWorldBuilder, Bounds> m_PreviousBounds = new Dictionary<IWorldBuilder, Bounds>();
 
         void CreateDefaultTerrain()
         {
@@ -180,6 +184,12 @@ namespace GameCraftersGuild.WorldBuilding
                         builder.GenerateMask();
                         builder.IsDirty = true;
                         modifiedBuilder = builder;
+                        
+                        // Add to dirty builders collection
+                        if (!m_DirtyWorldBuilders.Contains(builder))
+                        {
+                            m_DirtyWorldBuilders.Add(builder);
+                        }
                         break;
                     }
                 }
@@ -191,6 +201,7 @@ namespace GameCraftersGuild.WorldBuilding
                 return;
             }
 
+            m_IsDirty = true;
             Generate();
         }
 
@@ -204,10 +215,17 @@ namespace GameCraftersGuild.WorldBuilding
                     modifiedBuilder = builder;
                     builder.GenerateMask();
                     builder.IsDirty = true;
+                    
+                    // Add to dirty builders collection
+                    if (!m_DirtyWorldBuilders.Contains(builder))
+                    {
+                        m_DirtyWorldBuilders.Add(builder);
+                    }
                     break;
                 }
             }
 
+            m_IsDirty = true;
             Generate();
         }
 
@@ -221,6 +239,12 @@ namespace GameCraftersGuild.WorldBuilding
                     builder.GenerateMask();
                     builder.IsDirty = true;
                     modifiedBuilder = builder;
+                    
+                    // Add to dirty builders collection
+                    if (!m_DirtyWorldBuilders.Contains(builder))
+                    {
+                        m_DirtyWorldBuilders.Add(builder);
+                    }
                     break;
                 }
             }
@@ -231,6 +255,7 @@ namespace GameCraftersGuild.WorldBuilding
                 return;
             }
 
+            m_IsDirty = true;
             Generate();
         }
 
@@ -251,6 +276,10 @@ namespace GameCraftersGuild.WorldBuilding
 
         private void Update()
         {
+            // Clear the list of dirty world builders
+            m_DirtyWorldBuilders.Clear();
+            
+            // Check for dirty builders and collect them
             for (int i = m_WorldBuilders.Count - 1; i >= 0; i--)
             {
                 var builder = m_WorldBuilders[i];
@@ -261,11 +290,13 @@ namespace GameCraftersGuild.WorldBuilding
                 }
                 else if (builder.IsDirty)
                 {
+                    // This builder is dirty, add it to our collection
+                    m_DirtyWorldBuilders.Add(builder);
                     m_IsDirty = true;
                 }
             }
 
-            if (m_IsDirty)
+            if (m_IsDirty && m_DirtyWorldBuilders.Count > 0)
             {
                 Generate();
             }
@@ -297,6 +328,12 @@ namespace GameCraftersGuild.WorldBuilding
             if (worldBuilder.IsDirty)
             {
                 worldBuilder.GenerateMask();
+                
+                // Add to dirty builders collection
+                if (!m_DirtyWorldBuilders.Contains(worldBuilder))
+                {
+                    m_DirtyWorldBuilders.Add(worldBuilder);
+                }
             }
 
             m_IsDirty = true;
@@ -306,6 +343,14 @@ namespace GameCraftersGuild.WorldBuilding
         {
             if (!m_WorldBuilders.Contains(worldBuilder))
                 return;
+            
+            // Add to dirty builders collection to ensure terrains are updated
+            // We'll use the previous bounds of this builder from the last Generate call
+            // to clean up terrains that were affected by it
+            if (!m_DirtyWorldBuilders.Contains(worldBuilder))
+            {
+                m_DirtyWorldBuilders.Add(worldBuilder);
+            }
 
             m_WorldBuilders.Remove(worldBuilder);
             m_IsDirty = true;
@@ -326,10 +371,17 @@ namespace GameCraftersGuild.WorldBuilding
                 return;
             }
 
+            // If there are no dirty builders, nothing to do
+            if (m_DirtyWorldBuilders.Count == 0)
+            {
+                m_IsDirty = false;
+                return;
+            }
+
             // Cleanup disabled modifiers before regenerating
             CleanupDisabledModifiers();
 
-            // Sort builders by priority.
+            // Sort builders by priority if needed
             m_WorldBuilders.Sort((worldBuilder1, worldBuilder2) =>
                 worldBuilder1.Priority.CompareTo(worldBuilder2.Priority));
 
@@ -344,14 +396,24 @@ namespace GameCraftersGuild.WorldBuilding
             CreateFullScreenQuad();
 
             Terrain.GetActiveTerrains(m_ActiveTerrains);
+            
+            #if UNITY_EDITOR
+            int totalTerrains = m_ActiveTerrains.Count;
+            int updatedTerrains = 0;
+            #endif
+            
+            // Process each terrain
             foreach (var terrain in m_ActiveTerrains)
             {
                 TerrainData terrainData = terrain.terrainData;
-                if (terrain.drawInstanced == false)
+                
+                // Skip terrains with no terrain data
+                if (terrainData == null)
                 {
-                    terrain.drawInstanced = true;
+                    Debug.LogWarning($"Terrain {terrain.name} has no terrain data, skipping");
+                    continue;
                 }
-
+                
                 // Calculate terrain bounds
                 Vector3 terrainPosition = terrain.transform.position;
                 Vector3 terrainSize = terrainData.size;
@@ -359,6 +421,46 @@ namespace GameCraftersGuild.WorldBuilding
                     terrainPosition + new Vector3(terrainSize.x * 0.5f, terrainSize.y * 0.5f, terrainSize.z * 0.5f), 
                     terrainSize
                 );
+                
+                // Check if this terrain intersects with any dirty builder's current or previous bounds
+                bool shouldUpdate = false;
+                foreach (var dirtyBuilder in m_DirtyWorldBuilders)
+                {
+                    // If the builder is still in the world builders list, check its current bounds
+                    if (m_WorldBuilders.Contains(dirtyBuilder))
+                    {
+                        Bounds currentBounds = dirtyBuilder.WorldBounds;
+                        
+                        // Check if terrain intersects with current bounds
+                        if (terrainBounds.Intersects(currentBounds))
+                        {
+                            shouldUpdate = true;
+                            break;
+                        }
+                    }
+                    
+                    // Check if terrain intersects with previous bounds (if available)
+                    // This handles both moved and removed builders
+                    if (m_PreviousBounds.TryGetValue(dirtyBuilder, out Bounds previousBounds))
+                    {
+                        if (terrainBounds.Intersects(previousBounds))
+                        {
+                            shouldUpdate = true;
+                            break;
+                        }
+                    }
+                }
+                
+                // Skip this terrain if it doesn't need updating
+                if (!shouldUpdate)
+                {
+                    continue;
+                }
+                
+                if (terrain.drawInstanced == false)
+                {
+                    terrain.drawInstanced = true;
+                }
 
                 // Process terrain layers only from relevant world builders
                 GenerateTerrainLayers(terrainData, terrainBounds);
@@ -391,19 +493,60 @@ namespace GameCraftersGuild.WorldBuilding
 
                 m_WorldBuildingContext.Release();
                 m_TerrainsToUpdate.Enqueue(terrain);
+
+                #if UNITY_EDITOR
+                updatedTerrains++;
+                #endif
             }
+
+            // First, keep track of previous bounds for any removed builders that were dirty
+            // (so we can update terrains they affected)
+            Dictionary<IWorldBuilder, Bounds> tempBounds = new Dictionary<IWorldBuilder, Bounds>();
+            foreach (var dirtyBuilder in m_DirtyWorldBuilders)
+            {
+                if (!m_WorldBuilders.Contains(dirtyBuilder) && m_PreviousBounds.TryGetValue(dirtyBuilder, out Bounds bounds))
+                {
+                    tempBounds[dirtyBuilder] = bounds;
+                }
+                else if (m_WorldBuilders.Contains(dirtyBuilder))
+                {
+                    // Reset the dirty flag for builders still in the world builders list
+                    dirtyBuilder.IsDirty = false;
+                }
+            }
+            
+            // Now clear and rebuild the previous bounds dictionary
+            m_PreviousBounds.Clear();
+            
+            // Add entries for all current builders
+            foreach (var builder in m_WorldBuilders)
+            {
+                m_PreviousBounds[builder] = builder.WorldBounds;
+            }
+            
+            // Re-add the removed dirty builders with their previous bounds
+            foreach (var kvp in tempBounds)
+            {
+                m_PreviousBounds[kvp.Key] = kvp.Value;
+            }
+            
+            m_DirtyWorldBuilders.Clear();
 
             m_LODUpdateDelay = 1.0f;
             m_IsGenerating = false;
+
+            #if UNITY_EDITOR
+            Debug.Log($"Updated {updatedTerrains} out of {totalTerrains} terrains");
+            #endif
         }
 
         private void GenerateTask(Bounds terrainBounds)
         {
-            Debug.Log("GenerateTask");
             // Clear and reuse the pre-allocated list to avoid GC allocations
             m_RelevantWorldBuilders.Clear();
             
             // Filter world builders that intersect with the terrain bounds
+            // Only consider builders that are still in the world builders list
             foreach (var builder in m_WorldBuilders)
             {
                 if (builder.WorldBounds.Intersects(terrainBounds))
