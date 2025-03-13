@@ -25,6 +25,8 @@ namespace GameCraftersGuild.WorldBuilding
         private Queue<Terrain> m_TerrainsToUpdate = new Queue<Terrain>();
 
         private HashSet<TerrainLayer> m_TerrainLayersHashset = new HashSet<TerrainLayer>();
+        // Pre-allocated list for relevant world builders to avoid GC allocations
+        private List<IWorldBuilder> m_RelevantWorldBuilders = new List<IWorldBuilder>();
 
         void CreateDefaultTerrain()
         {
@@ -344,21 +346,31 @@ namespace GameCraftersGuild.WorldBuilding
             Terrain.GetActiveTerrains(m_ActiveTerrains);
             foreach (var terrain in m_ActiveTerrains)
             {
-
                 TerrainData terrainData = terrain.terrainData;
                 if (terrain.drawInstanced == false)
                 {
                     terrain.drawInstanced = true;
                 }
 
-                GenerateTerrainLayers(terrainData);
+                // Calculate terrain bounds
+                Vector3 terrainPosition = terrain.transform.position;
+                Vector3 terrainSize = terrainData.size;
+                Bounds terrainBounds = new Bounds(
+                    terrainPosition + new Vector3(terrainSize.x * 0.5f, terrainSize.y * 0.5f, terrainSize.z * 0.5f), 
+                    terrainSize
+                );
+
+                // Process terrain layers only from relevant world builders
+                GenerateTerrainLayers(terrainData, terrainBounds);
+                
                 m_WorldBuildingContext = WorldBuildingContext.Create(terrain);
                 m_WorldBuildingContext.TerrainLayersIndexMap = m_TerrainLayersIndexMap;
                 m_WorldBuildingContext.m_ApplyHeightmapMaterial = m_HeightmapMaterial;
                 m_WorldBuildingContext.m_ApplySplatmapMaterial = m_SplatmapMaterial;
                 m_WorldBuildingContext.m_Quad = m_Quad;
 
-                GenerateTask();
+                // Only process world builders that intersect with this terrain
+                GenerateTask(terrainBounds);
 
                 RenderTexture.active = m_WorldBuildingContext.HeightmapRenderTexture;
                 RectInt heightmapRect = new RectInt(0, 0, m_WorldBuildingContext.HeightmapRenderTexture.width,
@@ -385,16 +397,31 @@ namespace GameCraftersGuild.WorldBuilding
             m_IsGenerating = false;
         }
 
-        private void GenerateTask()
+        private void GenerateTask(Bounds terrainBounds)
         {
+            Debug.Log("GenerateTask");
+            // Clear and reuse the pre-allocated list to avoid GC allocations
+            m_RelevantWorldBuilders.Clear();
+            
+            // Filter world builders that intersect with the terrain bounds
             foreach (var builder in m_WorldBuilders)
             {
-                builder.IsDirty = false;
+                if (builder.WorldBounds.Intersects(terrainBounds))
+                {
+                    builder.IsDirty = false;
+                    m_RelevantWorldBuilders.Add(builder);
+                }
+            }
+            
+            // Only process relevant world builders for heights
+            foreach (var builder in m_RelevantWorldBuilders)
+            {
                 m_WorldBuildingContext.CurrentTransform = builder.TransformMatrix;
                 builder.ApplyHeights(m_WorldBuildingContext);
             }
 
-            foreach (var builder in m_WorldBuilders)
+            // Only process relevant world builders for splatmap
+            foreach (var builder in m_RelevantWorldBuilders)
             {
                 m_WorldBuildingContext.CurrentTransform = builder.TransformMatrix;
                 builder.ApplySplatmap(m_WorldBuildingContext);
@@ -406,8 +433,8 @@ namespace GameCraftersGuild.WorldBuilding
             // Clear existing tree instances 
             terrainData.treeInstances = new TreeInstance[0];
             
-            // Register all vegetation prototypes
-            foreach (var builder in m_WorldBuilders)
+            // Register all vegetation prototypes from relevant builders
+            foreach (var builder in m_RelevantWorldBuilders)
             {
                 if (builder is ITerrainVegetationProvider vegetationProvider)
                 {
@@ -422,8 +449,8 @@ namespace GameCraftersGuild.WorldBuilding
                 }
             }
             
-            // Now have all modifiers generate vegetation data into the context
-            foreach (var builder in m_WorldBuilders)
+            // Now have relevant modifiers generate vegetation data into the context
+            foreach (var builder in m_RelevantWorldBuilders)
             {
                 m_WorldBuildingContext.CurrentTransform = builder.TransformMatrix;
                 builder.GenerateVegetation(m_WorldBuildingContext);
@@ -432,7 +459,8 @@ namespace GameCraftersGuild.WorldBuilding
             // Apply all vegetation at once
             m_WorldBuildingContext.ApplyVegetationToTerrain();
 
-            foreach (var builder in m_WorldBuilders)
+            // Only spawn game objects from relevant builders
+            foreach (var builder in m_RelevantWorldBuilders)
             {
                 m_WorldBuildingContext.CurrentTransform = builder.TransformMatrix;
                 builder.SpawnGameObjects(m_WorldBuildingContext);
@@ -443,6 +471,78 @@ namespace GameCraftersGuild.WorldBuilding
         {
             foreach (var builder in m_WorldBuilders)
             {
+                foreach (var splatModifier in builder.TerrainSplatModifiers)
+                {
+                    int numTerrainLayers = splatModifier.GetNumTerrainLayers();
+                    for (int i = 0; i < numTerrainLayers; i++)
+                    {
+                        TerrainLayer layer = splatModifier.GetTerrainLayer(i);
+                        m_TerrainLayersHashset.Add(layer);
+                    }
+                }
+            }
+
+            var terrainLayers = terrainData.terrainLayers;
+            if (terrainLayers.Length != m_TerrainLayersHashset.Count)
+            {
+                terrainLayers = new TerrainLayer[m_TerrainLayersHashset.Count];
+                int index = 0;
+                foreach (var terrainLayer in m_TerrainLayersHashset)
+                {
+                    terrainLayers[index++] = terrainLayer;
+                }
+            }
+            else
+            {
+                bool changed = false;
+                for (int i = 0; i < terrainLayers.Length; ++i)
+                {
+                    if (m_TerrainLayersHashset.Contains(terrainLayers[i]))
+                    {
+                        m_TerrainLayersHashset.Remove(terrainLayers[i]);
+                        continue;
+                    }
+
+                    terrainLayers[i] = null;
+                    changed = true;
+                }
+
+                if (changed)
+                {
+                    for (int i = 0; i < terrainLayers.Length; ++i)
+                    {
+                        if (terrainLayers[i] == null)
+                        {
+                            var enumerator = m_TerrainLayersHashset.GetEnumerator();
+                            enumerator.MoveNext();
+                            terrainLayers[i] = enumerator.Current;
+                            m_TerrainLayersHashset.Remove(enumerator.Current);
+                        }
+                    }
+                }
+            }
+
+            m_TerrainLayersHashset.Clear();
+            terrainData.terrainLayers = terrainLayers;
+
+            m_TerrainLayersIndexMap.Clear();
+            for (int i = 0; i < terrainLayers.Length; ++i)
+            {
+                m_TerrainLayersIndexMap.Add(terrainLayers[i], i);
+            }
+        }
+
+        private void GenerateTerrainLayers(TerrainData terrainData, Bounds terrainBounds)
+        {
+            m_TerrainLayersHashset.Clear();
+            
+            // Only process terrain layers from builders that intersect with this terrain
+            foreach (var builder in m_WorldBuilders)
+            {
+                // Skip builders that don't intersect with the terrain bounds
+                if (!builder.WorldBounds.Intersects(terrainBounds))
+                    continue;
+                    
                 foreach (var splatModifier in builder.TerrainSplatModifiers)
                 {
                     int numTerrainLayers = splatModifier.GetNumTerrainLayers();
