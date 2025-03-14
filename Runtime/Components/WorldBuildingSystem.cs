@@ -25,13 +25,14 @@ namespace GameCraftersGuild.WorldBuilding
         private Queue<Terrain> m_TerrainsToUpdate = new Queue<Terrain>();
 
         private HashSet<TerrainLayer> m_TerrainLayersHashset = new HashSet<TerrainLayer>();
-        // Pre-allocated list for relevant world builders to avoid GC allocations
+        // Pre-allocated list for relevant world builders to avoid GC allocations.
         private List<IWorldBuilder> m_RelevantWorldBuilders = new List<IWorldBuilder>();
-        // Collection to store dirty world builders and their bounds
-        private List<IWorldBuilder> m_DirtyWorldBuilders = new List<IWorldBuilder>();
+        // Collection to store dirty world builders.
+        private HashSet<IWorldBuilder> m_DirtyBuilders = new HashSet<IWorldBuilder>();
         // Dictionary to track previous bounds of builders
         private Dictionary<IWorldBuilder, Bounds> m_PreviousBounds = new Dictionary<IWorldBuilder, Bounds>();
-
+        // Collection to store builders that modified heights or splatmaps in the current terrain.
+        private HashSet<IWorldBuilder> m_ModifiedRegionBuilders = new HashSet<IWorldBuilder>();
         void CreateDefaultTerrain()
         {
             TerrainData newTerrainData = new TerrainData();
@@ -185,11 +186,8 @@ namespace GameCraftersGuild.WorldBuilding
                         builder.IsDirty = true;
                         modifiedBuilder = builder;
                         
-                        // Add to dirty builders collection
-                        if (!m_DirtyWorldBuilders.Contains(builder))
-                        {
-                            m_DirtyWorldBuilders.Add(builder);
-                        }
+                        // Add to dirty builders collection (HashSet automatically prevents duplicates)
+                        m_DirtyBuilders.Add(builder);
                         break;
                     }
                 }
@@ -216,11 +214,8 @@ namespace GameCraftersGuild.WorldBuilding
                     builder.GenerateMask();
                     builder.IsDirty = true;
                     
-                    // Add to dirty builders collection
-                    if (!m_DirtyWorldBuilders.Contains(builder))
-                    {
-                        m_DirtyWorldBuilders.Add(builder);
-                    }
+                    // Add to dirty builders collection (HashSet automatically prevents duplicates)
+                    m_DirtyBuilders.Add(builder);
                     break;
                 }
             }
@@ -240,11 +235,8 @@ namespace GameCraftersGuild.WorldBuilding
                     builder.IsDirty = true;
                     modifiedBuilder = builder;
                     
-                    // Add to dirty builders collection
-                    if (!m_DirtyWorldBuilders.Contains(builder))
-                    {
-                        m_DirtyWorldBuilders.Add(builder);
-                    }
+                    // Add to dirty builders collection (HashSet automatically prevents duplicates)
+                    m_DirtyBuilders.Add(builder);
                     break;
                 }
             }
@@ -276,8 +268,8 @@ namespace GameCraftersGuild.WorldBuilding
 
         private void Update()
         {
-            // Clear the list of dirty world builders
-            m_DirtyWorldBuilders.Clear();
+            // Clear the set of dirty world builders
+            m_DirtyBuilders.Clear();
             
             // Check for dirty builders and collect them
             for (int i = m_WorldBuilders.Count - 1; i >= 0; i--)
@@ -291,12 +283,12 @@ namespace GameCraftersGuild.WorldBuilding
                 else if (builder.IsDirty)
                 {
                     // This builder is dirty, add it to our collection
-                    m_DirtyWorldBuilders.Add(builder);
+                    m_DirtyBuilders.Add(builder);
                     m_IsDirty = true;
                 }
             }
 
-            if (m_IsDirty && m_DirtyWorldBuilders.Count > 0)
+            if (m_IsDirty && m_DirtyBuilders.Count > 0)
             {
                 Generate();
             }
@@ -330,10 +322,7 @@ namespace GameCraftersGuild.WorldBuilding
                 worldBuilder.GenerateMask();
                 
                 // Add to dirty builders collection
-                if (!m_DirtyWorldBuilders.Contains(worldBuilder))
-                {
-                    m_DirtyWorldBuilders.Add(worldBuilder);
-                }
+                m_DirtyBuilders.Add(worldBuilder);
             }
 
             m_IsDirty = true;
@@ -347,10 +336,7 @@ namespace GameCraftersGuild.WorldBuilding
             // Add to dirty builders collection to ensure terrains are updated
             // We'll use the previous bounds of this builder from the last Generate call
             // to clean up terrains that were affected by it
-            if (!m_DirtyWorldBuilders.Contains(worldBuilder))
-            {
-                m_DirtyWorldBuilders.Add(worldBuilder);
-            }
+            m_DirtyBuilders.Add(worldBuilder);
 
             m_WorldBuilders.Remove(worldBuilder);
             m_IsDirty = true;
@@ -372,7 +358,7 @@ namespace GameCraftersGuild.WorldBuilding
             }
 
             // If there are no dirty builders, nothing to do
-            if (m_DirtyWorldBuilders.Count == 0)
+            if (m_DirtyBuilders.Count == 0)
             {
                 m_IsDirty = false;
                 return;
@@ -424,7 +410,7 @@ namespace GameCraftersGuild.WorldBuilding
                 
                 // Check if this terrain intersects with any dirty builder's current or previous bounds
                 bool shouldUpdate = false;
-                foreach (var dirtyBuilder in m_DirtyWorldBuilders)
+                foreach (var dirtyBuilder in m_DirtyBuilders)
                 {
                     // If the builder is still in the world builders list, check its current bounds
                     if (m_WorldBuilders.Contains(dirtyBuilder))
@@ -483,8 +469,13 @@ namespace GameCraftersGuild.WorldBuilding
                 RectInt splatmapRect = new RectInt(0, 0, terrainData.alphamapWidth,
                     terrainData.alphamapHeight);
                 int index = 0;
+                int alphamapTextureCount = terrainData.alphamapTextureCount;
                 foreach (var splatRenderTexture in m_WorldBuildingContext.SplatRenderTextures)
                 {
+                    // Make sure we don't exceed the number of alphamap textures in the terrain
+                    if (index >= alphamapTextureCount)
+                        break;
+                        
                     RenderTexture.active = splatRenderTexture;
                     terrainData.CopyActiveRenderTextureToTexture(TerrainData.AlphamapTextureName, index, splatmapRect,
                         splatmapRect.position, false);
@@ -502,16 +493,11 @@ namespace GameCraftersGuild.WorldBuilding
             // First, keep track of previous bounds for any removed builders that were dirty
             // (so we can update terrains they affected)
             Dictionary<IWorldBuilder, Bounds> tempBounds = new Dictionary<IWorldBuilder, Bounds>();
-            foreach (var dirtyBuilder in m_DirtyWorldBuilders)
+            foreach (var dirtyBuilder in m_DirtyBuilders)
             {
                 if (!m_WorldBuilders.Contains(dirtyBuilder) && m_PreviousBounds.TryGetValue(dirtyBuilder, out Bounds bounds))
                 {
                     tempBounds[dirtyBuilder] = bounds;
-                }
-                else if (m_WorldBuilders.Contains(dirtyBuilder))
-                {
-                    // Reset the dirty flag for builders still in the world builders list
-                    dirtyBuilder.IsDirty = false;
                 }
             }
             
@@ -522,6 +508,12 @@ namespace GameCraftersGuild.WorldBuilding
             foreach (var builder in m_WorldBuilders)
             {
                 m_PreviousBounds[builder] = builder.WorldBounds;
+                
+                // Reset the dirty flag for all builders after all terrains have been processed
+                if (m_DirtyBuilders.Contains(builder))
+                {
+                    builder.IsDirty = false;
+                }
             }
             
             // Re-add the removed dirty builders with their previous bounds
@@ -530,7 +522,7 @@ namespace GameCraftersGuild.WorldBuilding
                 m_PreviousBounds[kvp.Key] = kvp.Value;
             }
             
-            m_DirtyWorldBuilders.Clear();
+            m_DirtyBuilders.Clear();
 
             m_LODUpdateDelay = 1.0f;
             m_IsGenerating = false;
@@ -544,6 +536,8 @@ namespace GameCraftersGuild.WorldBuilding
         {
             // Clear and reuse the pre-allocated list to avoid GC allocations
             m_RelevantWorldBuilders.Clear();
+            // Clear the set of builders that modified regions on this terrain
+            m_ModifiedRegionBuilders.Clear();
             
             // Filter world builders that intersect with the terrain bounds
             // Only consider builders that are still in the world builders list
@@ -551,23 +545,34 @@ namespace GameCraftersGuild.WorldBuilding
             {
                 if (builder.WorldBounds.Intersects(terrainBounds))
                 {
-                    builder.IsDirty = false;
                     m_RelevantWorldBuilders.Add(builder);
                 }
             }
             
-            // Only process relevant world builders for heights
+            // Track which builders applied height changes
             foreach (var builder in m_RelevantWorldBuilders)
             {
                 m_WorldBuildingContext.CurrentTransform = builder.TransformMatrix;
-                builder.ApplyHeights(m_WorldBuildingContext);
+                bool heightChangesApplied = builder.ApplyHeights(m_WorldBuildingContext);
+                
+                // Track builders that modified the terrain
+                if (heightChangesApplied)
+                {
+                    m_ModifiedRegionBuilders.Add(builder);
+                }
             }
 
-            // Only process relevant world builders for splatmap
+            // Track which builders applied splatmap changes
             foreach (var builder in m_RelevantWorldBuilders)
             {
                 m_WorldBuildingContext.CurrentTransform = builder.TransformMatrix;
-                builder.ApplySplatmap(m_WorldBuildingContext);
+                bool splatChangesApplied = builder.ApplySplatmap(m_WorldBuildingContext);
+                
+                // Track builders that modified the terrain
+                if (splatChangesApplied)
+                {
+                    m_ModifiedRegionBuilders.Add(builder);
+                }
             }
             
             // Register vegetation prototypes first for current terrain
@@ -602,77 +607,47 @@ namespace GameCraftersGuild.WorldBuilding
             // Apply all vegetation at once
             m_WorldBuildingContext.ApplyVegetationToTerrain();
 
-            // Only spawn game objects from relevant builders
+            // Only spawn game objects from builders that:
+            // 1. Are in areas where terrain was modified (bounds intersect with any modified builder), OR
+            // 2. Are explicitly dirty (in m_DirtyBuilders)
             foreach (var builder in m_RelevantWorldBuilders)
             {
-                m_WorldBuildingContext.CurrentTransform = builder.TransformMatrix;
-                builder.SpawnGameObjects(m_WorldBuildingContext);
-            }
-        }
-
-        private void GenerateTerrainLayers(TerrainData terrainData)
-        {
-            foreach (var builder in m_WorldBuilders)
-            {
-                foreach (var splatModifier in builder.TerrainSplatModifiers)
+                bool shouldSpawn = m_DirtyBuilders.Contains(builder);
+                
+                // If not already determined to spawn, check if it intersects with any modified regions
+                if (!shouldSpawn && m_ModifiedRegionBuilders.Count > 0)
                 {
-                    int numTerrainLayers = splatModifier.GetNumTerrainLayers();
-                    for (int i = 0; i < numTerrainLayers; i++)
+                    Bounds builderBounds = builder.WorldBounds;
+                    
+                    // Check if this builder's bounds intersect with any builder that modified the terrain
+                    foreach (var modifiedBuilder in m_ModifiedRegionBuilders)
                     {
-                        TerrainLayer layer = splatModifier.GetTerrainLayer(i);
-                        m_TerrainLayersHashset.Add(layer);
-                    }
-                }
-            }
-
-            var terrainLayers = terrainData.terrainLayers;
-            if (terrainLayers.Length != m_TerrainLayersHashset.Count)
-            {
-                terrainLayers = new TerrainLayer[m_TerrainLayersHashset.Count];
-                int index = 0;
-                foreach (var terrainLayer in m_TerrainLayersHashset)
-                {
-                    terrainLayers[index++] = terrainLayer;
-                }
-            }
-            else
-            {
-                bool changed = false;
-                for (int i = 0; i < terrainLayers.Length; ++i)
-                {
-                    if (m_TerrainLayersHashset.Contains(terrainLayers[i]))
-                    {
-                        m_TerrainLayersHashset.Remove(terrainLayers[i]);
-                        continue;
-                    }
-
-                    terrainLayers[i] = null;
-                    changed = true;
-                }
-
-                if (changed)
-                {
-                    for (int i = 0; i < terrainLayers.Length; ++i)
-                    {
-                        if (terrainLayers[i] == null)
+                        if (builderBounds.Intersects(modifiedBuilder.WorldBounds))
                         {
-                            var enumerator = m_TerrainLayersHashset.GetEnumerator();
-                            enumerator.MoveNext();
-                            terrainLayers[i] = enumerator.Current;
-                            m_TerrainLayersHashset.Remove(enumerator.Current);
+                            shouldSpawn = true;
+                            break;
                         }
                     }
                 }
+                
+                if (shouldSpawn)
+                {
+                    m_WorldBuildingContext.CurrentTransform = builder.TransformMatrix;
+                    builder.SpawnGameObjects(m_WorldBuildingContext);
+                }
             }
-
-            m_TerrainLayersHashset.Clear();
-            terrainData.terrainLayers = terrainLayers;
-
-            m_TerrainLayersIndexMap.Clear();
-            for (int i = 0; i < terrainLayers.Length; ++i)
+            
+            // After processing all world builders for this terrain, reset their dirty flags
+            foreach (var builder in m_RelevantWorldBuilders)
             {
-                m_TerrainLayersIndexMap.Add(terrainLayers[i], i);
+                if (m_DirtyBuilders.Contains(builder))
+                {
+                    // Don't clear the dirty flag yet, wait until all terrains are processed
+                    builder.IsDirty = false;
+                }
             }
+            
+            // Note: Terrain layers processing is now handled by GenerateTerrainLayers
         }
 
         private void GenerateTerrainLayers(TerrainData terrainData, Bounds terrainBounds)

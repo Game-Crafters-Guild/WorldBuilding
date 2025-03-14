@@ -140,26 +140,38 @@ namespace GameCraftersGuild.WorldBuilding
             m_Shape.GenerateMask();
         }
 
-        public virtual void ApplyHeights(WorldBuildingContext context)
+        public virtual bool ApplyHeights(WorldBuildingContext context)
         {
             context.MaskFalloff = new MaskFalloff();
             context.MaintainMaskAspectRatio = m_Shape.MaintainMaskAspectRatio;
+            
+            bool changesApplied = false;
             foreach (var heightModifier in m_Modifiers.TerrainHeightModifiers)
             {
                 if (!heightModifier.Enabled) continue;
                 heightModifier.ApplyHeightmap(context, this.WorldBounds, MaskTexture);
+                // Assume that if an enabled height modifier exists, changes were applied
+                changesApplied = true;
             }
+            
+            return changesApplied;
         }
 
-        public virtual void ApplySplatmap(WorldBuildingContext context)
+        public virtual bool ApplySplatmap(WorldBuildingContext context)
         {
             context.MaskFalloff = new MaskFalloff();
             context.MaintainMaskAspectRatio = m_Shape.MaintainMaskAspectRatio;
+            
+            bool changesApplied = false;
             foreach (var splatModifier in m_Modifiers.TerrainSplatModifiers)
             {
                 if (!splatModifier.Enabled) continue;
                 splatModifier.ApplySplatmap(context, WorldBounds, MaskTexture);
+                // Assume that if an enabled splat modifier exists, changes were applied
+                changesApplied = true;
             }
+            
+            return changesApplied;
         }
 
         public void GenerateVegetation(WorldBuildingContext context)

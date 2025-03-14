@@ -14,8 +14,8 @@ namespace GameCraftersGuild.WorldBuilding
 
         SplineContainer SplineContainer { get; }
 
-        public void ApplyHeights(WorldBuildingContext context);
-        public void ApplySplatmap(WorldBuildingContext context);
+        public bool ApplyHeights(WorldBuildingContext context);
+        public bool ApplySplatmap(WorldBuildingContext context);
         public void GenerateVegetation(WorldBuildingContext context);
         public void SpawnGameObjects(WorldBuildingContext context);
 
