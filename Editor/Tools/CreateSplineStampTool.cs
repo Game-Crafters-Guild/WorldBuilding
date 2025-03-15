@@ -317,15 +317,6 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             {
                 stamp = splineObject.AddComponent<Stamp>();
             }
-            
-            // Create and set up a SplinePathShape
-            /*var splinePathShape = ObjectFactory.CreateInstance<SplinePathShape>();
-            splinePathShape.m_SplineContainer = splineContainer;
-            stamp.Shape = splinePathShape;
-            
-            // Add the stamp to the WorldBuildingSystem if needed
-            var worldBuildingSystem = WorldBuildingSystem.GetOrCreate();
-            worldBuildingSystem.RegisterBuilder(stamp);*/
         }
         
         private float3 CalculateCenter(List<float3> points)
