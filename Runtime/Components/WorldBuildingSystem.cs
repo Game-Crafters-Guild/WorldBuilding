@@ -268,9 +268,6 @@ namespace GameCraftersGuild.WorldBuilding
 
         private void Update()
         {
-            // Clear the set of dirty world builders
-            m_DirtyBuilders.Clear();
-            
             // Check for dirty builders and collect them
             for (int i = m_WorldBuilders.Count - 1; i >= 0; i--)
             {
@@ -317,13 +314,8 @@ namespace GameCraftersGuild.WorldBuilding
                 return;
             }
 
-            if (worldBuilder.IsDirty)
-            {
-                worldBuilder.GenerateMask();
-                
-                // Add to dirty builders collection
-                m_DirtyBuilders.Add(worldBuilder);
-            }
+            // Add to dirty builders collection
+            m_DirtyBuilders.Add(worldBuilder);
 
             m_IsDirty = true;
         }
@@ -333,20 +325,24 @@ namespace GameCraftersGuild.WorldBuilding
             if (!m_WorldBuilders.Contains(worldBuilder))
                 return;
             
-            // Add to dirty builders collection to ensure terrains are updated
-            // We'll use the previous bounds of this builder from the last Generate call
-            // to clean up terrains that were affected by it
+            // First add to dirty builders collection before removing from main list
+            // This ensures the Generate method will process terrains affected by this builder
+            // using its previous bounds stored in m_PreviousBounds
             m_DirtyBuilders.Add(worldBuilder);
-
+            
+            // Now remove from the main world builders list
             m_WorldBuilders.Remove(worldBuilder);
+            
+            // Mark system as dirty to ensure Generate gets called on next Update
             m_IsDirty = true;
+            
+            #if UNITY_EDITOR
+            //Debug.Log($"World builder {worldBuilder.GetType().Name} removed and marked for terrain update");
+            #endif
         }
 
         private WorldBuildingContext m_WorldBuildingContext;
         [SerializeField] private bool m_IsGenerating;
-
-        private const int kMaskTextureWidth = 256;
-        private const int kMaskTextureHeight = 256;
 
         public void Generate()
         {
@@ -522,13 +518,15 @@ namespace GameCraftersGuild.WorldBuilding
                 m_PreviousBounds[kvp.Key] = kvp.Value;
             }
             
+            // Now that all terrains are processed and all cleanup is done,
+            // we can safely clear the dirty builders collection
             m_DirtyBuilders.Clear();
 
             m_LODUpdateDelay = 1.0f;
             m_IsGenerating = false;
 
             #if UNITY_EDITOR
-            Debug.Log($"Updated {updatedTerrains} out of {totalTerrains} terrains");
+            //Debug.Log($"Updated {updatedTerrains} out of {totalTerrains} terrains");
             #endif
         }
 
@@ -646,8 +644,6 @@ namespace GameCraftersGuild.WorldBuilding
                     builder.IsDirty = false;
                 }
             }
-            
-            // Note: Terrain layers processing is now handled by GenerateTerrainLayers
         }
 
         private void GenerateTerrainLayers(TerrainData terrainData, Bounds terrainBounds)
