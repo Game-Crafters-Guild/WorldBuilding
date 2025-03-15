@@ -15,11 +15,26 @@ namespace GameCraftersGuild.WorldBuilding.Editor
 #endif
     public class CreateSplineStampTool : SplineTool
     {
-        private List<float3> m_DrawnPoints = new List<float3>();
+        // Reusable collections to reduce allocations
+        private List<float3> m_DrawnPoints = new List<float3>(128); // Pre-allocate capacity
+        private List<float3> m_SimplifiedPoints = new List<float3>(64);
+        private List<float3> m_LocalPositions = new List<float3>(64);
+        private Stack<SimplifyStackEntry> m_SimplifyStack = new Stack<SimplifyStackEntry>(16);
+        
+        // Struct to replace recursion with stack-based iteration
+        private struct SimplifyStackEntry
+        {
+            public int StartIdx;
+            public int EndIdx;
+        }
+        
         private bool m_IsDrawing = false;
         private readonly float m_MinimumDistanceBetweenPoints = 0.25f;
         private readonly float m_BaseClosingThreshold = 1.0f; // Base threshold for close proximity
         private GUIContent m_IconContent;
+        
+        // Cached ray and hit info to reduce allocation
+        private RaycastHit m_RaycastHitInfo;
         
         public override GUIContent toolbarIcon => m_IconContent;
         
@@ -31,6 +46,15 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                 text = "Create Spline Stamp",
                 tooltip = "Draw a shape to create a new spline stamp"
             };
+        }
+        
+        private void OnDisable()
+        {
+            // Clear collections when disabled to free memory
+            m_DrawnPoints.Clear();
+            m_SimplifiedPoints.Clear();
+            m_LocalPositions.Clear();
+            m_SimplifyStack.Clear();
         }
         
         public override void OnToolGUI(EditorWindow window)
@@ -92,20 +116,20 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             m_IsDrawing = true;
             
             Ray ray = HandleUtility.GUIPointToWorldRay(evt.mousePosition);
-            if (Physics.Raycast(ray, out RaycastHit hit))
+            if (Physics.Raycast(ray, out m_RaycastHitInfo))
             {
-                m_DrawnPoints.Add(hit.point);
+                m_DrawnPoints.Add(m_RaycastHitInfo.point);
             }
             else
             {
                 // If we didn't hit anything, use a point on the grid
                 float distanceToGrid = 10f; // Default distance if no grid
-                if (Physics.Raycast(ray, out RaycastHit gridHit, Mathf.Infinity, LayerMask.GetMask("Grid")))
+                if (Physics.Raycast(ray, out m_RaycastHitInfo, Mathf.Infinity, LayerMask.GetMask("Grid")))
                 {
-                    distanceToGrid = gridHit.distance;
+                    distanceToGrid = m_RaycastHitInfo.distance;
                 }
                 
-                Vector3 pointOnGrid = ray.origin + ray.direction * distanceToGrid;
+                float3 pointOnGrid = ray.origin + ray.direction * distanceToGrid;
                 m_DrawnPoints.Add(pointOnGrid);
             }
         }
@@ -116,26 +140,26 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                 return;
                 
             Ray ray = HandleUtility.GUIPointToWorldRay(evt.mousePosition);
-            Vector3 newPoint;
+            float3 newPoint;
             
-            if (Physics.Raycast(ray, out RaycastHit hit))
+            if (Physics.Raycast(ray, out m_RaycastHitInfo))
             {
-                newPoint = hit.point;
+                newPoint = m_RaycastHitInfo.point;
             }
             else
             {
                 // If we didn't hit anything, use a point on the grid
                 float distanceToGrid = 10f; // Default distance if no grid
-                if (Physics.Raycast(ray, out RaycastHit gridHit, Mathf.Infinity, LayerMask.GetMask("Grid")))
+                if (Physics.Raycast(ray, out m_RaycastHitInfo, Mathf.Infinity, LayerMask.GetMask("Grid")))
                 {
-                    distanceToGrid = gridHit.distance;
+                    distanceToGrid = m_RaycastHitInfo.distance;
                 }
                 
                 newPoint = ray.origin + ray.direction * distanceToGrid;
             }
             
             // Only add point if it's far enough from the last one
-            if (Vector3.Distance(newPoint, m_DrawnPoints[m_DrawnPoints.Count - 1]) > m_MinimumDistanceBetweenPoints)
+            if (math.distance(newPoint, m_DrawnPoints[m_DrawnPoints.Count - 1]) > m_MinimumDistanceBetweenPoints)
             {
                 m_DrawnPoints.Add(newPoint);
             }
@@ -154,7 +178,7 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             float closingThreshold = CalculateClosingThreshold();
             
             // Check if the shape is closed (last point is close to first point)
-            bool shouldClosePath = Vector3.Distance(m_DrawnPoints[0], m_DrawnPoints[m_DrawnPoints.Count - 1]) < closingThreshold;
+            bool shouldClosePath = math.distance(m_DrawnPoints[0], m_DrawnPoints[m_DrawnPoints.Count - 1]) < closingThreshold;
             
             if (shouldClosePath)
             {
@@ -181,10 +205,10 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                 return m_BaseClosingThreshold;
                 
             // More robust approach that properly scales with distance
-            Vector3 pointPosition = (Vector3)m_DrawnPoints[0];
+            float3 pointPosition = m_DrawnPoints[0];
             
             // Calculate distance from camera to point
-            float distanceToCamera = Vector3.Distance(camera.transform.position, pointPosition);
+            float distanceToCamera = math.distance(camera.transform.position, pointPosition);
             
             // Keep in mind that ScreenToWorldPoint in Unity uses the distance from the camera to determine scale
             // We need to use the camera's projection parameters to calculate screen space to world space conversion
@@ -194,7 +218,7 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             float worldUnitsPerPixelAtDistance = 2.0f * distanceToCamera * Mathf.Tan(fovRadians * 0.5f) / camera.pixelHeight;
             
             // Desired size in pixels (how close cursor needs to be to first point to activate closing)
-            float desiredScreenSizePixels = 10.0f;
+            const float desiredScreenSizePixels = 10.0f;
             
             // Convert to world units
             float worldSpaceThreshold = worldUnitsPerPixelAtDistance * desiredScreenSizePixels;
@@ -222,15 +246,18 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             Handles.color = Color.green;
             
             // Draw lines between points
+            Vector3 p1, p2;
             for (int i = 0; i < m_DrawnPoints.Count - 1; i++)
             {
-                Handles.DrawLine(m_DrawnPoints[i], m_DrawnPoints[i + 1], 5.0f);
+                p1 = m_DrawnPoints[i];
+                p2 = m_DrawnPoints[i + 1];
+                Handles.DrawLine(p1, p2, 5.0f);
             }
             
             // Draw points
-            foreach (Vector3 point in m_DrawnPoints)
+            Handles.color = Color.white;
+            foreach (var point in m_DrawnPoints)
             {
-                Handles.color = Color.white;
                 Handles.SphereHandleCap(0, point, Quaternion.identity, 0.2f, EventType.Repaint);
             }
             
@@ -243,35 +270,35 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                 Handles.color = new Color(1, 1, 0, 0.5f);
                 
                 Ray ray = HandleUtility.GUIPointToWorldRay(Event.current.mousePosition);
-                if (Physics.Raycast(ray, out RaycastHit hit))
+                float3 lastPoint = m_DrawnPoints[m_DrawnPoints.Count - 1];
+                float3 cursorPoint;
+                
+                if (Physics.Raycast(ray, out m_RaycastHitInfo))
                 {
-                    Handles.DrawDottedLine(m_DrawnPoints[m_DrawnPoints.Count - 1], hit.point, 5f);
+                    cursorPoint = m_RaycastHitInfo.point;
                 }
                 else
                 {
                     float distanceToGrid = 10f;
-                    if (Physics.Raycast(ray, out RaycastHit gridHit, Mathf.Infinity, LayerMask.GetMask("Grid")))
+                    if (Physics.Raycast(ray, out m_RaycastHitInfo, Mathf.Infinity, LayerMask.GetMask("Grid")))
                     {
-                        distanceToGrid = gridHit.distance;
+                        distanceToGrid = m_RaycastHitInfo.distance;
                     }
                     
-                    Vector3 pointOnGrid = ray.origin + ray.direction * distanceToGrid;
-                    Handles.DrawDottedLine(m_DrawnPoints[m_DrawnPoints.Count - 1], pointOnGrid, 5f);
+                    cursorPoint = ray.origin + ray.direction * distanceToGrid;
                 }
+                
+                Handles.DrawDottedLine(lastPoint, cursorPoint, 5f);
                 
                 // Show closing indicator if close to the first point
                 if (m_DrawnPoints.Count > 2)
                 {
-                    Vector3 mousePosition = HandleUtility.GUIPointToWorldRay(Event.current.mousePosition).GetPoint(10f);
-                    if (Physics.Raycast(ray, out RaycastHit closeHit))
-                    {
-                        mousePosition = closeHit.point;
-                    }
+                    float3 firstPoint = m_DrawnPoints[0];
                     
-                    if (Vector3.Distance(mousePosition, m_DrawnPoints[0]) < closingThreshold)
+                    if (math.distance(cursorPoint, firstPoint) < closingThreshold)
                     {
                         Handles.color = Color.yellow;
-                        Handles.DrawWireDisc(m_DrawnPoints[0], Vector3.up, closingThreshold);
+                        Handles.DrawWireDisc(firstPoint, Vector3.up, closingThreshold);
                     }
                 }
             }
@@ -284,7 +311,7 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             SplineContainer splineContainer = splineObject.AddComponent<SplineContainer>();
             
             // Create points for the spline
-            List<float3> positions = ProcessDrawnPointsForSpline();
+            ProcessDrawnPointsForSpline(out var positions);
             
             // Position the object at the center of the drawn points
             float3 center = CalculateCenter(positions);
@@ -297,14 +324,14 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             float errorThreshold = CalculateErrorThreshold(positions);
             
             // Adjust positions relative to the object's position
-            List<float3> localPositions = new List<float3>(positions.Count);
-            foreach (var pos in positions)
+            m_LocalPositions.Clear();
+            for (int i = 0; i < positions.Count; i++)
             {
-                localPositions.Add(pos - center);
+                m_LocalPositions.Add(positions[i] - center);
             }
             
             // Use SplineUtility.FitSplineToPoints to create a spline from the points
-            SplineUtility.FitSplineToPoints(localPositions, errorThreshold, isSplineClosed, out spline);
+            SplineUtility.FitSplineToPoints(m_LocalPositions, errorThreshold, isSplineClosed, out spline);
             
             // Add the spline to the container
             splineContainer.Spline = spline;
@@ -325,12 +352,15 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                 return float3.zero;
                 
             float3 sum = float3.zero;
-            foreach (var point in points)
+            
+            // Use direct sum with preallocated points count to avoid division per point
+            int pointCount = points.Count;
+            for (int i = 0; i < pointCount; i++)
             {
-                sum += point;
+                sum += points[i];
             }
             
-            return sum / points.Count;
+            return sum / pointCount;
         }
         
         private float CalculateErrorThreshold(List<float3> points)
@@ -342,23 +372,24 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             float totalDistance = 0f;
             float maxDistance = 0f;
             
-            for (int i = 0; i < points.Count - 1; i++)
+            int pointCount = points.Count;
+            for (int i = 0; i < pointCount - 1; i++)
             {
                 float distance = math.distance(points[i], points[i + 1]);
                 totalDistance += distance;
                 maxDistance = math.max(maxDistance, distance);
             }
             
-            float avgDistance = totalDistance / (points.Count - 1);
+            float avgDistance = totalDistance / (pointCount - 1);
             
             // Method 2: Calculate the bounding box size
             float3 min = points[0];
             float3 max = points[0];
             
-            foreach (var pt in points)
+            for (int i = 0; i < pointCount; i++)
             {
-                min = math.min(min, pt);
-                max = math.max(max, pt);
+                min = math.min(min, points[i]);
+                max = math.max(max, points[i]);
             }
             
             float boundingBoxDiagonal = math.length(max - min);
@@ -382,14 +413,24 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             return threshold;
         }
         
-        private List<float3> ProcessDrawnPointsForSpline()
+        private void ProcessDrawnPointsForSpline(out List<float3> results)
         {
+            // Use the reusable collection instead of creating a new one
+            m_SimplifiedPoints.Clear();
+            
             // Apply Ramer-Douglas-Peucker algorithm to simplify the polyline
             // This reduces the number of points while preserving the overall shape
             
             // If we have very few points, just return them as is
             if (m_DrawnPoints.Count <= 3)
-                return new List<float3>(m_DrawnPoints);
+            {
+                foreach (var pt in m_DrawnPoints)
+                {
+                    m_SimplifiedPoints.Add(pt);
+                }
+                results = m_SimplifiedPoints;
+                return;
+            }
                 
             // Choose a simplification tolerance based on the size of the shape
             float3 min = m_DrawnPoints[0];
@@ -407,59 +448,81 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             float simplificationTolerance = boundingBoxDiagonal * 0.01f;
             
             // Apply the Douglas-Peucker algorithm
-            List<float3> simplifiedPoints = SimplifyPoints(m_DrawnPoints, simplificationTolerance);
+            SimplifyPointsNonRecursive(m_DrawnPoints, simplificationTolerance, m_SimplifiedPoints);
             
-            return simplifiedPoints;
+            results = m_SimplifiedPoints;
         }
         
-        // Ramer-Douglas-Peucker algorithm for polyline simplification
-        private List<float3> SimplifyPoints(List<float3> points, float epsilon)
+        // Non-recursive version of the Ramer-Douglas-Peucker algorithm
+        private void SimplifyPointsNonRecursive(List<float3> points, float epsilon, List<float3> result)
         {
             if (points.Count <= 2)
-                return points;
-                
-            // Find the point with the maximum distance from the line segment
-            float maxDistance = 0;
-            int indexOfFurthest = 0;
-            
-            float3 firstPoint = points[0];
-            float3 lastPoint = points[points.Count - 1];
-            
-            for (int i = 1; i < points.Count - 1; i++)
             {
-                float distance = PerpendicularDistance(points[i], firstPoint, lastPoint);
-                
-                if (distance > maxDistance)
+                foreach (var pt in points)
                 {
-                    maxDistance = distance;
-                    indexOfFurthest = i;
+                    result.Add(pt);
+                }
+                return;
+            }
+            
+            // Use a boolean array to mark which points to keep
+            bool[] keepPoint = new bool[points.Count];
+            
+            // Always keep first and last points
+            keepPoint[0] = true;
+            keepPoint[points.Count - 1] = true;
+            
+            // Clear the stack and add the first range
+            m_SimplifyStack.Clear();
+            m_SimplifyStack.Push(new SimplifyStackEntry { StartIdx = 0, EndIdx = points.Count - 1 });
+            
+            // Process all segments in the stack
+            while (m_SimplifyStack.Count > 0)
+            {
+                SimplifyStackEntry entry = m_SimplifyStack.Pop();
+                int startIdx = entry.StartIdx;
+                int endIdx = entry.EndIdx;
+                
+                float maxDistance = 0;
+                int indexOfFurthest = 0;
+                
+                // Find the point with the maximum distance
+                for (int i = startIdx + 1; i < endIdx; i++)
+                {
+                    float distance = PerpendicularDistance(points[i], points[startIdx], points[endIdx]);
+                    
+                    if (distance > maxDistance)
+                    {
+                        maxDistance = distance;
+                        indexOfFurthest = i;
+                    }
+                }
+                
+                // If max distance is greater than epsilon, mark point to keep and process sub-segments
+                if (maxDistance > epsilon)
+                {
+                    keepPoint[indexOfFurthest] = true;
+                    
+                    if (indexOfFurthest - startIdx > 1)
+                    {
+                        m_SimplifyStack.Push(new SimplifyStackEntry { StartIdx = startIdx, EndIdx = indexOfFurthest });
+                    }
+                    
+                    if (endIdx - indexOfFurthest > 1)
+                    {
+                        m_SimplifyStack.Push(new SimplifyStackEntry { StartIdx = indexOfFurthest, EndIdx = endIdx });
+                    }
                 }
             }
             
-            // If max distance is greater than epsilon, recursively simplify
-            List<float3> result = new List<float3>();
-            
-            if (maxDistance > epsilon)
+            // Add all the kept points to the result in order
+            for (int i = 0; i < points.Count; i++)
             {
-                // Recursive case: split and simplify both parts
-                List<float3> firstPart = points.GetRange(0, indexOfFurthest + 1);
-                List<float3> secondPart = points.GetRange(indexOfFurthest, points.Count - indexOfFurthest);
-                
-                List<float3> simplifiedFirstPart = SimplifyPoints(firstPart, epsilon);
-                List<float3> simplifiedSecondPart = SimplifyPoints(secondPart, epsilon);
-                
-                // Combine the results, avoiding duplication of the middle point
-                result.AddRange(simplifiedFirstPart);
-                result.AddRange(simplifiedSecondPart.GetRange(1, simplifiedSecondPart.Count - 1));
+                if (keepPoint[i])
+                {
+                    result.Add(points[i]);
+                }
             }
-            else
-            {
-                // Base case: just use the endpoints
-                result.Add(firstPoint);
-                result.Add(lastPoint);
-            }
-            
-            return result;
         }
         
         // Calculate the perpendicular distance from a point to a line segment
