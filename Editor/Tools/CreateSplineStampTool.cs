@@ -344,6 +344,7 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             {
                 stamp = splineObject.AddComponent<Stamp>();
             }
+            stamp.GenerateMask();
         }
         
         private float3 CalculateCenter(List<float3> points)
