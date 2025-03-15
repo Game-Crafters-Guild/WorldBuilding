@@ -377,24 +377,116 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             // - For large shapes, allow more deviation (larger threshold)
             // - Keep it proportional to the shape size
             
-            // Between 1% and 5% of the diagonal, clamped between 0.05 and 0.5
-            float diagonalPercentage = boundingBoxDiagonal * 0.02f;
-            float basedOnAvgDistance = avgDistance * 0.2f;
+            // Increased percentages to allow more error (fewer points)
+            // Between 3% and 8% of the diagonal instead of 1-5%
+            float diagonalPercentage = boundingBoxDiagonal * 0.05f;
+            float basedOnAvgDistance = avgDistance * 0.4f; // Doubled from 0.2f
             
-            // Choose the smaller of the two to favor precision
-            float threshold = math.min(diagonalPercentage, basedOnAvgDistance);
+            // Choose the larger of the two to favor fewer points
+            float threshold = math.max(diagonalPercentage, basedOnAvgDistance);
             
-            // Ensure reasonable bounds
-            threshold = math.clamp(threshold, 0.05f, 0.5f);
+            // Ensure reasonable bounds, with higher minimum and maximum
+            threshold = math.clamp(threshold, 0.1f, 1.0f); // Increased from 0.05-0.5
             
             return threshold;
         }
         
         private List<float3> ProcessDrawnPointsForSpline()
         {
-            // Process the drawn points for spline creation
-            // We may want to simplify, smooth, or otherwise process the points
-            return new List<float3>(m_DrawnPoints);
+            // Apply Ramer-Douglas-Peucker algorithm to simplify the polyline
+            // This reduces the number of points while preserving the overall shape
+            
+            // If we have very few points, just return them as is
+            if (m_DrawnPoints.Count <= 3)
+                return new List<float3>(m_DrawnPoints);
+                
+            // Choose a simplification tolerance based on the size of the shape
+            float3 min = m_DrawnPoints[0];
+            float3 max = m_DrawnPoints[0];
+            
+            foreach (var pt in m_DrawnPoints)
+            {
+                min = math.min(min, pt);
+                max = math.max(max, pt);
+            }
+            
+            float boundingBoxDiagonal = math.length(max - min);
+            
+            // Set simplification tolerance as a percentage of the bounding box size
+            float simplificationTolerance = boundingBoxDiagonal * 0.01f;
+            
+            // Apply the Douglas-Peucker algorithm
+            List<float3> simplifiedPoints = SimplifyPoints(m_DrawnPoints, simplificationTolerance);
+            
+            return simplifiedPoints;
+        }
+        
+        // Ramer-Douglas-Peucker algorithm for polyline simplification
+        private List<float3> SimplifyPoints(List<float3> points, float epsilon)
+        {
+            if (points.Count <= 2)
+                return points;
+                
+            // Find the point with the maximum distance from the line segment
+            float maxDistance = 0;
+            int indexOfFurthest = 0;
+            
+            float3 firstPoint = points[0];
+            float3 lastPoint = points[points.Count - 1];
+            
+            for (int i = 1; i < points.Count - 1; i++)
+            {
+                float distance = PerpendicularDistance(points[i], firstPoint, lastPoint);
+                
+                if (distance > maxDistance)
+                {
+                    maxDistance = distance;
+                    indexOfFurthest = i;
+                }
+            }
+            
+            // If max distance is greater than epsilon, recursively simplify
+            List<float3> result = new List<float3>();
+            
+            if (maxDistance > epsilon)
+            {
+                // Recursive case: split and simplify both parts
+                List<float3> firstPart = points.GetRange(0, indexOfFurthest + 1);
+                List<float3> secondPart = points.GetRange(indexOfFurthest, points.Count - indexOfFurthest);
+                
+                List<float3> simplifiedFirstPart = SimplifyPoints(firstPart, epsilon);
+                List<float3> simplifiedSecondPart = SimplifyPoints(secondPart, epsilon);
+                
+                // Combine the results, avoiding duplication of the middle point
+                result.AddRange(simplifiedFirstPart);
+                result.AddRange(simplifiedSecondPart.GetRange(1, simplifiedSecondPart.Count - 1));
+            }
+            else
+            {
+                // Base case: just use the endpoints
+                result.Add(firstPoint);
+                result.Add(lastPoint);
+            }
+            
+            return result;
+        }
+        
+        // Calculate the perpendicular distance from a point to a line segment
+        private float PerpendicularDistance(float3 point, float3 lineStart, float3 lineEnd)
+        {
+            float3 lineVec = lineEnd - lineStart;
+            float lineLength = math.length(lineVec);
+            
+            // Handle special case of zero-length line
+            if (lineLength < float.Epsilon)
+                return math.distance(point, lineStart);
+                
+            // Project point onto line
+            float t = math.clamp(math.dot(point - lineStart, lineVec) / math.dot(lineVec, lineVec), 0f, 1f);
+            float3 projection = lineStart + t * lineVec;
+            
+            // Return distance to projection
+            return math.distance(point, projection);
         }
     }
 }
