@@ -6,6 +6,9 @@ RWTexture2D<float4> Result;
 // Controls the blur strength/radius
 int _BlurStrength;
 
+// Flag for handling straight lines specially
+int _IsStraightLine;
+
 [numthreads(8,8,1)]
 void CSBlurMask(uint3 id : SV_DispatchThreadID)
 {
@@ -18,6 +21,14 @@ void CSBlurMask(uint3 id : SV_DispatchThreadID)
     
     // Apply a weighted blur with safer bounds checking
     int kBlurRadius = min(max(1, _BlurStrength), 10); // Limit radius to avoid excessive sampling
+    
+    // For straight lines, we can increase the blur radius a bit more 
+    // to ensure the line is visible
+    if (_IsStraightLine > 0)
+    {
+        kBlurRadius = min(kBlurRadius + 2, 10);
+    }
+    
     float4 sum = float4(0, 0, 0, 0);
     float totalWeight = 0;
     
@@ -38,7 +49,17 @@ void CSBlurMask(uint3 id : SV_DispatchThreadID)
             
             // Weight calculation (true Gaussian)
             float distSq = float(x * x + y * y);
+            
+            // For straight lines, we can adjust the weight calculation to 
+            // favor certain directions (particularly perpendicular to the line)
+            // This helps make the line more visible
             float weight = exp(-distSq / twoSigmaSq);
+            
+            // For straight lines, bias toward dilating the edges
+            if (_IsStraightLine > 0 && distSq <= 4)
+            {
+                weight *= 1.5; // Boost the weight of nearby pixels
+            }
             
             float4 pixelColor = Source[samplePos];
             sum += pixelColor * weight;
@@ -55,7 +76,27 @@ void CSBlurMask(uint3 id : SV_DispatchThreadID)
     // Additional intensity-preserving smoothing for alpha channel
     if (original.a > 0.01)
     {
-        result.a = max(result.a, original.a * 0.7);
+        // For straight lines, preserve alpha more aggressively
+        if (_IsStraightLine > 0)
+        {
+            result.a = max(result.a, original.a * 0.85);
+            
+            // Also ensure some minimum alpha to make the line visible
+            result.a = max(result.a, 0.05);
+        }
+        else
+        {
+            result.a = max(result.a, original.a * 0.7);
+        }
+    }
+    else if (_IsStraightLine > 0)
+    {
+        // For straight lines, if we see any non-zero alpha in the neighborhood,
+        // ensure this pixel has some minimal alpha too
+        if (sum.a > 0.01)
+        {
+            result.a = max(result.a, 0.03);
+        }
     }
     
     Result[id.xy] = result;

@@ -57,7 +57,13 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/WriteSplatmap"
             float4 frag (v2f i) : SV_Target
             {
                 float mask = tex2D(_Mask, i.uv).x;
-                mask = smoothstep(_Falloff.x, _Falloff.y, mask);
+                if (mask <= 0.005) return float4(0, 0, 0, 0);
+                
+                float falloffRange = max(0.01, _Falloff.y - _Falloff.x);
+                mask = saturate(smoothstep(_Falloff.x, _Falloff.y, mask));
+                
+                mask = pow(mask, 0.9);
+                
                 return float4(mask, mask, mask, mask);
             }
             ENDCG
@@ -107,7 +113,13 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/WriteSplatmap"
             float4 frag (v2f i) : SV_Target
             {
                 float mask = tex2D(_Mask, i.uv).x;
-                mask = smoothstep(_Falloff.x, _Falloff.y, mask);
+                if (mask <= 0.005) return float4(0, 0, 0, 0);
+                
+                float falloffRange = max(0.01, _Falloff.y - _Falloff.x);
+                mask = saturate(smoothstep(_Falloff.x, _Falloff.y, mask));
+                
+                mask = pow(mask, 0.9);
+                
                 return _Intensity * mask;
             }
             ENDCG
