@@ -85,7 +85,7 @@ namespace GameCraftersGuild.WorldBuilding
                 // Check distance against all placed objects
                 foreach (var placedObj in PlacedObjects)
                 {
-                    // Use the maximum of the two minimum distances
+                    // The stored MinDistance already includes the global scale at the time it was added
                     float requiredDistance = Mathf.Max(currentObjectMinDistance, placedObj.MinDistance);
                     
                     float distance = Vector3.Distance(placedObj.Position, proposedPosition);
@@ -144,9 +144,9 @@ namespace GameCraftersGuild.WorldBuilding
         [Tooltip("Maximum number of objects to spawn. If set to 0, there is no limit.")]
         public int MaxObjects = 1000;
         
-        [Tooltip("Default minimum distance between objects")]
-        [Range(0f, 10f)]
-        public float DefaultMinDistance = 2.0f;
+        [Tooltip("Global scale factor applied to all spawned objects")]
+        [Range(0.1f, 10f)]
+        public float GlobalScale = 1.0f;
         
         /*[Header("GPU Placement")]
         [Tooltip("Use GPU-based placement for better performance")]
@@ -305,8 +305,8 @@ namespace GameCraftersGuild.WorldBuilding
                 ConstraintsContainer.Constraints.Add(new SlopeConstraint());
                 ConstraintsContainer.Constraints.Add(new MaskConstraint());
                 
-                // Add default collision constraint
-                ConstraintsContainer.Constraints.Add(new ObjectCollisionConstraint { DefaultMinDistance = DefaultMinDistance });
+                // Add default collision constraint with user's value (without scale applied)
+                ConstraintsContainer.Constraints.Add(new ObjectCollisionConstraint { DefaultMinDistance = 2.0f });
                 
                 // Cache collision constraint reference for performance
                 m_CollisionConstraint = ConstraintsContainer.FindConstraint<ObjectCollisionConstraint>();
@@ -481,8 +481,11 @@ namespace GameCraftersGuild.WorldBuilding
                             // Add to collision tracking if constraint exists
                             if (m_CollisionConstraint != null)
                             {
-                                // Add the object with its minimum distance
-                                m_CollisionConstraint.AddObject(request.position, request.minimumDistance);
+                                // Get the scale factor from the request.scale (using x component since it's a uniform scale)
+                                float scaleFactor = request.scale.x;
+                                // Add the object with its pre-scaled minimum distance, accounting for object scale
+                                float effectiveMinDistance = request.minimumDistance * scaleFactor;
+                                m_CollisionConstraint.AddObject(request.position, effectiveMinDistance);
                             }
                         }
                     };
@@ -555,7 +558,7 @@ namespace GameCraftersGuild.WorldBuilding
                     prefab = objectSettings.Prefab,
                     position = placement.Position,
                     rotation = rotation,
-                    scale = Vector3.one * placement.Scale,
+                    scale = Vector3.one * placement.Scale, // Note: Scale from GPU already includes GlobalScale
                     minimumDistance = objectSettings.MinimumDistance
                 });
             }
@@ -595,8 +598,11 @@ namespace GameCraftersGuild.WorldBuilding
                         // Add to collision tracking if constraint exists
                         if (m_CollisionConstraint != null)
                         {
-                            // Add the object with its minimum distance
-                            m_CollisionConstraint.AddObject(request.position, request.minimumDistance);
+                            // Get the scale factor from the request.scale (using x component since it's a uniform scale)
+                            float scaleFactor = request.scale.x;
+                            // Add the object with its pre-scaled minimum distance, also accounting for object scale
+                            float effectiveMinDistance = request.minimumDistance * GlobalScale * scaleFactor;
+                            m_CollisionConstraint.AddObject(request.position, effectiveMinDistance);
                         }
                     }
                 }
@@ -758,7 +764,7 @@ namespace GameCraftersGuild.WorldBuilding
                     
                     // Set scale
                     float randomScale = GetRandomRange(objectSettings.MinScale, objectSettings.MaxScale);
-                    newObject.transform.localScale = Vector3.one * randomScale;
+                    newObject.transform.localScale = Vector3.one * randomScale * GlobalScale;
                     
                     // Set rotation
                     if (objectSettings.AlignToNormal)
@@ -790,8 +796,11 @@ namespace GameCraftersGuild.WorldBuilding
                     // Add to collision tracking if constraint exists
                     if (m_CollisionConstraint != null)
                     {
-                        // Add the object with its minimum distance
-                        m_CollisionConstraint.AddObject(position, objectSettings.MinimumDistance);
+                        // Get the scale factor from the request.scale (using x component since it's a uniform scale)
+                        float scaleFactor = randomScale;
+                        // Add the object with its pre-scaled minimum distance, also accounting for object scale
+                        float effectiveMinDistance = objectSettings.MinimumDistance * GlobalScale * scaleFactor;
+                        m_CollisionConstraint.AddObject(position, effectiveMinDistance);
                     }
                     break;
                 }
@@ -816,6 +825,9 @@ namespace GameCraftersGuild.WorldBuilding
 
             // Get slope at this position
             float slope = GetTerrainSlope(terrainData, normX, normZ);
+            
+            // Apply global scale to minimum distance
+            minimumDistance = minimumDistance > 0 ? minimumDistance * GlobalScale : minimumDistance;
             
             // Create context for constraint checking
             return new PlacementConstraintContext

@@ -310,8 +310,6 @@ namespace GameCraftersGuild.WorldBuilding
                 placedObjectPositions = new float[collisionConstraint.PlacedObjects.Count * 3];
                 minimumDistances = new float[collisionConstraint.PlacedObjects.Count];
                 
-                //Debug.Log($"GPU Placement: Using {collisionConstraint.PlacedObjects.Count} placed objects for collision constraint");
-                
                 for (int i = 0; i < collisionConstraint.PlacedObjects.Count; i++)
                 {
                     var obj = collisionConstraint.PlacedObjects[i];
@@ -324,17 +322,8 @@ namespace GameCraftersGuild.WorldBuilding
             else
             {
                 // Empty arrays if no objects placed yet
-                placedObjectPositions = new float[0];
-                minimumDistances = new float[0];
-                
-                /*if (collisionConstraint != null)
-                {
-                    Debug.Log("GPU Placement: CollisionConstraint exists but has no placed objects");
-                }
-                else
-                {
-                    Debug.Log("GPU Placement: No CollisionConstraint found");
-                }*/
+                placedObjectPositions = Array.Empty<float>();
+                minimumDistances = Array.Empty<float>();
             }
             
             // Setup prefab settings
@@ -358,16 +347,26 @@ namespace GameCraftersGuild.WorldBuilding
             {
                 var gameObj = modifier.GameObjects[i];
                 
+                // Get minimum distance (use default if not specified)
+                float minDist = gameObj.MinimumDistance;
+                
+                // If not specified, try to get from collision constraint
+                if (minDist <= 0)
+                {
+                    var collisionConstraint = FindConstraint<GameObjectModifier.ObjectCollisionConstraint>(modifier.ConstraintsContainer.Constraints);
+                    minDist = collisionConstraint != null ? collisionConstraint.DefaultMinDistance : 2.0f;
+                }
+                
                 prefabSettings[i] = new PrefabSettings
                 {
-                    minScale = gameObj.MinScale,
-                    maxScale = gameObj.MaxScale,
+                    minScale = gameObj.MinScale * modifier.GlobalScale,
+                    maxScale = gameObj.MaxScale * modifier.GlobalScale,
                     yOffset = gameObj.YOffset,
                     alignToNormal = gameObj.AlignToNormal ? 1u : 0u,
                     randomYRotation = gameObj.RandomYRotation ? 1u : 0u,
                     minRotation = gameObj.MinRotation,
                     maxRotation = gameObj.MaxRotation,
-                    minimumDistance = gameObj.MinimumDistance > 0 ? gameObj.MinimumDistance : modifier.DefaultMinDistance
+                    minimumDistance = minDist // Store unscaled distance
                 };
             }
         }
@@ -488,7 +487,8 @@ namespace GameCraftersGuild.WorldBuilding
             
             // Calculate density/fillness factor - density 1.0 means objects are placed at a distance of their minimum distance apart
             // This is approximately the maximum possible density
-            float defaultDistance = modifier.DefaultMinDistance > 0f ? modifier.DefaultMinDistance : 2.0f;
+            var collisionConstraint = FindConstraint<GameObjectModifier.ObjectCollisionConstraint>(modifier.ConstraintsContainer.Constraints);
+            float defaultDistance = (collisionConstraint != null ? collisionConstraint.DefaultMinDistance : 2.0f) * modifier.GlobalScale;
             
             // Calculate theoretical maximum number of objects that could be placed based on minimum distances
             // For a grid of objects with spacing = defaultDistance, we get approximately:
@@ -527,7 +527,7 @@ namespace GameCraftersGuild.WorldBuilding
                 modifier.GameObjects.Count, 
                 modifier.RandomSeed, 
                 modifier.RandomOffset,
-                modifier.DefaultMinDistance > 0f ? modifier.DefaultMinDistance : 2.0f,
+                collisionConstraint != null ? collisionConstraint.DefaultMinDistance : 2.0f, // Get from constraint
                 mask
             );
             
@@ -559,17 +559,14 @@ namespace GameCraftersGuild.WorldBuilding
                 }
             }
             
-            //Debug.Log($"GPU returned {validGPUResults.Count} valid positions before collision filtering");
-            
             // Second pass: CPU-side collision detection between objects generated in this batch
             // Get existing collision constraint
-            var collisionConstraint = FindConstraint<GameObjectModifier.ObjectCollisionConstraint>(modifier.ConstraintsContainer.Constraints);
-            if (collisionConstraint == null)
+            /*if (collisionConstraint == null)
             {
                 Debug.LogWarning("No collision constraint found. Creating a new one.");
-                collisionConstraint = new GameObjectModifier.ObjectCollisionConstraint { DefaultMinDistance = modifier.DefaultMinDistance };
+                collisionConstraint = new GameObjectModifier.ObjectCollisionConstraint { DefaultMinDistance = 2.0f };
                 modifier.ConstraintsContainer.Constraints.Add(collisionConstraint);
-            }
+            }*/
             
             // Keep track of objects we've added in this pass
             List<Vector3> newlyAddedPositions = new List<Vector3>();
@@ -583,36 +580,46 @@ namespace GameCraftersGuild.WorldBuilding
                     
                 float minimumDistance = modifier.GameObjects[info.PrefabIndex].MinimumDistance;
                 if (minimumDistance <= 0)
-                    minimumDistance = modifier.DefaultMinDistance;
+                    minimumDistance = collisionConstraint != null ? collisionConstraint.DefaultMinDistance : 2.0f;
+                
+                // Scale by object's scale
+                minimumDistance *= info.Scale;
                 
                 // Check against previously added objects in this batch
                 bool validPosition = true;
-                for (int i = 0; i < newlyAddedPositions.Count; i++)
+                if (collisionConstraint != null)
                 {
-                    Vector3 existingPos = newlyAddedPositions[i];
-                    float requiredDist = Mathf.Max(minimumDistance, newlyAddedDistances[i]);
-                    
-                    if (Vector3.Distance(info.Position, existingPos) < requiredDist)
+                    for (int i = 0; i < newlyAddedPositions.Count; i++)
                     {
-                        validPosition = false;
-                        break;
-                    }
-                }
-                
-                // Check against previously placed objects (from previous batches)
-                if (validPosition && collisionConstraint.PlacedObjects.Count > 0)
-                {
-                    foreach (var placedObj in collisionConstraint.PlacedObjects)
-                    {
-                        float requiredDist = Mathf.Max(minimumDistance, placedObj.MinDistance);
-                        if (Vector3.Distance(info.Position, placedObj.Position) < requiredDist)
+                        Vector3 existingPos = newlyAddedPositions[i];
+
+                        // Use pre-scaled distances without applying GlobalScale again
+                        float requiredDist = Mathf.Max(minimumDistance, newlyAddedDistances[i]);
+
+                        if (Vector3.Distance(info.Position, existingPos) < requiredDist)
                         {
                             validPosition = false;
                             break;
                         }
                     }
+
+                    // Check against previously placed objects (from previous batches)
+                    if (validPosition && collisionConstraint.PlacedObjects.Count > 0)
+                    {
+                        foreach (var placedObj in collisionConstraint.PlacedObjects)
+                        {
+                            // Use pre-scaled distances without applying GlobalScale again
+                            float requiredDist = Mathf.Max(minimumDistance, placedObj.MinDistance);
+
+                            if (Vector3.Distance(info.Position, placedObj.Position) < requiredDist)
+                            {
+                                validPosition = false;
+                                break;
+                            }
+                        }
+                    }
                 }
-                
+
                 // If it passed all checks, add to final placements
                 if (validPosition)
                 {
@@ -620,22 +627,22 @@ namespace GameCraftersGuild.WorldBuilding
                     
                     // Track this position for checking against subsequent objects
                     newlyAddedPositions.Add(info.Position);
-                    newlyAddedDistances.Add(minimumDistance);
+                    newlyAddedDistances.Add(minimumDistance); // Already has global scale applied
                     
                     // Add to collision constraint for future passes
-                    collisionConstraint.AddObject(info.Position, minimumDistance);
+                    collisionConstraint?.AddObject(info.Position, minimumDistance); // Already has global scale applied
                     
                     // Debug - only for the first few objects
-                    if (placements.Count <= 5)
+                    /*if (placements.Count <= 5)
                     {
-                        //Debug.Log($"Added object {placements.Count-1} to collision constraint: Position={info.Position}, MinDistance={minimumDistance}");
+                        Debug.Log($"Added object {placements.Count-1} to collision constraint: Position={info.Position}, MinDistance={minimumDistance}");
                     }
                     
                     // Log total count periodically
                     if (placements.Count % 50 == 0)
                     {
-                        //Debug.Log($"Collision constraint now has {collisionConstraint.PlacedObjects.Count} objects");
-                    }
+                        Debug.Log($"Collision constraint now has {collisionConstraint.PlacedObjects.Count} objects");
+                    }*/
                 }
             }
             
@@ -717,18 +724,10 @@ namespace GameCraftersGuild.WorldBuilding
             {
                 ReleaseBuffer(ref minimumDistancesBuffer);
                 minimumDistancesBuffer = new ComputeBuffer(minDistancesCount, sizeof(float));
-                //Debug.Log($"Created minimumDistancesBuffer with {minDistancesCount} elements, stride={sizeof(float)}");
             }
             if (minimumDistances.Length > 0)
             {
                 minimumDistancesBuffer.SetData(minimumDistances);
-                /*Debug.Log($"Set minimumDistancesBuffer data with {minimumDistances.Length} elements");
-                
-                // Debug some values
-                if (minimumDistances.Length >= 1)
-                {
-                    Debug.Log($"First minimum distance: {minimumDistances[0]}");
-                }*/
             }
             
             // Setup prefab settings buffer

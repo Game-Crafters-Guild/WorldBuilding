@@ -189,7 +189,7 @@ bool CheckNoiseConstraint(float2 boundsNorm)
     return noiseValue >= noiseParams.x;
 }
 
-bool CheckCollisionConstraint(float3 worldPos, float currentMinDistance)
+bool CheckCollisionConstraint(float3 worldPos, float currentMinDistance, float objectScale)
 {
     // If no placed objects, constraint is satisfied
     if (_PlacedObjectCount == 0)
@@ -197,6 +197,9 @@ bool CheckCollisionConstraint(float3 worldPos, float currentMinDistance)
     
     // Use default if not specified
     float minDist = currentMinDistance > 0 ? currentMinDistance : _DefaultMinDistance;
+    
+    // Scale the minimum distance by the object's scale
+    minDist *= objectScale;
     
     // Check against all placed objects
     for (uint i = 0; i < _PlacedObjectCount; i++)
@@ -208,7 +211,7 @@ bool CheckCollisionConstraint(float3 worldPos, float currentMinDistance)
             _PlacedObjectPositions[i*3+2]
         );
         
-        // Get minimum distance for this object
+        // Get minimum distance for this object (already includes GlobalScale and that object's scale)
         float objMinDist = _MinimumDistances[i];
         
         // Use maximum of the two distances
@@ -268,7 +271,7 @@ bool CheckLayerConstraint(float2 normPos)
     return false;
 }
 
-bool CheckAllConstraints(float2 normPos, float2 boundsNorm, float height, float slope, float3 worldPos, float minDistance)
+bool CheckAllConstraints(float2 normPos, float2 boundsNorm, float height, float slope, float3 worldPos, float minDistance, float objectScale)
 {
     // Check mask constraint if texture provided
     if (!CheckMaskConstraint(boundsNorm))
@@ -296,8 +299,8 @@ bool CheckAllConstraints(float2 normPos, float2 boundsNorm, float height, float 
     if (!CheckLayerConstraint(normPos))
         return false;
     
-    // Check collision constraint
-    if (!CheckCollisionConstraint(worldPos, minDistance))
+    // Check collision constraint with object scale
+    if (!CheckCollisionConstraint(worldPos, minDistance, objectScale))
         return false;
     
     return true;
@@ -368,23 +371,20 @@ void GeneratePositions(uint3 id : SV_DispatchThreadID)
     worldPos.y = height + settings.yOffset;
     worldPos.z = _TerrainPosition.z + normPos.y * _TerrainParams.z;
     
-    // Check all constraints with object-specific minimum distance
-    if (CheckAllConstraints(normPos, boundsNorm, height, slope, worldPos, settings.minimumDistance))
+    // Calculate random scale based on prefab settings
+    float scale = lerp(settings.minScale, settings.maxScale, GetRandomFloat(index * 9 + 6, _RandomSeed));
+    
+    // Check all constraints with object-specific minimum distance and scale
+    if (CheckAllConstraints(normPos, boundsNorm, height, slope, worldPos, settings.minimumDistance, scale))
     {
-        // Calculate random scale based on prefab settings
-        float scale = lerp(settings.minScale, settings.maxScale, GetRandomFloat(index * 9 + 6, _RandomSeed));
-        
-        // Calculate random rotation based on prefab settings
-        float rotation = 0;
-        if (settings.randomYRotation > 0)
-        {
-            rotation = lerp(settings.minRotation, settings.maxRotation, GetRandomFloat(index * 11 + 7, _RandomSeed));
-        }
-        
         // Store valid result
         _Results[index].position = worldPos;
         _Results[index].scale = scale;
-        _Results[index].rotation = rotation;
+        _Results[index].rotation = 0;
+        if (settings.randomYRotation > 0)
+        {
+            _Results[index].rotation = lerp(settings.minRotation, settings.maxRotation, GetRandomFloat(index * 11 + 7, _RandomSeed));
+        }
         _Results[index].prefabIndex = prefabIndex;
         _Results[index].isValid = 1;
     }
