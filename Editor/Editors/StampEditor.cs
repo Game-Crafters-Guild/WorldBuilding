@@ -206,7 +206,43 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             priorityField.style.flexGrow = 1;
             
             // Create a button to open the Stamp Order Manager
-            Button openOrderManagerButton = new Button(() => StampOrderingWindow.ShowWindow());
+            Button openOrderManagerButton = new Button(() => {
+                // Show a dropdown menu with options
+                GenericMenu menu = new GenericMenu();
+                
+                menu.AddItem(new GUIContent("Open as Window"), false, () => {
+                    StampOrderingWindow.ShowWindow();
+                });
+                
+                /*menu.AddItem(new GUIContent("Toggle Overlay"), false, () => {
+                    // Get the overlay type
+                    var overlayType = typeof(StampOrderingOverlay);
+                    
+                    // Get the current scene view
+                    var sceneView = SceneView.lastActiveSceneView;
+                    if (sceneView != null)
+                    {
+                        // Toggle the overlay
+                        var overlays = sceneView.overlays;
+                        var overlay = overlays.Find(overlayType) as StampOrderingOverlay;
+                        
+                        if (overlay != null)
+                        {
+                            if (overlay.displayed)
+                                overlay.collapsed = !overlay.collapsed;
+                            else
+                                overlay.displayed = true;
+                        }
+                        else
+                        {
+                            overlays.Add(overlayType);
+                        }
+                    }
+                });*/
+                
+                menu.ShowAsContext();
+            });
+            
             openOrderManagerButton.text = "Order Manager";
             openOrderManagerButton.tooltip = "Open the Stamp Order Manager to view and reorder all stamps";
             openOrderManagerButton.style.marginLeft = 5;

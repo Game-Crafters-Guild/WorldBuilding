@@ -1,39 +1,19 @@
+/*using UnityEngine.UIElements;
+using System;
 using System.Collections.Generic;
 using System.Linq;
-using UnityEditor;
-using UnityEditor.UIElements;
-using UnityEngine;
-using UnityEngine.UIElements;
 
 namespace GameCraftersGuild.WorldBuilding.Editor
 {
     [CustomEditor(typeof(WorldBuildingSystem))]
     public class WorldBuildingSystemEditor : UnityEditor.Editor
     {
-        WorldBuildingSystem Target => target as WorldBuildingSystem;
         private StampOrderingControl stampOrderingControl;
-
+        
         public override VisualElement CreateInspectorGUI()
         {
-            // Create a new VisualElement to be the root of the Inspector UI.
-            VisualElement inspector = new VisualElement();
-
-            // Attach a default Inspector to the Foldout.
-            InspectorElement.FillDefaultInspector(inspector, serializedObject, this);
-
-            Button generateButton = new Button() { text = "Generate" };
-            generateButton.clicked += () => Target.Generate();
-            inspector.Add(generateButton);
+            var root = new VisualElement();
             
-            // Add stamp management section
-            AddStampManagementSection(inspector);
-
-            // Return the finished Inspector UI.
-            return inspector;
-        }
-
-        private void AddStampManagementSection(VisualElement inspector)
-        {
             // Stamp ordering section
             var stampOrderingSection = new Foldout
             {
@@ -50,7 +30,9 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             };
             
             stampOrderingSection.Add(stampOrderingControl);
-            inspector.Add(stampOrderingSection);
+            root.Add(stampOrderingSection);
+            
+            return root;
         }
     }
-}
+} */

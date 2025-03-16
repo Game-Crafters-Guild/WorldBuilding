@@ -3,10 +3,10 @@
       xmlns="UnityEngine.UIElements" 
       xmlns:editor="UnityEditor.UIElements" 
       xsi:schemaLocation="UnityEngine.UIElements ../../UIElementsSchema/UnityEngine.UIElements.xsd UnityEditor.UIElements ../../UIElementsSchema/UnityEditor.UIElements.xsd">
-    <Style src="StampOrderingWindowStylesheet.uss" />
+    <Style src="StampOrderingControlStylesheet.uss" />
     
     <VisualElement class="stamp-order-manager-root">
-        <VisualElement class="header">
+        <VisualElement name="header-container" class="header">
             <Label text="Stamp Order Manager" class="header-label" />
             <Button text="Refresh" name="refresh-button" />
         </VisualElement>
@@ -18,9 +18,9 @@
             <Toggle label="Auto-refresh" name="auto-refresh-toggle" value="true" />
         </VisualElement>
         
-        <VisualElement class="container">
+        <VisualElement name="list-container" class="container">
             <Label text="Processing Order (Top to Bottom)" class="section-label" />
-            <ListView name="stamps-list-view" item-height="24" show-border="true" selection-type="Multiple" reorderable="true" reorder-mode="Animated" show-alternating-row-backgrounds="All" />
+            <ListView name="stamps-list-view" item-height="30" show-border="true" selection-type="Multiple" reorderable="true" reorder-mode="animated" show-alternating-row-backgrounds="All" />
         </VisualElement>
         
         <VisualElement class="footer">
