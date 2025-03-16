@@ -11,9 +11,13 @@
 
 .stamp-ordering-control {
     flex-grow: 1;
-    margin: var(--spacing-m);
+    margin: var(--spacing-xs);
     border-radius: 3px;
     background-color: rgba(40, 40, 40, 0.2);
+}
+
+.stamp-order-manager-root {
+    flex-grow: 1;
 }
 
 .header {
@@ -23,7 +27,6 @@
     padding: var(--spacing-m) var(--spacing-l);
     border-bottom-width: 1px;
     border-bottom-color: var(--border-color);
-    margin-bottom: var(--spacing-s);
 }
 
 .header-label {
@@ -37,7 +40,6 @@
     border-bottom-width: 1px;
     border-bottom-color: var(--border-color);
     align-items: center;
-    margin-bottom: var(--spacing-s);
 }
 
 .toolbar > Button {
@@ -71,41 +73,23 @@
     opacity: 0.7;
 }
 
-/* Additional padding at the top of the list to make drag target more visible */
-.unity-list-view__item:first-child {
-    margin-top: var(--spacing-m);
+.unity-list-view__reorderable-handle {
+    justify-content: center;
 }
 
-/* Extra padding for last item to make dragging to bottom easier */
-.unity-list-view__item:last-child {
-    margin-bottom: var(--spacing-m);
-}
-
-/* Additional styling for list items to ensure they render properly in all contexts */
-.unity-list-view__item {
-    margin: 2px 0;
-}
-
-.unity-list-view {
-    border-radius: 3px;
-    border-width: 1px;
-    border-color: var(--border-color);
-    margin-bottom: var(--spacing-m);
-    background-color: rgba(35, 35, 35, 0.3);
-}
-
+/* List Item Styling */
 .list-item {
     flex-direction: row;
     align-items: center;
-    padding: var(--spacing-s) var(--spacing-l);
-    margin: 1px;
-    border-radius: 3px;
+    padding: var(--spacing-s);
     height: var(--list-item-height);
-    background-color: rgba(45, 45, 45, 0.1);
+    border-radius: 2px;
+    margin: 1px 2px;
 }
 
-.list-item:hover {
-    background-color: var(--hover-color);
+/* Fix issue with the alternating row backgrounds */
+.unity-list-view__item--alternative-background {
+    background-color: rgba(50, 50, 50, 0.2);
 }
 
 .list-item__icon {
@@ -134,7 +118,7 @@
 
 .list-item__select-button {
     width: 60px;
-    margin-right: var(--spacing-m);
+    margin-right: 0;
     height: 20px;
 }
 

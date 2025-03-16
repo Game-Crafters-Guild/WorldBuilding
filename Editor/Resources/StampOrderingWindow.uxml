@@ -20,7 +20,15 @@
         
         <VisualElement name="list-container" class="container">
             <Label text="Processing Order (Top to Bottom)" class="section-label" />
-            <ListView name="stamps-list-view" item-height="30" show-border="true" selection-type="Multiple" reorderable="true" reorder-mode="animated" show-alternating-row-backgrounds="All" />
+            <ListView name="stamps-list-view" 
+                      fixed-item-height="30" 
+                      show-border="true" 
+                      selection-type="Multiple" 
+                      reorderable="true" 
+                      reorder-mode="Animated"
+                      show-alternating-row-backgrounds="All" 
+                      show-bound-collection-size="false"
+                      virtualization-method="DynamicHeight" />
         </VisualElement>
         
         <VisualElement class="footer">

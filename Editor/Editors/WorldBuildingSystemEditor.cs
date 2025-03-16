@@ -21,9 +21,67 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             // Attach a default Inspector to the Foldout.
             InspectorElement.FillDefaultInspector(inspector, serializedObject, this);
 
+            // Add generate button
+            var buttonContainer = new VisualElement();
+            buttonContainer.style.flexDirection = FlexDirection.Row;
+            buttonContainer.style.marginTop = 8;
+            buttonContainer.style.marginBottom = 10;
+            
             Button generateButton = new Button() { text = "Generate" };
             generateButton.clicked += () => Target.Generate();
-            inspector.Add(generateButton);
+            generateButton.style.flexGrow = 1;
+            buttonContainer.Add(generateButton);
+            
+            // Add Stamp Order Manager button
+            Button openOrderManagerButton = new Button(() => {
+                // Show a dropdown menu with options
+                GenericMenu menu = new GenericMenu();
+                
+                menu.AddItem(new GUIContent("Open as Window"), false, () => {
+                    StampOrderingWindow.ShowWindow();
+                });
+                
+                /*menu.AddItem(new GUIContent("Toggle Overlay"), false, () => {
+                    // Get the overlay type
+                    var overlayType = typeof(StampOrderingOverlay);
+                    
+                    // Get the current scene view
+                    var sceneView = SceneView.lastActiveSceneView;
+                    if (sceneView != null)
+                    {
+                        // Toggle the overlay
+                        var overlays = sceneView.overlays;
+                        var overlay = overlays.Find(overlayType) as StampOrderingOverlay;
+                        
+                        if (overlay != null)
+                        {
+                            if (overlay.displayed)
+                                overlay.collapsed = !overlay.collapsed;
+                            else
+                                overlay.displayed = true;
+                        }
+                        else
+                        {
+                            overlays.Add(overlayType);
+                        }
+                    }
+                });*/
+                
+                menu.ShowAsContext();
+            });
+            openOrderManagerButton.text = "Stamp Order Manager";
+            openOrderManagerButton.tooltip = "Open the Stamp Order Manager to view and reorder all stamps";
+            openOrderManagerButton.style.marginLeft = 5;
+            buttonContainer.Add(openOrderManagerButton);
+            
+            inspector.Add(buttonContainer);
+            
+            // Add the stylesheet for the order management
+            StyleSheet stampOrderWindowStylesheet = Resources.Load<StyleSheet>("StampOrderingControlStylesheet");
+            if (stampOrderWindowStylesheet != null)
+            {
+                inspector.styleSheets.Add(stampOrderWindowStylesheet);
+            }
             
             // Add stamp management section
             AddStampManagementSection(inspector);

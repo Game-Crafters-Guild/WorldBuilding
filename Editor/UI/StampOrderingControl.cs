@@ -156,6 +156,14 @@ namespace GameCraftersGuild.WorldBuilding.Editor
         {
             if (stampListView == null) return;
             
+            // Configure the list view
+            stampListView.fixedItemHeight = 30;
+            stampListView.showBoundCollectionSize = false;
+            stampListView.showAlternatingRowBackgrounds = AlternatingRowBackground.All;
+            stampListView.reorderable = true;
+            stampListView.selectionType = SelectionType.Multiple;
+            stampListView.virtualizationMethod = CollectionVirtualizationMethod.DynamicHeight;
+            
             stampListView.makeItem = () =>
             {
                 var itemElement = listItemTemplate.CloneTree();
@@ -215,8 +223,7 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                 priorityLabel.text = $"Priority: {stamp.Priority}";
             };
             
-            // Set a fixed item height to improve performance and appearance
-            stampListView.fixedItemHeight = 30;
+            // Set the items source
             stampListView.itemsSource = stamps;
             
             // Handle reordering
