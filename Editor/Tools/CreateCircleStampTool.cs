@@ -251,6 +251,10 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                     new Vector3(m_Scale.x, 1f, m_Scale.y) // Apply X/Z scaling
                 );
                 
+                // Draw dimension lines with colors based on current mode
+                // Using white for active axis and yellow for normal
+                Color normalColor = Color.yellow;
+                Color activeColor = Color.white;
                 using (new Handles.DrawingScope(transformMatrix))
                 {
                     // Draw wire circle
@@ -261,11 +265,6 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                     Color fillColor = new Color(0, 1, 0, 0.2f);
                     Handles.color = fillColor;
                     Handles.DrawSolidDisc(Vector3.zero, Vector3.up, m_Radius);
-                    
-                    // SWAPPED: Draw dimension lines with colors based on current mode
-                    // Now using white for active axis and yellow for normal
-                    Color normalColor = Color.yellow;
-                    Color activeColor = Color.white;
                     
                     // Draw axis indicators with default color (yellow)
                     Handles.color = normalColor;
@@ -294,23 +293,23 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                         Handles.color = activeColor;
                         Handles.DrawLine(Vector3.zero, new Vector3(0, 0, m_Radius));
                     }
-                    
-                    // If in rotation mode, draw a rotation handle
-                    if (m_CurrentMode == AdjustmentMode.Rotation)
-                    {
-                        Handles.color = activeColor;
+                }
+                
+                // If in rotation mode, draw a rotation handle
+                if (m_CurrentMode == AdjustmentMode.Rotation)
+                {
+                    Handles.color = activeColor;
                         
-                        // Make rotation visualization larger based on circle radius
-                        float rotationIndicatorLength = m_Radius * 0.5f; // 50% of the radius
-                        Vector3 cameraRight = SceneView.lastActiveSceneView.camera.transform.right;
-                        cameraRight.y = 0.0f;
-                        cameraRight = Quaternion.AngleAxis(-m_Rotation, Vector3.up) * cameraRight;
-                        Vector3 direction = cameraRight * rotationIndicatorLength;
-                        Handles.DrawLine(Vector3.zero, direction, 2f); // Make the line thicker
+                    // Make rotation visualization larger based on circle radius
+                    float rotationIndicatorLength = m_Radius * 0.5f; // 50% of the radius
+                    Vector3 cameraRight = SceneView.lastActiveSceneView.camera.transform.right;
+                    cameraRight.y = 0.0f;
+                    //cameraRight = Quaternion.AngleAxis(-m_Rotation, Vector3.up) * cameraRight;
+                    Vector3 direction = cameraRight * rotationIndicatorLength;
+                    Handles.DrawLine(m_PlacementPosition, m_PlacementPosition + direction, 2f); // Make the line thicker
                         
-                        // Draw larger arc for rotation
-                        Handles.DrawWireArc(Vector3.zero, Vector3.up, direction, m_Rotation, rotationIndicatorLength, 2f);
-                    }
+                    // Draw larger arc for rotation
+                    Handles.DrawWireArc(m_PlacementPosition, Vector3.up, direction, m_Rotation, rotationIndicatorLength, 2f);
                 }
                 
                 // Calculate the text position to appear just above the placement position
