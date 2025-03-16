@@ -363,9 +363,28 @@ namespace GameCraftersGuild.WorldBuilding
             // Cleanup disabled modifiers before regenerating
             CleanupDisabledModifiers();
 
-            // Sort builders by priority if needed
-            m_WorldBuilders.Sort((worldBuilder1, worldBuilder2) =>
-                worldBuilder1.Priority.CompareTo(worldBuilder2.Priority));
+            // Sort builders by their position in the scene hierarchy instead of priority
+            m_WorldBuilders.Sort((worldBuilder1, worldBuilder2) => {
+                // Cast to MonoBehaviour to access transform (all IWorldBuilder implementations are MonoBehaviours in this case)
+                var mb1 = worldBuilder1 as MonoBehaviour;
+                var mb2 = worldBuilder2 as MonoBehaviour;
+                
+                if (mb1 == null || mb2 == null)
+                    return worldBuilder1.Priority.CompareTo(worldBuilder2.Priority); // Fallback to priority
+                
+                // If they're siblings, sort by sibling index
+                if (mb1.transform.parent == mb2.transform.parent)
+                    return mb1.transform.GetSiblingIndex().CompareTo(mb2.transform.GetSiblingIndex());
+                
+                // If they're not siblings, compare hierarchy depth (lower depth = higher in hierarchy)
+                int depth1 = GetHierarchyDepth(mb1.transform);
+                int depth2 = GetHierarchyDepth(mb2.transform);
+                if (depth1 != depth2)
+                    return depth1.CompareTo(depth2);
+                
+                // If all else is equal, fall back to priority
+                return worldBuilder1.Priority.CompareTo(worldBuilder2.Priority);
+            });
 
             if (Terrain.activeTerrain == null)
             {
@@ -742,6 +761,19 @@ namespace GameCraftersGuild.WorldBuilding
                     stamp.m_Modifiers.CleanupDisabledModifiers();
                 }
             }
+        }
+
+        // Helper method to get the depth of a transform in the hierarchy
+        private int GetHierarchyDepth(Transform transform)
+        {
+            int depth = 0;
+            Transform current = transform;
+            while (current.parent != null)
+            {
+                depth++;
+                current = current.parent;
+            }
+            return depth;
         }
     }
 }
