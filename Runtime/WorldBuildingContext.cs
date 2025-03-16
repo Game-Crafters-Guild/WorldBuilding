@@ -149,10 +149,11 @@ namespace GameCraftersGuild.WorldBuilding
             Matrix4x4 lookAtMatrix = Matrix4x4.LookAt(Vector3.up * 0.5f, Vector3.zero, Vector3.forward).inverse;
             cmd.SetViewMatrix(lookAtMatrix);
 
-            Matrix4x4 transform = Matrix4x4.TRS(new Vector3(positionToTerrainSpace.x, 0.0f, positionToTerrainSpace.y),
-                                      quaternion.identity,
-                                      new Vector3(sizeToTerrainSpace.x, 1.0f, sizeToTerrainSpace.y) * aspectRatio) *
-                                  worldTransform;
+            Matrix4x4 scaleMatrix =
+                Matrix4x4.Scale(new Vector3(sizeToTerrainSpace.x, 1.0f, sizeToTerrainSpace.y) * aspectRatio);
+            Matrix4x4 translationMatrix = Matrix4x4.Translate(new Vector3(positionToTerrainSpace.x, 0.0f,
+                positionToTerrainSpace.y));
+            Matrix4x4 transform = translationMatrix * worldTransform * scaleMatrix;
             cmd.DrawMesh(m_Quad, transform, material, 0, shaderPass, properties: materialPropertyBlock);
             Graphics.ExecuteCommandBuffer(cmd);
         }
@@ -187,10 +188,11 @@ namespace GameCraftersGuild.WorldBuilding
             Matrix4x4 lookAtMatrix = Matrix4x4.LookAt(Vector3.up * 0.5f, Vector3.zero, Vector3.forward).inverse;
             cmd.SetViewMatrix(lookAtMatrix);
 
-            Matrix4x4 transform = Matrix4x4.TRS(new Vector3(positionToTerrainSpace.x, 0.0f, positionToTerrainSpace.y),
-                                      quaternion.identity,
-                                      new Vector3(sizeToTerrainSpace.x, 1.0f, sizeToTerrainSpace.y) * aspectRatio) *
-                                  worldTransform;
+            Matrix4x4 scaleMatrix =
+                Matrix4x4.Scale(new Vector3(sizeToTerrainSpace.x, 1.0f, sizeToTerrainSpace.y) * aspectRatio);
+            Matrix4x4 translationMatrix = Matrix4x4.Translate(new Vector3(positionToTerrainSpace.x, 0.0f,
+                positionToTerrainSpace.y));
+            Matrix4x4 transform = translationMatrix * worldTransform * scaleMatrix;
 
             cmd.DrawMesh(m_Quad, transform, material, 0, 0, properties: materialPropertyBlock);
             cmd.DrawMesh(m_Quad, transform, material, 0, 1, properties: materialPropertyBlock);
