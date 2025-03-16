@@ -65,7 +65,12 @@ namespace GameCraftersGuild.WorldBuilding
             }
             bool isLongPath = splineLength > 50f;
             
-            int maskTextureWidth = (isStraightLine || isLongPath) ? Mathf.Max(m_MaskResolution, 1024) : m_MaskResolution;
+            // CRITICAL FIX: Use higher resolution for mask textures to avoid breaks
+            int maskTextureWidth = Mathf.Max(1024, m_MaskResolution);
+            if (isLongPath) {
+                // For long paths, use much higher resolution
+                maskTextureWidth = Mathf.Max(2048, Mathf.NextPowerOfTwo(Mathf.CeilToInt(splineLength * 10)));
+            }
             int maskTextureHeight = maskTextureWidth;
 
             RenderTexture renderTexture = RenderTexture.GetTemporary(maskTextureWidth, maskTextureHeight, 0,
@@ -79,7 +84,7 @@ namespace GameCraftersGuild.WorldBuilding
             MaskTexture.wrapMode = TextureWrapMode.Clamp;
 
             // Use our improved mesh generation for splines with proper height encoding
-            Mesh splineMesh = isLongPath ? GenerateSplineMeshWithConsistentHeight() : GenerateSplineMesh();
+            Mesh splineMesh = GenerateSplineMeshWithConsistentHeight();
 
             Bounds meshBounds = splineMesh.bounds;
             Bounds splineBounds = CalculateSplineBoundsWithHeight();
@@ -674,7 +679,7 @@ namespace GameCraftersGuild.WorldBuilding
             }
         }
 
-        // Add this method to properly use knot Y positions without any smoothing
+        // Fix the exact height method to avoid segmentation breaks in the mask
         private void GenerateSplineMeshWithExactHeight(Spline spline, int widthDataIndex, ref NativeList<float3> positions,
             ref NativeList<float3> normals, ref NativeList<float2> uvs, ref NativeList<int> indices)
         {
@@ -688,12 +693,21 @@ namespace GameCraftersGuild.WorldBuilding
             bool isStraightLine = spline.Count == 2;
             bool isLongPath = length > 50f;
             
-            // Determine segment count - more segments for better height representation
-            int kBaseSegmentsPerMeter = 15; // Higher density for better height accuracy
-            float segmentDensity = Mathf.Min(kBaseSegmentsPerMeter, kBaseSegmentsPerMeter * 50f / Mathf.Max(50f, length));
-            segmentDensity = Mathf.Max(segmentDensity, 1.0f);
+            // CRITICAL FIX: Increase segment density for better continuity
+            int kBaseSegmentsPerMeter = Mathf.Max(20, (int)(length * 0.5f)); // Much higher density
+            float segmentDensity = Mathf.Min(kBaseSegmentsPerMeter, kBaseSegmentsPerMeter * 60f / Mathf.Max(60f, length));
+            segmentDensity = Mathf.Max(segmentDensity, 2.0f);
             
-            int segments = Mathf.Max(16, Mathf.CeilToInt(segmentDensity * length));
+            int segments = Mathf.Max(32, Mathf.CeilToInt(segmentDensity * length));
+
+            // For long paths, ensure enough segments to avoid breaks
+            if (isLongPath) {
+                segments = Mathf.Max(segments, Mathf.CeilToInt(length * 2));
+            }
+            
+            // Make sure we have a power of 2 number of segments for better texture alignment
+            segments = Mathf.NextPowerOfTwo(segments);
+            
             float segmentStepT = 1f / segments;
             int steps = segments + 1;
             int vertexCount = steps * 2;
@@ -716,11 +730,14 @@ namespace GameCraftersGuild.WorldBuilding
                 Debug.Log($"Start height: {startPos.y}, End height: {endPos.y}");
             }
             
-            // UV scaling
-            float uvScaleFactor = Mathf.Min(1f, 10f / Mathf.Sqrt(length));
+            // UV scaling - use a more consistent approach for all path lengths
+            float uvScaleFactor = 1.0f;
+            if (length > Width * 10) {
+                // For longer paths, we want tiling
+                uvScaleFactor = Width / (length * 0.1f);
+            }
 
-            // CRITICAL: Instead of pre-calculating and smoothing heights, we'll use the exact
-            // heights from spline evaluation at each point
+            // CRITICAL: Use continuous parameter evaluation to avoid breaks
             for (int i = 0; i < steps; i++)
             {
                 float t = (float)i / (steps - 1);
@@ -771,6 +788,9 @@ namespace GameCraftersGuild.WorldBuilding
                     }
                 }
                 
+                // Ensure minimum width for better visibility
+                width = math.max(width, 0.5f);
+                
                 // CRITICAL FIX: Apply vertex positions with consistent tangent but preserve exact height
                 float3 leftPos = pos - (tangent * width);
                 float3 rightPos = pos + (tangent * width);
@@ -793,17 +813,24 @@ namespace GameCraftersGuild.WorldBuilding
                 normals.Add(up);
                 normals.Add(up);
                 
-                // Calculate UV coordinates
-                float v = (t * length / Width * uvScaleFactor) % 1.0f;
-                if (isStraightLine) v = t; // Better UV mapping for straight lines
+                // Calculate UV coordinates - CRITICAL: use consistent UV mapping to avoid breaks
+                float v;
+                if (isStraightLine) {
+                    v = t; // Simple mapping for straight lines
+                } else {
+                    // Use absolute distance along spline for more consistent mapping
+                    float distanceAlongSpline = t * length;
+                    v = (distanceAlongSpline / Width) * uvScaleFactor;
+                }
                 
                 uvs.Add(new float2(-1f, v));
                 uvs.Add(new float2(1f, v));
             }
             
-            // Create triangles
+            // Create triangles with overlapping to avoid gaps
             for (int i = 0, n = prevVertexCount; i < triangleCount; i += 6, n += 2)
             {
+                // Use modulo to properly connect the mesh
                 indices.Add((n + 2) % (prevVertexCount + vertexCount));
                 indices.Add((n + 1) % (prevVertexCount + vertexCount));
                 indices.Add((n + 0) % (prevVertexCount + vertexCount));

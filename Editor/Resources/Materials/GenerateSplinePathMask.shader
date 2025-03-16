@@ -6,6 +6,7 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/GenerateSplinePathMask"
         _LocalBoundsMinY ("Local Bounds Min Y", Float) = 0.0
         _LocalBoundsMaxY ("Local Bounds Max Y", Float) = 1.0
         _IsStraightLine ("Is Straight Line", Float) = 0.0
+        _Width ("Width", Float) = 5.0
     }
     
     SubShader
@@ -20,6 +21,7 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/GenerateSplinePathMask"
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma target 3.0
             
             #include "UnityCG.cginc"
             
@@ -43,6 +45,7 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/GenerateSplinePathMask"
             float _LocalBoundsMinY;
             float _LocalBoundsMaxY;
             float _IsStraightLine;
+            float _Width;
             
             v2f vert (appdata v)
             {
@@ -57,19 +60,23 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/GenerateSplinePathMask"
             
             float4 frag (v2f i) : SV_Target
             {
-                // Calculate mask intensity based on UV 
-                // Stronger in center (1.0), weaker at edges (0.0)
+                // CRITICAL FIX: Improve mask intensity calculation to avoid discontinuities
+                // Use a smoother falloff that stretches to the edges
                 float maskIntensity = 1.0 - abs(i.uv.x);
                 
-                // Apply more gradual falloff for long paths
+                // Apply more gradual falloff for better continuity
                 if (_IsStraightLine > 0.5) {
-                    maskIntensity = pow(maskIntensity, 0.8); // Less falloff for straight lines
+                    // Straight lines need a sharper, more defined edge
+                    maskIntensity = pow(maskIntensity, 0.7);
                 } else {
-                    // More consistent falloff that doesn't vary with path length
-                    maskIntensity = pow(maskIntensity, 0.95);
+                    // For curved paths, use a softer falloff that ensures full coverage
+                    maskIntensity = saturate(pow(maskIntensity, 0.85) + 0.05);
+                    
+                    // Add a slight offset to ensure overlapping between segments
+                    maskIntensity *= 1.05;
                 }
                 
-                // CRITICAL FIX: Don't derive height from world position - use actual Y position directly
+                // CRITICAL: Don't derive height from world position - use actual Y position directly
                 // This ensures we're using the exact height from the spline
                 float height = i.localPos.y;
                 
