@@ -1,0 +1,91 @@
+:root {
+    --spacing-xs: 2px;
+    --spacing-s: 4px;
+    --spacing-m: 8px;
+    --spacing-l: 12px;
+    --spacing-xl: 16px;
+}
+
+.header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-m);
+    border-bottom-width: 1px;
+    border-bottom-color: rgb(50, 50, 50);
+}
+
+.header-label {
+    font-size: 14px;
+    -unity-font-style: bold;
+}
+
+.toolbar {
+    flex-direction: row;
+    padding: var(--spacing-s) var(--spacing-m);
+    border-bottom-width: 1px;
+    border-bottom-color: rgb(50, 50, 50);
+    align-items: center;
+}
+
+.toolbar > Button {
+    margin-right: var(--spacing-m);
+}
+
+.spacer {
+    flex-grow: 1;
+}
+
+.container {
+    flex-grow: 1;
+    padding: var(--spacing-m);
+}
+
+.section-label {
+    -unity-font-style: bold;
+    margin-bottom: var(--spacing-s);
+}
+
+.footer {
+    padding: var(--spacing-m);
+    border-top-width: 1px;
+    border-top-color: rgb(50, 50, 50);
+}
+
+.list-item {
+    flex-direction: row;
+    align-items: center;
+    padding: var(--spacing-xs) var(--spacing-s);
+}
+
+.list-item:hover {
+    background-color: rgba(75, 75, 75, 0.2);
+}
+
+.list-item__icon {
+    width: 20px;
+    height: 20px;
+    margin-right: var(--spacing-s);
+}
+
+.list-item__name {
+    flex-grow: 1;
+}
+
+.list-item__handle {
+    width: 16px;
+    height: 16px;
+    background-image: resource("drag-handle");
+    -unity-background-scale-mode: scale-to-fit;
+    opacity: 0.5;
+}
+
+.list-item__handle:hover {
+    opacity: 1;
+}
+
+.drag-indicator {
+    height: 2px;
+    background-color: rgb(0, 120, 210);
+    margin: var(--spacing-xs) 0;
+} 

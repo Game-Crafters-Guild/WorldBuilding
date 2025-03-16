@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UXML xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+      xmlns="UnityEngine.UIElements" 
+      xmlns:editor="UnityEditor.UIElements" 
+      xsi:schemaLocation="UnityEngine.UIElements ../../UIElementsSchema/UnityEngine.UIElements.xsd UnityEditor.UIElements ../../UIElementsSchema/UnityEditor.UIElements.xsd">
+    <VisualElement class="list-item">
+        <editor:ObjectField name="stamp-object" class="list-item__object-field" />
+        <Label name="stamp-path" class="list-item__path" />
+        <Label name="stamp-priority" class="list-item__priority" />
+        <Button name="select-button" text="Select" class="list-item__select-button" />
+        <VisualElement name="drag-handle" class="list-item__handle" />
+    </VisualElement>
+</UXML> 

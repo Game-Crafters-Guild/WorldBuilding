@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UXML xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+      xmlns="UnityEngine.UIElements" 
+      xmlns:editor="UnityEditor.UIElements" 
+      xsi:schemaLocation="UnityEngine.UIElements ../../UIElementsSchema/UnityEngine.UIElements.xsd UnityEditor.UIElements ../../UIElementsSchema/UnityEditor.UIElements.xsd">
+    <Style src="StampOrderingWindow.uss" />
+    
+    <VisualElement class="header">
+        <Label text="Stamp Order Manager" class="header-label" />
+        <Button text="Refresh" name="refresh-button" />
+    </VisualElement>
+    
+    <VisualElement class="toolbar">
+        <Button text="Select All" name="select-all-button" />
+        <Button text="Deselect All" name="deselect-all-button" />
+        <VisualElement class="spacer" />
+        <Toggle label="Auto-refresh" name="auto-refresh-toggle" value="true" />
+    </VisualElement>
+    
+    <VisualElement class="container">
+        <Label text="Processing Order (Top to Bottom)" class="section-label" />
+        <ListView name="stamps-list-view" item-height="24" show-border="true" selection-type="Multiple" reorderable="true" />
+    </VisualElement>
+    
+    <VisualElement class="footer">
+        <Label text="Drag items to change their processing order" />
+    </VisualElement>
+</UXML> 
