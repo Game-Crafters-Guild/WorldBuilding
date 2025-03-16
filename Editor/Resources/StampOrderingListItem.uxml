@@ -3,9 +3,10 @@
       xmlns="UnityEngine.UIElements" 
       xmlns:editor="UnityEditor.UIElements" 
       xsi:schemaLocation="UnityEngine.UIElements ../../UIElementsSchema/UnityEngine.UIElements.xsd UnityEditor.UIElements ../../UIElementsSchema/UnityEditor.UIElements.xsd">
-    <VisualElement class="list-item">
-        <editor:ObjectField name="stamp-object" class="list-item__object-field" />
-        <Label name="stamp-path" class="list-item__path" />
+    <VisualElement class="list-item" name="stamp-item">
+        <Image name="stamp-icon" class="list-item__icon" />
+        <Label name="stamp-name" class="list-item__name" />
+        <Label name="stamp-type" class="list-item__type" />
         <Label name="stamp-priority" class="list-item__priority" />
         <Button name="select-button" text="Select" class="list-item__select-button" />
         <VisualElement name="drag-handle" class="list-item__handle" />

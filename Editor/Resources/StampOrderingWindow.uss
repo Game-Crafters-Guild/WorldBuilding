@@ -52,10 +52,23 @@
     border-top-color: rgb(50, 50, 50);
 }
 
+/* Additional padding at the top of the list to make drag target more visible */
+.unity-list-view__item:first-child {
+    margin-top: var(--spacing-m);
+}
+
+/* Extra padding for last item to make dragging to bottom easier */
+.unity-list-view__item:last-child {
+    margin-bottom: var(--spacing-m);
+}
+
 .list-item {
     flex-direction: row;
     align-items: center;
-    padding: var(--spacing-xs) var(--spacing-s);
+    padding: var(--spacing-s) var(--spacing-m);
+    margin: 1px 0;
+    border-radius: 3px;
+    height: 28px;
 }
 
 .list-item:hover {
@@ -70,22 +83,43 @@
 
 .list-item__name {
     flex-grow: 1;
+    -unity-text-align: middle-left;
+}
+
+.list-item__type {
+    color: rgb(170, 170, 170);
+    width: 120px;
+    -unity-text-align: middle-left;
+    margin-right: var(--spacing-s);
+}
+
+.list-item__priority {
+    width: 80px;
+    -unity-text-align: middle-left;
+    margin-right: var(--spacing-s);
+}
+
+.list-item__select-button {
+    width: 60px;
+    margin-right: var(--spacing-m);
+    height: 20px;
 }
 
 .list-item__handle {
     width: 16px;
     height: 16px;
-    background-image: resource("drag-handle");
+    background-image: resource("d_CONTEXT_MENU_Handle_1");
     -unity-background-scale-mode: scale-to-fit;
-    opacity: 0.5;
+    opacity: 0.6;
+    cursor: move-arrow;
 }
 
 .list-item__handle:hover {
     opacity: 1;
 }
 
-.drag-indicator {
+.unity-list-view__drag-hover-bar {
     height: 2px;
     background-color: rgb(0, 120, 210);
-    margin: var(--spacing-xs) 0;
+    margin: 0;
 } 

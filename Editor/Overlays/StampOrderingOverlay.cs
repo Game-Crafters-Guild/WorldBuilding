@@ -85,8 +85,18 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             stampListView.makeItem = () =>
             {
                 var itemElement = listItemTemplate.CloneTree();
-                var objectField = itemElement.Q<ObjectField>("stamp-object");
-                objectField.SetEnabled(false); // Make it read-only
+                
+                // Register double-click handler for selection
+                var listItem = itemElement.Q<VisualElement>("stamp-item");
+                listItem.RegisterCallback<MouseDownEvent>(evt => {
+                    if (evt.clickCount == 2) {
+                        int index = (int)listItem.userData;
+                        if (index >= 0 && index < stamps.Count) {
+                            Selection.activeGameObject = stamps[index].gameObject;
+                            EditorGUIUtility.PingObject(stamps[index].gameObject);
+                        }
+                    }
+                });
                 
                 var selectButton = itemElement.Q<Button>("select-button");
                 selectButton.clicked += () => 
@@ -106,24 +116,33 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             {
                 var stamp = stamps[index];
                 
+                // Store index on the list item for double-click
+                var listItem = element.Q<VisualElement>("stamp-item");
+                listItem.userData = index;
+                
                 // Set user data for the select button
                 var selectButton = element.Q<Button>("select-button");
                 selectButton.userData = index;
                 
-                // Set object field
-                var objectField = element.Q<ObjectField>("stamp-object");
-                objectField.objectType = typeof(Stamp);
-                objectField.value = stamp;
+                // Set stamp icon
+                var iconElement = element.Q<Image>("stamp-icon");
+                iconElement.image = EditorGUIUtility.ObjectContent(stamp, typeof(Stamp)).image;
                 
-                // Set path label to show hierarchy path
-                var pathLabel = element.Q<Label>("stamp-path");
-                pathLabel.text = GetHierarchyPath(stamp.transform);
+                // Set name label
+                var nameLabel = element.Q<Label>("stamp-name");
+                nameLabel.text = stamp.name;
+                
+                // Set type label (show shape type)
+                var typeLabel = element.Q<Label>("stamp-type");
+                typeLabel.text = stamp.Shape != null ? $"({stamp.Shape.GetType().Name.Replace("Shape", "")})" : "(Unknown)";
                 
                 // Set priority label
                 var priorityLabel = element.Q<Label>("stamp-priority");
                 priorityLabel.text = $"Priority: {stamp.Priority}";
             };
             
+            // Set a fixed item height to improve performance and appearance
+            stampListView.fixedItemHeight = 30;
             stampListView.itemsSource = stamps;
             
             // Handle reordering
