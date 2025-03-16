@@ -6,6 +6,10 @@
     --spacing-xl: 16px;
 }
 
+.stamp-order-manager-root {
+    flex-grow: 1;
+}
+
 .header {
     flex-direction: row;
     justify-content: space-between;
@@ -62,6 +66,11 @@
     margin-bottom: var(--spacing-m);
 }
 
+/* Additional styling for list items to ensure they render properly in all contexts */
+.unity-list-view__item {
+    margin: 1px 0;
+}
+
 .list-item {
     flex-direction: row;
     align-items: center;
@@ -69,6 +78,7 @@
     margin: 1px 0;
     border-radius: 3px;
     height: 28px;
+    background-color: rgba(45, 45, 45, 0.1);
 }
 
 .list-item:hover {
@@ -105,21 +115,8 @@
     height: 20px;
 }
 
-.list-item__handle {
-    width: 16px;
-    height: 16px;
-    background-image: resource("d_CONTEXT_MENU_Handle_1");
-    -unity-background-scale-mode: scale-to-fit;
-    opacity: 0.6;
-    cursor: move-arrow;
-}
-
-.list-item__handle:hover {
-    opacity: 1;
-}
-
 .unity-list-view__drag-hover-bar {
     height: 2px;
     background-color: rgb(0, 120, 210);
-    margin: 0;
+    margin: var(--spacing-xs) 0;
 } 

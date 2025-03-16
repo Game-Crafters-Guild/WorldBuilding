@@ -23,6 +23,9 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             // Attach a default Inspector to the Foldout.
             InspectorElement.FillDefaultInspector(inspector, serializedObject, this);
 
+            // Add a button next to Priority field to open Stamp Order Manager
+            CustomizePriorityField(inspector);
+
             m_ShapeInspector = new Foldout() { text = "Shape Properties" };
             CreateShapeDropdown(inspector);
             FillShapeInspector(m_ShapeInspector, inspector);
@@ -182,6 +185,44 @@ namespace GameCraftersGuild.WorldBuilding.Editor
         private void OnPropertyFieldValueChanged(SerializedPropertyChangeEvent evt)
         {
             Target.IsDirty = true;
+        }
+
+        private void CustomizePriorityField(VisualElement inspector)
+        {
+            // Find the Priority field
+            PropertyField priorityField = inspector.Q<PropertyField>("PropertyField:m_Priority");
+            if (priorityField == null) return;
+
+            // Create a container for field and button
+            VisualElement container = new VisualElement();
+            container.style.flexDirection = FlexDirection.Row;
+            container.style.alignItems = Align.Center;
+            
+            // Remove the original field from the inspector
+            priorityField.RemoveFromHierarchy();
+            
+            // Add the field to our container
+            container.Add(priorityField);
+            priorityField.style.flexGrow = 1;
+            
+            // Create a button to open the Stamp Order Manager
+            Button openOrderManagerButton = new Button(() => StampOrderingWindow.ShowWindow());
+            openOrderManagerButton.text = "Order Manager";
+            openOrderManagerButton.tooltip = "Open the Stamp Order Manager to view and reorder all stamps";
+            openOrderManagerButton.style.marginLeft = 5;
+            container.Add(openOrderManagerButton);
+            
+            // Find where to insert the container (after the script field)
+            var scriptField = inspector.Q<PropertyField>("PropertyField:m_Script");
+            if (scriptField != null)
+            {
+                int scriptIndex = inspector.IndexOf(scriptField);
+                inspector.Insert(scriptIndex + 1, container);
+            }
+            else
+            {
+                inspector.Insert(0, container);
+            }
         }
     }
 }

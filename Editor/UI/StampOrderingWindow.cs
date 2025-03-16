@@ -80,6 +80,7 @@ namespace GameCraftersGuild.WorldBuilding.Editor
 
         private void SetupListView()
         {
+            stampListView.reorderMode = ListViewReorderMode.Animated;
             stampListView.makeItem = () =>
             {
                 var itemElement = listItemTemplate.CloneTree();
