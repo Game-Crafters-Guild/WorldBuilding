@@ -315,7 +315,7 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             
             // Position the object at the center of the drawn points
             float3 center = CalculateCenter(positions);
-            splineObject.transform.position = center;
+            splineObject.transform.position = center + new float3(0.0f, 1.0f, 1.0f);
             
             // Create the spline
             Spline spline = splineContainer.Spline != null ? splineContainer.Spline : new Spline();

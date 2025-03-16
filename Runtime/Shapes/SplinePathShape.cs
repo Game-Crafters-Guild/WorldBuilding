@@ -16,10 +16,19 @@ namespace GameCraftersGuild.WorldBuilding
         public override bool MaintainMaskAspectRatio { get; } = false;
 
         [SerializeField, HideInInspector] private Material m_SplineToMaskMaterial;
-        private const int kMaskTextureWidth = 256;
-        private const int kMaskTextureHeight = 256;
+        [SerializeField, HideInInspector] private ComputeShader m_BlurComputeShader;
+        
+        [Tooltip("Higher resolution gives smoother edges but uses more memory")]
+        [SerializeField] private int m_MaskResolution = 256;
+        
+        [Tooltip("Number of blur passes, higher values give smoother edges")]
+        [SerializeField, Range(1, 10)] private int m_BlurPasses = 3;
+        
+        [Tooltip("Blur strength, higher values give smoother but more spread out edges")]
+        [SerializeField, Range(1, 10)] private int m_BlurStrength = 5;
 
         private static readonly int kMaterialColorId = Shader.PropertyToID("_Color");
+        private static readonly int kBlurStrengthId = Shader.PropertyToID("_BlurStrength");
 
         [SerializeField] List<SplineData<float>> m_Widths = new List<SplineData<float>>();
 
@@ -43,12 +52,17 @@ namespace GameCraftersGuild.WorldBuilding
         {
             if (m_SplineContainer.Splines.Count == 0) return;
 
-            RenderTexture renderTexture = RenderTexture.GetTemporary(kMaskTextureWidth, kMaskTextureHeight, 0,
+            int maskTextureWidth = m_MaskResolution;
+            int maskTextureHeight = m_MaskResolution;
+
+            RenderTexture renderTexture = RenderTexture.GetTemporary(maskTextureWidth, maskTextureHeight, 0,
                 RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
             renderTexture.enableRandomWrite = true;
 
             FindSplineMaskMaterial();
-            MaskTexture = new Texture2D(kMaskTextureWidth, kMaskTextureHeight, TextureFormat.ARGB32, false, true);
+            FindBlurComputeShader();
+
+            MaskTexture = new Texture2D(maskTextureWidth, maskTextureHeight, TextureFormat.ARGB32, false, true);
             MaskTexture.wrapMode = TextureWrapMode.Clamp;
 
             Mesh splineMesh = GenerateSplineMesh();
@@ -89,6 +103,75 @@ namespace GameCraftersGuild.WorldBuilding
             cmd.CopyTexture(renderTexture, MaskTexture);
             Graphics.ExecuteCommandBuffer(cmd);
 
+            // Apply blur to smooth out the jagged edges
+            if (m_BlurComputeShader != null)
+            {
+                try
+                {
+                    // Create two temporary textures for ping-pong blurring
+                    RenderTexture blurTextureA = RenderTexture.GetTemporary(maskTextureWidth, maskTextureHeight, 0,
+                        RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+                    RenderTexture blurTextureB = RenderTexture.GetTemporary(maskTextureWidth, maskTextureHeight, 0,
+                        RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+                    
+                    blurTextureA.enableRandomWrite = true;
+                    blurTextureB.enableRandomWrite = true;
+                    
+                    // Create and activate the textures to ensure they're valid
+                    blurTextureA.Create();
+                    blurTextureB.Create();
+                    
+                    // Initial copy
+                    Graphics.Blit(renderTexture, blurTextureA);
+
+                    // Calculate dispatch dimensions - ensure at least 1 workgroup
+                    int workgroupsX = Mathf.Max(1, Mathf.CeilToInt(maskTextureWidth / 8.0f));
+                    int workgroupsY = Mathf.Max(1, Mathf.CeilToInt(maskTextureHeight / 8.0f));
+                    
+                    // Verify kernel exists
+                    int blurKernel = m_BlurComputeShader.FindKernel("CSBlurMask");
+                    
+                    // Set blur strength - clamp to reasonable values
+                    m_BlurStrength = Mathf.Clamp(m_BlurStrength, 1, 10);
+                    m_BlurComputeShader.SetInt(kBlurStrengthId, m_BlurStrength);
+
+                    // Limit blur passes to avoid potential issues
+                    int blurPasses = Mathf.Clamp(m_BlurPasses, 1, 10);
+                    
+                    // Multi-pass blur with ping-pong rendering
+                    RenderTexture currentSource = blurTextureA;
+                    RenderTexture currentTarget = blurTextureB;
+                    
+                    for (int pass = 0; pass < blurPasses; pass++)
+                    {
+                        // Set textures for this pass
+                        m_BlurComputeShader.SetTexture(blurKernel, "Source", currentSource);
+                        m_BlurComputeShader.SetTexture(blurKernel, "Result", currentTarget);
+                        
+                        // Dispatch the shader
+                        m_BlurComputeShader.Dispatch(blurKernel, workgroupsX, workgroupsY, 1);
+                        
+                        // Swap textures for next pass
+                        RenderTexture temp = currentSource;
+                        currentSource = currentTarget;
+                        currentTarget = temp;
+                    }
+                    
+                    // Copy the final blurred result back to our mask texture
+                    Graphics.CopyTexture(currentSource, MaskTexture);
+                    
+                    // Release temporary RenderTextures
+                    RenderTexture.ReleaseTemporary(blurTextureA);
+                    RenderTexture.ReleaseTemporary(blurTextureB);
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogError($"Error during spline path blur: {e.Message}");
+                    // Fallback - just use the unblurred texture
+                    Graphics.CopyTexture(renderTexture, MaskTexture);
+                }
+            }
+
             RenderTexture.ReleaseTemporary(renderTexture);
         }
 
@@ -105,6 +188,10 @@ namespace GameCraftersGuild.WorldBuilding
             }
 
             FindSplineMaskMaterial();
+            FindBlurComputeShader();
+            
+            // Ensure mask resolution is a power of 2
+            m_MaskResolution = Mathf.NextPowerOfTwo(Mathf.Clamp(m_MaskResolution, 512, 4096));
         }
 
         private void FindSplineMaskMaterial()
@@ -117,9 +204,21 @@ namespace GameCraftersGuild.WorldBuilding
 #endif
         }
 
+        private void FindBlurComputeShader()
+        {
+#if UNITY_EDITOR
+            if (m_BlurComputeShader == null)
+            {
+                m_BlurComputeShader = Resources.Load<ComputeShader>("Shaders/SplinePathBlurShader");
+            }
+#endif
+        }
+
         protected void OnEnable()
         {
             m_SplineContainer = GetComponent<SplineContainer>();
+            FindSplineMaskMaterial();
+            FindBlurComputeShader();
         }
 
         private Mesh GenerateSplineMesh()

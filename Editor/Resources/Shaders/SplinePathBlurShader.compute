@@ -1,0 +1,62 @@
+#pragma kernel CSBlurMask
+
+Texture2D<float4> Source;
+RWTexture2D<float4> Result;
+
+// Controls the blur strength/radius
+int _BlurStrength;
+
+[numthreads(8,8,1)]
+void CSBlurMask(uint3 id : SV_DispatchThreadID)
+{
+    uint width, height;
+    Source.GetDimensions(width, height);
+    
+    // Skip if out of bounds
+    if (id.x >= width || id.y >= height)
+        return;
+    
+    // Apply a weighted blur with safer bounds checking
+    int kBlurRadius = min(max(1, _BlurStrength), 10); // Limit radius to avoid excessive sampling
+    float4 sum = float4(0, 0, 0, 0);
+    float totalWeight = 0;
+    
+    // Sigma value for Gaussian - related to blur strength
+    float sigma = kBlurRadius * 0.5;
+    float twoSigmaSq = 2.0 * sigma * sigma;
+    
+    // Sample within safe bounds
+    for (int y = -kBlurRadius; y <= kBlurRadius; y++)
+    {
+        for (int x = -kBlurRadius; x <= kBlurRadius; x++)
+        {
+            int2 samplePos = int2(id.xy) + int2(x, y);
+            
+            // Strict bounds checking to prevent sampling outside texture
+            if (samplePos.x < 0 || samplePos.y < 0 || samplePos.x >= width || samplePos.y >= height)
+                continue;
+            
+            // Weight calculation (true Gaussian)
+            float distSq = float(x * x + y * y);
+            float weight = exp(-distSq / twoSigmaSq);
+            
+            float4 pixelColor = Source[samplePos];
+            sum += pixelColor * weight;
+            totalWeight += weight;
+        }
+    }
+    
+    // Avoid division by zero
+    float4 result = totalWeight > 0.0001 ? sum / totalWeight : Source[id.xy];
+    
+    // Get original pixel safely
+    float4 original = Source[id.xy];
+    
+    // Additional intensity-preserving smoothing for alpha channel
+    if (original.a > 0.01)
+    {
+        result.a = max(result.a, original.a * 0.7);
+    }
+    
+    Result[id.xy] = result;
+} 
