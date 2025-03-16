@@ -50,6 +50,9 @@ namespace GameCraftersGuild.WorldBuilding.Editor
 
         private void AddStampManagementSection(VisualElement inspector)
         {
+            // Create a container for the entire stamp management section
+            var stampManagementContainer = new VisualElement();
+            
             // Create a container for the header row
             var headerRow = new VisualElement();
             headerRow.style.flexDirection = FlexDirection.Row;
@@ -58,13 +61,15 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             headerRow.style.marginTop = 10;
             
             // Stamp ordering section foldout
-            var stampOrderingSection = new Foldout
+            var stampOrderingFoldout = new Foldout
             {
                 text = "Stamp Order Manager",
                 value = false // Start collapsed
             };
-            stampOrderingSection.style.flexGrow = 1;
-            headerRow.Add(stampOrderingSection);
+            stampOrderingFoldout.style.flexGrow = 1;
+            stampOrderingFoldout.style.marginRight = 0;
+            stampOrderingFoldout.style.marginBottom = 0;
+            headerRow.Add(stampOrderingFoldout);
             
             // Add Order Manager button
             Button openOrderManagerButton = new Button(() => {
@@ -109,8 +114,12 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             openOrderManagerButton.style.marginLeft = 5;
             headerRow.Add(openOrderManagerButton);
             
-            // Add the header row to the inspector
-            inspector.Add(headerRow);
+            // Add the header row to the container
+            stampManagementContainer.Add(headerRow);
+            
+            // Create a container for the foldout content
+            var foldoutContent = new VisualElement();
+            foldoutContent.style.display = DisplayStyle.None;
             
             // Create our stamp ordering control
             stampOrderingControl = new StampOrderingControl
@@ -120,8 +129,19 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                 ListHeight = 200f
             };
             
-            // Add the control to the foldout
-            stampOrderingSection.Add(stampOrderingControl);
+            // Add the control to the foldout content
+            foldoutContent.Add(stampOrderingControl);
+            
+            // Add the foldout content to the container
+            stampManagementContainer.Add(foldoutContent);
+            
+            // Connect the foldout toggle to show/hide the content
+            stampOrderingFoldout.RegisterValueChangedCallback(evt => {
+                foldoutContent.style.display = evt.newValue ? DisplayStyle.Flex : DisplayStyle.None;
+            });
+            
+            // Add the container to the inspector
+            inspector.Add(stampManagementContainer);
         }
     }
 }
