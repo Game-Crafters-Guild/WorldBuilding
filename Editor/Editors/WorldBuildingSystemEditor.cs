@@ -32,48 +32,6 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             generateButton.style.flexGrow = 1;
             buttonContainer.Add(generateButton);
             
-            // Add Stamp Order Manager button
-            Button openOrderManagerButton = new Button(() => {
-                // Show a dropdown menu with options
-                GenericMenu menu = new GenericMenu();
-                
-                menu.AddItem(new GUIContent("Open as Window"), false, () => {
-                    StampOrderingWindow.ShowWindow();
-                });
-                
-                /*menu.AddItem(new GUIContent("Toggle Overlay"), false, () => {
-                    // Get the overlay type
-                    var overlayType = typeof(StampOrderingOverlay);
-                    
-                    // Get the current scene view
-                    var sceneView = SceneView.lastActiveSceneView;
-                    if (sceneView != null)
-                    {
-                        // Toggle the overlay
-                        var overlays = sceneView.overlays;
-                        var overlay = overlays.Find(overlayType) as StampOrderingOverlay;
-                        
-                        if (overlay != null)
-                        {
-                            if (overlay.displayed)
-                                overlay.collapsed = !overlay.collapsed;
-                            else
-                                overlay.displayed = true;
-                        }
-                        else
-                        {
-                            overlays.Add(overlayType);
-                        }
-                    }
-                });*/
-                
-                menu.ShowAsContext();
-            });
-            openOrderManagerButton.text = "Stamp Order Manager";
-            openOrderManagerButton.tooltip = "Open the Stamp Order Manager to view and reorder all stamps";
-            openOrderManagerButton.style.marginLeft = 5;
-            buttonContainer.Add(openOrderManagerButton);
-            
             inspector.Add(buttonContainer);
             
             // Add the stylesheet for the order management
@@ -92,12 +50,67 @@ namespace GameCraftersGuild.WorldBuilding.Editor
 
         private void AddStampManagementSection(VisualElement inspector)
         {
-            // Stamp ordering section
+            // Create a container for the header row
+            var headerRow = new VisualElement();
+            headerRow.style.flexDirection = FlexDirection.Row;
+            headerRow.style.alignItems = Align.Center;
+            headerRow.style.justifyContent = Justify.SpaceBetween;
+            headerRow.style.marginTop = 10;
+            
+            // Stamp ordering section foldout
             var stampOrderingSection = new Foldout
             {
                 text = "Stamp Order Manager",
                 value = false // Start collapsed
             };
+            stampOrderingSection.style.flexGrow = 1;
+            headerRow.Add(stampOrderingSection);
+            
+            // Add Order Manager button
+            Button openOrderManagerButton = new Button(() => {
+                // Show a dropdown menu with options
+                GenericMenu menu = new GenericMenu();
+                
+                menu.AddItem(new GUIContent("Open as Window"), false, () => {
+                    StampOrderingWindow.ShowWindow();
+                });
+                
+                menu.AddItem(new GUIContent("Toggle Overlay"), false, () => {
+                    // Get the overlay type
+                    var overlayType = typeof(StampOrderingOverlay);
+                    
+                    // Get the current scene view
+                    var sceneView = SceneView.lastActiveSceneView;
+                    if (sceneView != null)
+                    {
+                        // Toggle the overlay
+                        sceneView.TryGetOverlay(StampOrderingOverlay.kId, out var overlay);
+                        if (overlay != null)
+                        {
+                            if (overlay.displayed)
+                                overlay.collapsed = !overlay.collapsed;
+                            else
+                                overlay.displayed = true;
+                        }
+                        else
+                        {
+                            overlay = new StampOrderingOverlay();
+                            SceneView.AddOverlayToActiveView(overlay);
+                            overlay.displayed = true;
+                            overlay.collapsed = false;
+                        }
+                    }
+                });
+                
+                menu.ShowAsContext();
+            });
+            openOrderManagerButton.text = "Order Manager";
+            openOrderManagerButton.tooltip = "Open the Stamp Order Manager to view and reorder all stamps";
+            openOrderManagerButton.style.marginLeft = 5;
+            headerRow.Add(openOrderManagerButton);
+            
+            // Add the header row to the inspector
+            inspector.Add(headerRow);
             
             // Create our stamp ordering control
             stampOrderingControl = new StampOrderingControl
@@ -107,8 +120,8 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                 ListHeight = 200f
             };
             
+            // Add the control to the foldout
             stampOrderingSection.Add(stampOrderingControl);
-            inspector.Add(stampOrderingSection);
         }
     }
 }

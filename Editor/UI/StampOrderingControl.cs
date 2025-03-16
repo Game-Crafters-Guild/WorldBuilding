@@ -14,70 +14,89 @@ namespace GameCraftersGuild.WorldBuilding.Editor
     [UxmlElement]
     public partial class StampOrderingControl : VisualElement
     {
-        private ListView stampListView;
-        private List<Stamp> stamps = new List<Stamp>();
-        private Toggle autoRefreshToggle;
-        private WorldBuildingSystem worldBuildingSystem;
-        private VisualTreeAsset listItemTemplate;
-        private VisualElement headerContainer;
-        private VisualElement listContainer;
-        private Button refreshButton;
-        private Button selectAllButton;
-        private Button deselectAllButton;
+        private ListView m_StampListView;
+        private List<Stamp> m_Stamps = new List<Stamp>();
+        private Toggle m_AutoRefreshToggle;
+        private WorldBuildingSystem m_WorldBuildingSystem;
+        private VisualTreeAsset m_ListItemTemplate;
+        private VisualElement m_HeaderContainer;
+        private VisualElement m_ListContainer;
+        private Button m_RefreshButton;
+        private Button m_SelectAllButton;
+        private Button m_DeselectAllButton;
         
         // Events that consumers can subscribe to
         public event Action OnRefreshRequested;
         
         // Customization options
-        private bool showAutoRefreshToggle = true;
+        private bool m_ShowAutoRefreshToggle = true;
         public bool ShowAutoRefreshToggle 
         { 
-            get => showAutoRefreshToggle;
+            get => m_ShowAutoRefreshToggle;
             set 
             {
-                showAutoRefreshToggle = value;
-                if (autoRefreshToggle != null)
+                m_ShowAutoRefreshToggle = value;
+                if (m_AutoRefreshToggle != null)
                 {
-                    autoRefreshToggle.style.display = value ? DisplayStyle.Flex : DisplayStyle.None;
+                    m_AutoRefreshToggle.style.display = value ? DisplayStyle.Flex : DisplayStyle.None;
                 }
             }
         }
         
-        private bool showHeader = true;
+        private bool m_ShowHeader = true;
         public bool ShowHeader 
         { 
-            get => showHeader;
+            get => m_ShowHeader;
             set 
             {
-                showHeader = value;
-                if (headerContainer != null)
+                m_ShowHeader = value;
+                if (m_HeaderContainer != null)
                 {
-                    headerContainer.style.display = value ? DisplayStyle.Flex : DisplayStyle.None;
+                    m_HeaderContainer.style.display = value ? DisplayStyle.Flex : DisplayStyle.None;
                 }
             }
         }
         
-        private float listHeight = 300f;
+        private float m_ListHeight = 300f;
         public float ListHeight 
         { 
-            get => listHeight;
+            get => m_ListHeight;
             set 
             {
-                listHeight = value;
-                if (stampListView != null)
+                m_ListHeight = value;
+                if (m_StampListView != null)
                 {
-                    stampListView.style.height = value;
+                    m_StampListView.style.height = value;
                 }
             }
         }
         
         public bool AutoRefresh 
         {
-            get => autoRefreshToggle?.value ?? false;
+            get => m_AutoRefreshToggle?.value ?? false;
             set 
             {
-                if (autoRefreshToggle != null)
-                    autoRefreshToggle.value = value;
+                if (m_AutoRefreshToggle != null)
+                    m_AutoRefreshToggle.value = value;
+            }
+        }
+
+        private bool m_AutoAdjustListHeight = false;
+        public bool AutoAdjustListHeight
+        {
+            get => m_AutoAdjustListHeight;
+            set
+            {
+                if (m_AutoAdjustListHeight == value) return;
+                m_AutoAdjustListHeight = value;
+                if (m_AutoAdjustListHeight)
+                {
+                    RegisterCallback<GeometryChangedEvent>(OnGeometryChanged);
+                }
+                else
+                {
+                    UnregisterCallback<GeometryChangedEvent>(OnGeometryChanged);
+                }
             }
         }
         
@@ -106,9 +125,9 @@ namespace GameCraftersGuild.WorldBuilding.Editor
         {
             // Load UI assets using Resources.Load
             var visualTree = Resources.Load<VisualTreeAsset>("StampOrderingWindow");
-            listItemTemplate = Resources.Load<VisualTreeAsset>("StampOrderingListItem");
+            m_ListItemTemplate = Resources.Load<VisualTreeAsset>("StampOrderingListItem");
             
-            if (visualTree == null || listItemTemplate == null)
+            if (visualTree == null || m_ListItemTemplate == null)
             {
                 Add(new Label("Failed to load UI assets. Please ensure the UXML files are in the Resources folder."));
                 return;
@@ -125,58 +144,60 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             visualTree.CloneTree(this);
             
             // Get references to UI elements
-            headerContainer = this.Q<VisualElement>("header-container");
-            stampListView = this.Q<ListView>("stamps-list-view");
-            autoRefreshToggle = this.Q<Toggle>("auto-refresh-toggle");
-            refreshButton = this.Q<Button>("refresh-button");
-            selectAllButton = this.Q<Button>("select-all-button");
-            deselectAllButton = this.Q<Button>("deselect-all-button");
-            listContainer = this.Q<VisualElement>("list-container");
+            m_HeaderContainer = this.Q<VisualElement>("header-container");
+            m_StampListView = this.Q<ListView>("stamps-list-view");
+            m_AutoRefreshToggle = this.Q<Toggle>("auto-refresh-toggle");
+            m_RefreshButton = this.Q<Button>("refresh-button");
+            m_SelectAllButton = this.Q<Button>("select-all-button");
+            m_DeselectAllButton = this.Q<Button>("deselect-all-button");
+            m_ListContainer = this.Q<VisualElement>("list-container");
             
             // Setup event handlers
-            if (refreshButton != null)
-                refreshButton.clicked += RefreshStampsList;
+            if (m_RefreshButton != null)
+                m_RefreshButton.clicked += RefreshStampsList;
                 
-            if (selectAllButton != null)
-                selectAllButton.clicked += SelectAllStamps;
+            if (m_SelectAllButton != null)
+                m_SelectAllButton.clicked += SelectAllStamps;
                 
-            if (deselectAllButton != null)
-                deselectAllButton.clicked += DeselectAllStamps;
+            if (m_DeselectAllButton != null)
+                m_DeselectAllButton.clicked += DeselectAllStamps;
             
             // Setup the ListView
             SetupListView();
             
             // Apply initial property values
-            ShowHeader = showHeader;
-            ShowAutoRefreshToggle = showAutoRefreshToggle;
-            ListHeight = listHeight;
+            ShowHeader = m_ShowHeader;
+            ShowAutoRefreshToggle = m_ShowAutoRefreshToggle;
+            ListHeight = m_ListHeight;
         }
         
         private void SetupListView()
         {
-            if (stampListView == null) return;
+            if (m_StampListView == null) return;
             
             // Configure the list view
-            stampListView.fixedItemHeight = 30;
-            stampListView.showBoundCollectionSize = false;
-            stampListView.showAlternatingRowBackgrounds = AlternatingRowBackground.All;
-            stampListView.reorderable = true;
-            stampListView.selectionType = SelectionType.Multiple;
-            stampListView.virtualizationMethod = CollectionVirtualizationMethod.DynamicHeight;
+            m_StampListView.fixedItemHeight = 30;
+            m_StampListView.showBoundCollectionSize = false;
+            m_StampListView.showAlternatingRowBackgrounds = AlternatingRowBackground.All;
+            m_StampListView.reorderable = true;
+            m_StampListView.selectionType = SelectionType.Multiple;
+            m_StampListView.virtualizationMethod = CollectionVirtualizationMethod.DynamicHeight;
             
-            stampListView.makeItem = () =>
+            m_StampListView.makeItem = () =>
             {
-                var itemElement = listItemTemplate.CloneTree();
+                var itemElement = m_ListItemTemplate.CloneTree();
                 
                 // Register double-click handler for selection
                 var listItem = itemElement.Q<VisualElement>("stamp-item");
                 listItem.RegisterCallback<MouseDownEvent>(evt => {
-                    if (evt.clickCount == 2) {
-                        int index = (int)listItem.userData;
-                        if (index >= 0 && index < stamps.Count) {
-                            Selection.activeGameObject = stamps[index].gameObject;
-                            EditorGUIUtility.PingObject(stamps[index].gameObject);
+                    int index = (int)listItem.userData;
+                    if (index >= 0 && index < m_Stamps.Count) {
+                        if (evt.clickCount == 2) {
+                            // Double click selects the GameObject
+                            Selection.activeGameObject = m_Stamps[index].gameObject;
                         }
+                        // Single click always pings the item
+                        EditorGUIUtility.PingObject(m_Stamps[index].gameObject);
                     }
                 });
                 
@@ -184,19 +205,19 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                 selectButton.clicked += () => 
                 {
                     int index = (int)selectButton.userData;
-                    if (index >= 0 && index < stamps.Count)
+                    if (index >= 0 && index < m_Stamps.Count)
                     {
-                        Selection.activeGameObject = stamps[index].gameObject;
-                        EditorGUIUtility.PingObject(stamps[index].gameObject);
+                        Selection.activeGameObject = m_Stamps[index].gameObject;
+                        EditorGUIUtility.PingObject(m_Stamps[index].gameObject);
                     }
                 };
                 
                 return itemElement;
             };
             
-            stampListView.bindItem = (element, index) =>
+            m_StampListView.bindItem = (element, index) =>
             {
-                var stamp = stamps[index];
+                var stamp = m_Stamps[index];
                 
                 // Store index on the list item for double-click
                 var listItem = element.Q<VisualElement>("stamp-item");
@@ -224,29 +245,29 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             };
             
             // Set the items source
-            stampListView.itemsSource = stamps;
+            m_StampListView.itemsSource = m_Stamps;
             
             // Handle reordering
-            stampListView.itemIndexChanged += ReorderStampsInHierarchy;
+            m_StampListView.itemIndexChanged += ReorderStampsInHierarchy;
             
             // Set the initial height
-            stampListView.style.height = listHeight;
+            m_StampListView.style.height = m_ListHeight;
         }
         
         private void InitializeData()
         {
-            worldBuildingSystem = WorldBuildingSystem.FindSystemInScene();
+            m_WorldBuildingSystem = WorldBuildingSystem.FindSystemInScene();
             RefreshStampsList();
         }
         
         public void RefreshStampsList()
         {
-            stamps.Clear();
+            m_Stamps.Clear();
             
             // Find all stamps in the scene
             var allStamps = UnityEngine.Object.FindObjectsByType<Stamp>(FindObjectsSortMode.None);
             
-            if (worldBuildingSystem != null)
+            if (m_WorldBuildingSystem != null)
             {
                 // Sort stamps according to the same logic as in WorldBuildingSystem
                 Array.Sort(allStamps, (stamp1, stamp2) => 
@@ -273,11 +294,11 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                 Array.Sort(allStamps, (a, b) => a.name.CompareTo(b.name));
             }
             
-            stamps.AddRange(allStamps);
+            m_Stamps.AddRange(allStamps);
             
-            if (stampListView != null)
+            if (m_StampListView != null)
             {
-                stampListView.Rebuild();
+                m_StampListView.Rebuild();
             }
             
             // Notify subscribers that refresh occurred
@@ -286,7 +307,7 @@ namespace GameCraftersGuild.WorldBuilding.Editor
         
         private void OnHierarchyChanged()
         {
-            if (autoRefreshToggle != null && autoRefreshToggle.value)
+            if (m_AutoRefreshToggle != null && m_AutoRefreshToggle.value)
             {
                 RefreshStampsList();
             }
@@ -294,8 +315,8 @@ namespace GameCraftersGuild.WorldBuilding.Editor
         
         private void SelectAllStamps()
         {
-            if (stamps.Count == 0) return;
-            Selection.objects = stamps.Select(s => s.gameObject).ToArray();
+            if (m_Stamps.Count == 0) return;
+            Selection.objects = m_Stamps.Select(s => s.gameObject).ToArray();
         }
         
         private void DeselectAllStamps()
@@ -307,7 +328,7 @@ namespace GameCraftersGuild.WorldBuilding.Editor
         {
             if (oldIndex == newIndex) return;
             
-            Stamp stampToMove = stamps[newIndex];
+            Stamp stampToMove = m_Stamps[newIndex];
             Stamp referenceStamp = null;
             
             // Move stampToMove in the hierarchy
@@ -316,9 +337,9 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                 // Find a reference stamp that shares the same parent
                 for (int i = newIndex - 1; i >= 0; i--)
                 {
-                    if (stamps[i].transform.parent == stampToMove.transform.parent)
+                    if (m_Stamps[i].transform.parent == stampToMove.transform.parent)
                     {
-                        referenceStamp = stamps[i];
+                        referenceStamp = m_Stamps[i];
                         break;
                     }
                 }
@@ -341,7 +362,7 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             }
             
             // Mark the world building system as dirty to process the changes
-            if (worldBuildingSystem != null)
+            if (m_WorldBuildingSystem != null)
             {
                 stampToMove.IsDirty = true;
                 EditorUtility.SetDirty(stampToMove);
@@ -361,6 +382,43 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                 current = current.parent;
             }
             return depth;
+        }
+        
+        private void OnGeometryChanged(GeometryChangedEvent evt)
+        {
+            if (m_StampListView != null && parent != null)
+            {
+                // Let the layout settle before adjusting the list height
+                m_StampListView.schedule.Execute(() => {
+                    AdjustListHeight();
+                });
+            }
+        }
+        
+        private void AdjustListHeight()
+        {
+            if (m_StampListView == null)
+                return;
+                
+            // Ensure list has flex grow
+            m_StampListView.style.flexGrow = 1;
+            
+            if (m_ListContainer != null)
+                m_ListContainer.style.flexGrow = 1;
+
+            float headerHeight = m_HeaderContainer != null && m_ShowHeader ? m_HeaderContainer.worldBound.height : 0;
+            float toolbarHeight = 30; // Approximate toolbar height
+            float footerHeight = 30; // Approximate footer height
+            float sectionLabelHeight = 20; // Approximate section label height
+            float padding = 40; // Additional padding
+            
+            float availableHeight = this.worldBound.height - (headerHeight + toolbarHeight + footerHeight + sectionLabelHeight + padding);
+            
+            if (availableHeight > 100) // Make sure we don't make it too small
+            {
+                m_StampListView.style.height = availableHeight;
+                m_ListHeight = availableHeight; // Update our stored height
+            }
         }
     }
 } 

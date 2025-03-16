@@ -5,10 +5,11 @@ using UnityEngine.UIElements;
 
 namespace GameCraftersGuild.WorldBuilding.Editor
 {
-    [Overlay(typeof(SceneView), "Stamp Order Manager")]
+    [Overlay(typeof(SceneView), id: "StampOrderingOverlay", "Stamp Order Manager")]
     public class StampOrderingOverlay : Overlay
     {
-        private StampOrderingControl stampOrdering;
+        public static string kId = "StampOrderingOverlay";
+        private StampOrderingControl m_StampOrderingControl;
         
         // Called when the overlay is created to construct the UI
         public override VisualElement CreatePanelContent()
@@ -18,7 +19,7 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             root.style.flexGrow = 1;
             
             // Create and configure the stamp ordering control
-            stampOrdering = new StampOrderingControl
+            m_StampOrderingControl = new StampOrderingControl
             {
                 ShowHeader = true,
                 ShowAutoRefreshToggle = true,
@@ -26,7 +27,7 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             };
             
             // Add the control to the root
-            root.Add(stampOrdering);
+            root.Add(m_StampOrderingControl);
             
             return root;
         }

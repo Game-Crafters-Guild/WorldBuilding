@@ -31,15 +31,6 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             FillShapeInspector(m_ShapeInspector, inspector);
             inspector.Add(m_ShapeInspector);
 
-            /*Button markDirtyButton = new Button();
-            markDirtyButton.text = "Mark Dirty\n(Will become automatic later)";
-            markDirtyButton.clicked += () =>
-            {
-                Target.IsDirty = true;
-                EditorUtility.SetDirty(Target);
-            };
-            inspector.Add(markDirtyButton);*/
-
             PropertyField modfiersField = inspector.Q<PropertyField>("PropertyField:m_Modifiers");
             if (modfiersField != null)
             {
@@ -214,7 +205,7 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                     StampOrderingWindow.ShowWindow();
                 });
                 
-                /*menu.AddItem(new GUIContent("Toggle Overlay"), false, () => {
+                menu.AddItem(new GUIContent("Toggle Overlay"), false, () => {
                     // Get the overlay type
                     var overlayType = typeof(StampOrderingOverlay);
                     
@@ -223,9 +214,7 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                     if (sceneView != null)
                     {
                         // Toggle the overlay
-                        var overlays = sceneView.overlays;
-                        var overlay = overlays.Find(overlayType) as StampOrderingOverlay;
-                        
+                        sceneView.TryGetOverlay(StampOrderingOverlay.kId, out var overlay);
                         if (overlay != null)
                         {
                             if (overlay.displayed)
@@ -235,10 +224,13 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                         }
                         else
                         {
-                            overlays.Add(overlayType);
+                            overlay = new StampOrderingOverlay();
+                            SceneView.AddOverlayToActiveView(overlay);
+                            overlay.displayed = true;
+                            overlay.collapsed = false;
                         }
                     }
-                });*/
+                });
                 
                 menu.ShowAsContext();
             });
