@@ -66,7 +66,7 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/WriteHeightmap"
                 // sample the texture
                 float mask = tex2D(_Mask, i.uv).x;
                 if (mask <= 0.01) discard;
-                mask = smoothstep(_Falloff.x, _Falloff.y, mask);
+                mask = saturate((mask - _Falloff.x) / (_Falloff.y - _Falloff.x));
 
                 float heightData = tex2D(_Data, i.uv).x;
                 float height = lerp(_HeightRange.x, _HeightRange.y, heightData) * 0.5;
@@ -132,7 +132,7 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/WriteHeightmap"
                 if (mask <= 0.005) discard;
                 
                 // Apply falloff
-                mask = smoothstep(_Falloff.x, _Falloff.y, mask);
+                mask = saturate((mask - _Falloff.x) / (_Falloff.y - _Falloff.x));
                 
                 // The blue channel contains the normalized height from the spline
                 float encodedHeight = maskSample.b;
