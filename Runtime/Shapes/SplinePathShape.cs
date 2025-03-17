@@ -440,8 +440,8 @@ namespace GameCraftersGuild.WorldBuilding
                 normals.Add(up);
 
                 // Improved UV mapping
-                float v;
-                if (isStraightLine)
+                float v = 1.0f;
+                /*if (isStraightLine)
                 {
                     // For straight lines, simple linear mapping works well
                     v = t;
@@ -456,7 +456,7 @@ namespace GameCraftersGuild.WorldBuilding
                 {
                     // For shorter paths
                     v = t;
-                }
+                }*/
 
                 uvs.Add(new Vector2(-1f, v));
                 uvs.Add(new Vector2(1f, v));
@@ -652,7 +652,8 @@ namespace GameCraftersGuild.WorldBuilding
                 normals.Add(up);
                 
                 // Calculate UV coordinates
-                float v = isStraightLine ? t : (t * length / Width * uvScaleFactor) % 1.0f;
+                //float v = isStraightLine ? t : (t * length / Width * uvScaleFactor) % 1.0f;
+                float v = 1.0f;
                 uvs.Add(new float2(-1f, v));
                 uvs.Add(new float2(1f, v));
             }
@@ -1128,7 +1129,8 @@ namespace GameCraftersGuild.WorldBuilding
                 normals.Add(up);
                 
                 // Simplified UV calculation
-                float v = isStraightLine ? t : (t * length / Width) * uvScaleFactor;
+                //float v = isStraightLine ? t : (t * length / Width) * uvScaleFactor;
+                float v = 1.0f;
                 uvs.Add(new float2(-1f, v));
                 uvs.Add(new float2(1f, v));
             }
