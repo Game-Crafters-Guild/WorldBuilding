@@ -454,7 +454,7 @@ namespace GameCraftersGuild.WorldBuilding
             
             // Get terrain data
             TerrainData terrainData = context.TerrainData;
-            if (terrainData == null || modifier.GameObjects.Count == 0)
+            if (terrainData == null || modifier.GameObjects.Count == 0) 
                 return new List<GameObjectPlacementInfo>();
                 
             // Get terrain
@@ -485,17 +485,15 @@ namespace GameCraftersGuild.WorldBuilding
             float areaDepth = (boundsMaxZ - boundsMinZ) * terrainSize.z;
             float areaSize = areaWidth * areaDepth;
             
-            // Calculate density/fillness factor - density 1.0 means objects are placed at a distance of their minimum distance apart
-            // This is approximately the maximum possible density
-            var collisionConstraint = FindConstraint<GameObjectModifier.ObjectCollisionConstraint>(modifier.ConstraintsContainer.Constraints);
-            float defaultDistance = (collisionConstraint != null ? collisionConstraint.DefaultMinDistance : 2.0f) * modifier.GlobalScale;
+            // Calculate number of square units in the area
+            int totalSquareUnits = Mathf.CeilToInt(areaSize);
             
-            // Calculate theoretical maximum number of objects that could be placed based on minimum distances
-            // For a grid of objects with spacing = defaultDistance, we get approximately:
-            float maxPossibleObjects = areaSize / (defaultDistance * defaultDistance);
+            // Calculate potential number of objects based on ObjectsPerSquareUnit
+            int potentialObjectsPerSquareUnit = modifier.ObjectsPerSquareUnit;
+            int potentialTotalObjects = totalSquareUnits * potentialObjectsPerSquareUnit;
             
-            // Now use Density as a direct scaling factor from 0 to maximum
-            int numObjects = Mathf.FloorToInt(maxPossibleObjects * modifier.Density);
+            // Apply density to determine how many objects to actually spawn
+            int numObjects = Mathf.FloorToInt(potentialTotalObjects * modifier.Density);
             
             // Apply max objects limit if set
             if (modifier.MaxObjects > 0)
@@ -509,14 +507,55 @@ namespace GameCraftersGuild.WorldBuilding
                 numObjects = 1;
             }
             
-            //Debug.Log($"GPU Placement: Area size={areaSize:F2}, Max possible objects={maxPossibleObjects:F2}, " +
-                     //$"Density={modifier.Density:F2}, Objects to place={numObjects}");
+            Debug.Log($"GPU Placement: Area size={areaSize:F2} square units, Total square units={totalSquareUnits}, " +
+                    $"Potential objects={potentialTotalObjects}, Density={modifier.Density:F2}, Objects to place={numObjects}");
+            
+            // Calculate grid dimensions for square unit based placement
+            // For very large terrains, we may not need a 1:1 grid cell to square unit ratio
+            // Limit to a maximum reasonable grid size
+            const int MaxGridDimension = 500; // Maximum grid cells in any dimension
+            
+            int gridWidth, gridDepth;
+            if (areaWidth > MaxGridDimension || areaDepth > MaxGridDimension)
+            {
+                // Scale down grid for very large terrains
+                float scaleFactor = Mathf.Min(MaxGridDimension / areaWidth, MaxGridDimension / areaDepth);
+                gridWidth = Mathf.CeilToInt(areaWidth * scaleFactor);
+                gridDepth = Mathf.CeilToInt(areaDepth * scaleFactor);
+                
+                Debug.Log($"GPU Placement: Scaling down grid from {Mathf.CeilToInt(areaWidth)}x{Mathf.CeilToInt(areaDepth)} " +
+                          $"to {gridWidth}x{gridDepth} for performance");
+            }
+            else
+            {
+                gridWidth = Mathf.CeilToInt(areaWidth);
+                gridDepth = Mathf.CeilToInt(areaDepth);
+            }
+            
+            // Ensure minimum grid dimensions
+            gridWidth = Mathf.Max(1, gridWidth);
+            gridDepth = Mathf.Max(1, gridDepth);
             
             // Limit the number of parallel calculations for performance
-            int numThreads = Mathf.Min(maxAttempts, 1000000);
+            // Ensure we spawn enough threads for effective hashed distribution - at least MaxObjects * 4
+            // so we get good distribution across the grid
+            int numThreads = Mathf.Max(
+                numObjects * 4,  // At least 4x the objects we want to place for good distribution
+                Mathf.Min(totalSquareUnits * modifier.ObjectsPerSquareUnit, 1000000)  // Cap at a reasonable number
+            );
+            
+            Debug.Log($"GPU Placement: Using {numThreads} threads for {gridWidth}x{gridDepth} grid");
             
             // Create buffers
             CreateBuffers(numThreads);
+            
+            // Additional parameters for grid-based placement
+            placementComputeShader.SetInt("_GridWidth", gridWidth);
+            placementComputeShader.SetInt("_GridDepth", gridDepth);
+            placementComputeShader.SetInt("_ObjectsPerSquareUnit", potentialObjectsPerSquareUnit);
+
+            GameObjectModifier.ObjectCollisionConstraint collisionConstraint =
+                modifier.ConstraintsContainer.FindConstraint<GameObjectModifier.ObjectCollisionConstraint>();
             
             // Set compute shader parameters using context
             SetShaderParameters(

@@ -17,6 +17,11 @@ uint _NumberOfGameObjects;
 uint _RandomSeed;
 float _RandomOffset;
 
+// Grid-based placement parameters
+int _GridWidth;
+int _GridDepth;
+int _ObjectsPerSquareUnit;
+
 // Prefab-specific settings
 struct PrefabSettings
 {
@@ -80,22 +85,60 @@ float GetRandomFloat(uint id, uint seed)
 
 float2 GetRandomPosition(uint id)
 {
-    float2 randomValues;
-    randomValues.x = GetRandomFloat(id * 2, _RandomSeed);
-    randomValues.y = GetRandomFloat(id * 2 + 1, _RandomSeed);
+    // Instead of using sequential grid cells, use a hash-based approach
+    // to distribute objects more evenly across the entire grid
+    uint hashedId = id;
     
-    // Generate position within bounds
+    // Simple hash based on Wang hash
+    hashedId = (hashedId ^ 61) ^ (hashedId >> 16);
+    hashedId = hashedId + (hashedId << 3);
+    hashedId = hashedId ^ (hashedId >> 4);
+    hashedId = hashedId * 0x27d4eb2d;
+    hashedId = hashedId ^ (hashedId >> 15);
+    
+    // Calculate total grid cells
+    uint totalGridCells = _GridWidth * _GridDepth;
+    
+    // Early exit if grid has no cells
+    if (totalGridCells == 0)
+        return float2(0, 0);
+    
+    // Get a cell ID that's distributed across the entire grid
+    uint gridCellId = hashedId % totalGridCells;
+    
+    // Calculate grid x, y coordinates
+    uint gridX = gridCellId % _GridWidth;
+    uint gridY = gridCellId / _GridWidth;
+    
+    // Calculate normalized bounds width and height
+    float boundsWidth = _BoundsMax.x - _BoundsMin.x;
+    float boundsHeight = _BoundsMax.z - _BoundsMin.z;
+    
+    // Calculate cell size in normalized coordinates
+    float cellWidth = boundsWidth / _GridWidth;
+    float cellHeight = boundsHeight / _GridDepth;
+    
+    // Calculate base position of this grid cell
+    float baseX = _BoundsMin.x + gridX * cellWidth;
+    float baseY = _BoundsMin.z + gridY * cellHeight;
+    
+    // Get randomization within this cell
+    uint localId = id % _ObjectsPerSquareUnit;
+    float randX = GetRandomFloat(gridCellId * 1000 + localId * 2, _RandomSeed);
+    float randY = GetRandomFloat(gridCellId * 1000 + localId * 2 + 1, _RandomSeed);
+    
+    // Final position within the cell
     float2 position;
-    position.x = lerp(_BoundsMin.x, _BoundsMax.x, randomValues.x);
-    position.y = lerp(_BoundsMin.z, _BoundsMax.z, randomValues.y);
+    position.x = baseX + randX * cellWidth;
+    position.y = baseY + randY * cellHeight;
     
     // Apply random offset if needed
     if (_RandomOffset > 0)
     {
-        float2 offsetScale = float2(_BoundsMax.x - _BoundsMin.x, _BoundsMax.z - _BoundsMin.z) * _RandomOffset;
+        float2 offsetScale = float2(cellWidth, cellHeight) * _RandomOffset;
         float2 offset;
-        offset.x = (GetRandomFloat(id * 4 + 2, _RandomSeed) * 2 - 1) * offsetScale.x;
-        offset.y = (GetRandomFloat(id * 4 + 3, _RandomSeed) * 2 - 1) * offsetScale.y;
+        offset.x = (GetRandomFloat(gridCellId * 1000 + localId * 4 + 2, _RandomSeed) * 2 - 1) * offsetScale.x;
+        offset.y = (GetRandomFloat(gridCellId * 1000 + localId * 4 + 3, _RandomSeed) * 2 - 1) * offsetScale.y;
         
         position += offset;
         
@@ -318,8 +361,16 @@ void GeneratePositions(uint3 id : SV_DispatchThreadID)
     if (_MaxObjectCount > 0 && index >= _MaxObjectCount)
         return;
     
-    // Generate random position
+    // Apply density-based filtering
+    if (GetRandomFloat(index * 13 + 9, _RandomSeed) > _Density)
+        return;
+    
+    // Generate grid-based random position with hashing for better distribution
     float2 normPos = GetRandomPosition(index);
+    
+    // Skip if position is invalid (outside grid)
+    if (normPos.x == 0 && normPos.y == 0 && _GridWidth > 0 && _GridDepth > 0)
+        return;
     
     // Calculate position within bounds (0-1 relative to bounds, not terrain)
     float2 boundsNorm;
