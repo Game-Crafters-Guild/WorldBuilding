@@ -64,11 +64,13 @@ SamplerState sampler_NoiseTexture;
 // Output buffer for positions
 struct PlacementResult 
 {
-    float3 position;    // x, y, z world space position
-    float scale;        // uniform scale factor
-    float rotation;     // rotation around Y axis in degrees
-    uint prefabIndex;   // index of the prefab to spawn
-    uint isValid;       // 1 if valid position, 0 if not
+    float3 position;    // x, y, z world space position (12 bytes)
+    float scale;        // uniform scale factor (4 bytes)
+    float rotation;     // rotation around Y axis in degrees (4 bytes)
+    uint prefabIndex;   // index of the prefab to spawn (4 bytes)
+    uint isValid;       // 1 if valid position, 0 if not (4 bytes)
+    float debugSlope;   // Debug value for slope (4 bytes)
+    // Total: 32 bytes
 };
 
 // Buffers for filter pass
@@ -162,19 +164,45 @@ float2 GetRandomPosition(uint id)
 
 float GetTerrainHeight(float2 normPos)
 {
-    return _HeightmapTexture.SampleLevel(sampler_HeightmapTexture, normPos, 0).r * _TerrainParams.y * 2.0;
+    return _HeightmapTexture.SampleLevel(sampler_HeightmapTexture, normPos, 0).r * _TerrainParams.y;
 }
 
 float3 GetTerrainNormal(float2 normPos)
 {
-    float3 normal = _NormalTexture.SampleLevel(sampler_NormalTexture, normPos, 0).xyz;
-    return normalize(normal * 2 - 1); // Convert from 0-1 to -1-1 range
+    // Sample heights at neighboring points (with small offset)
+    const float delta = 1.0 / max(_HeightmapResolution.x, _HeightmapResolution.y);
+    
+    float h = GetTerrainHeight(normPos);
+    float hL = GetTerrainHeight(float2(max(0.0, normPos.x - delta), normPos.y));
+    float hR = GetTerrainHeight(float2(min(1.0, normPos.x + delta), normPos.y));
+    float hD = GetTerrainHeight(float2(normPos.x, min(1.0, normPos.y + delta)));
+    float hU = GetTerrainHeight(float2(normPos.x, max(0.0, normPos.y - delta)));
+    
+    // Calculate world-space distances between sample points
+    float worldDeltaX = delta * _TerrainParams.x;
+    float worldDeltaZ = delta * _TerrainParams.z;
+    
+    // Calculate terrain normal using central differences
+    float3 normal;
+    normal.x = -(hR - hL) / (2.0 * worldDeltaX);
+    normal.z = -(hD - hU) / (2.0 * worldDeltaZ);
+    normal.y = 1.0;
+    normal = normalize(normal);
+    
+    return normal;
 }
 
 float GetTerrainSlope(float2 normPos)
 {
+    // Calculate the terrain normal directly from heightmap
     float3 normal = GetTerrainNormal(normPos);
-    return degrees(acos(dot(normal, float3(0, 1, 0))));
+    
+    // Calculate angle between normal and up vector (in degrees)
+    float cosAngle = dot(normal, float3(0, 1, 0));
+    cosAngle = clamp(cosAngle, -1.0, 1.0);
+    float angle = degrees(acos(cosAngle));
+    
+    return angle;
 }
 
 bool CheckHeightConstraint(float height, uint constraintIndex)
@@ -186,7 +214,12 @@ bool CheckHeightConstraint(float height, uint constraintIndex)
 bool CheckSlopeConstraint(float slope, uint constraintIndex)
 {
     float2 constraint = _SlopeConstraints[constraintIndex];
-    return slope >= constraint.x && slope <= constraint.y;
+    
+    // Explicitly check the constraint values
+    bool isValid = (slope >= constraint.x && slope <= constraint.y);
+    
+    // Add debug output in result.debugSlope later
+    return isValid;
 }
 
 bool CheckMaskConstraint(float2 boundsNorm)
@@ -352,6 +385,7 @@ void GeneratePositions(uint3 id : SV_DispatchThreadID)
     
     // Initialize result as invalid
     _Results[index].isValid = 0;
+    _Results[index].debugSlope = -1.0; // Initialize debug value
     
     // Skip if beyond the maximum number of objects
     if (_MaxObjectCount > 0 && index >= _MaxObjectCount)
@@ -405,6 +439,23 @@ void GeneratePositions(uint3 id : SV_DispatchThreadID)
     float height = GetTerrainHeight(normPos);
     float slope = GetTerrainSlope(normPos);
     
+    // Store slope for debugging (even if position is invalid)
+    _Results[index].debugSlope = slope;
+    
+    // Sample neighboring heights for validation
+    float h = height;
+    const float delta = 0.01;
+    float hL = GetTerrainHeight(float2(max(0.0, normPos.x - delta), normPos.y));
+    float hR = GetTerrainHeight(float2(min(1.0, normPos.x + delta), normPos.y));
+    float heightDiff = abs(hR - hL);
+    
+    // If significant height difference, we should have non-zero slope
+    if (heightDiff > 0.1 && slope < 1.0)
+    {
+        // Store height difference instead of slope for debugging
+        _Results[index].debugSlope = -100.0 - heightDiff; // Special marker to detect this condition
+    }
+    
     // Choose prefab index
     uint prefabIndex = floor(GetRandomFloat(index * 7 + 5, _RandomSeed) * _NumberOfGameObjects);
     if (prefabIndex >= _NumberOfGameObjects)
@@ -422,8 +473,28 @@ void GeneratePositions(uint3 id : SV_DispatchThreadID)
     // Calculate random scale based on prefab settings
     float scale = lerp(settings.minScale, settings.maxScale, GetRandomFloat(index * 9 + 6, _RandomSeed));
     
-    // Check all constraints with object-specific minimum distance and scale
-    if (CheckAllConstraints(normPos, boundsNorm, height, slope, worldPos, settings.minimumDistance, scale))
+    // Check all constraints and mark if slope constraint fails
+    bool allConstraintsValid = true;
+    bool slopeValid = CheckSlopeConstraint(slope, 0);
+    
+    // Store the raw slope with a special marker if slope constraint fails
+    if (!slopeValid)
+    {
+        _Results[index].debugSlope = -10.0 - slope; // Negative value with offset to signal slope constraint failure
+        allConstraintsValid = false;
+    }
+    
+    // Check other constraints
+    if (!CheckHeightConstraint(height, 0) || 
+        !CheckMaskConstraint(boundsNorm) ||
+        !CheckNoiseConstraint(boundsNorm) ||
+        !CheckLayerConstraint(normPos) ||
+        !CheckCollisionConstraint(worldPos, settings.minimumDistance, scale))
+    {
+        allConstraintsValid = false;
+    }
+    
+    if (allConstraintsValid)
     {
         // Store valid result
         _Results[index].position = worldPos;

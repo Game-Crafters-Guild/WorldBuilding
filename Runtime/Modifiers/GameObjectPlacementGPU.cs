@@ -50,6 +50,7 @@ namespace GameCraftersGuild.WorldBuilding
             public float rotation;
             public uint prefabIndex;
             public uint isValid;
+            public float debugSlope;
         }
         
         // Structure for prefab settings in compute shader
@@ -193,10 +194,12 @@ namespace GameCraftersGuild.WorldBuilding
             if (slopeConstraint != null)
             {
                 slopeConstraints = new Vector2[1] { new Vector2(slopeConstraint.MinSlope, slopeConstraint.MaxSlope) };
+                Debug.Log($"Slope constraint set: Min={slopeConstraint.MinSlope:F2}°, Max={slopeConstraint.MaxSlope:F2}°");
             }
             else
             {
                 slopeConstraints = new Vector2[1] { new Vector2(0f, 90f) }; // Default values
+                Debug.Log("Using default slope constraint: Min=0°, Max=90°");
             }
             
             // Setup noise constraints
@@ -417,14 +420,62 @@ namespace GameCraftersGuild.WorldBuilding
                 // Create normals from heightmap
                 Texture2D tempNormals = new Texture2D(terrainData.heightmapResolution, terrainData.heightmapResolution, TextureFormat.RGBAFloat, false);
                 
-                // Calculate normals based on heightmap - a simplified approach
+                // Sample points for debug logging
+                Vector2[] debugPoints = new Vector2[]
+                {
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2(0.75f, 0.75f)
+                };
+                
+                // Get terrain transform to calculate world space normals
+                Terrain terrain = Terrain.activeTerrain;
+                Vector3 terrainScale = Vector3.one;
+                if (terrain != null)
+                {
+                    // Check if terrain has a non-uniform scale that could affect normal calculations
+                    terrainScale = terrain.transform.lossyScale;
+                    Debug.Log($"Terrain Scale: ({terrainScale.x:F3}, {terrainScale.y:F3}, {terrainScale.z:F3})");
+                }
+                
+                // Calculate normals based on heightmap
                 for (int y = 0; y < terrainData.heightmapResolution; y++)
                 {
                     for (int x = 0; x < terrainData.heightmapResolution; x++)
                     {
-                        Vector3 normal = terrainData.GetInterpolatedNormal(
-                            (float)x / terrainData.heightmapResolution, 
-                            (float)y / terrainData.heightmapResolution);
+                        float normX = (float)x / (terrainData.heightmapResolution - 1);
+                        float normZ = (float)y / (terrainData.heightmapResolution - 1);
+                        
+                        // Use GetInterpolatedNormal for smoother normals
+                        Vector3 normal = terrainData.GetInterpolatedNormal(normX, normZ);
+                        
+                        // Ensure normal is normalized (especially important with non-uniform terrain scaling)
+                        normal.Normalize();
+                        
+                        // Debug log specific sample points
+                        foreach (var point in debugPoints)
+                        {
+                            if (Mathf.Approximately(normX, point.x) && Mathf.Approximately(normZ, point.y))
+                            {
+                                float slope = Vector3.Angle(normal, Vector3.up);
+                                
+                                // Also check slope by manually sampling heights
+                                float h = terrainData.GetInterpolatedHeight(normX, normZ);
+                                float hL = terrainData.GetInterpolatedHeight(Mathf.Max(0, normX - 0.01f), normZ);
+                                float hR = terrainData.GetInterpolatedHeight(Mathf.Min(1, normX + 0.01f), normZ);
+                                float hU = terrainData.GetInterpolatedHeight(normX, Mathf.Max(0, normZ - 0.01f));
+                                float hD = terrainData.GetInterpolatedHeight(normX, Mathf.Min(1, normZ + 0.01f));
+                                
+                                float slopeX = Mathf.Atan2(hR - hL, 0.02f * terrainData.size.x) * Mathf.Rad2Deg;
+                                float slopeZ = Mathf.Atan2(hD - hU, 0.02f * terrainData.size.z) * Mathf.Rad2Deg;
+                                float manualSlope = Mathf.Sqrt(slopeX * slopeX + slopeZ * slopeZ);
+                                
+                                Debug.Log($"Normal Texture Debug: pos=({normX:F3}, {normZ:F3}), " +
+                                         $"normal=({normal.x:F3}, {normal.y:F3}, {normal.z:F3}), " +
+                                         $"slope={slope:F2}°, manual slope={manualSlope:F2}°, " +
+                                         $"height={h:F2}");
+                            }
+                        }
                         
                         // Convert from -1,1 to 0,1 range for storage in texture
                         normal = normal * 0.5f + new Vector3(0.5f, 0.5f, 0.5f);
@@ -437,6 +488,8 @@ namespace GameCraftersGuild.WorldBuilding
                 
                 // Safely destroy the temporary texture
                 SafeDestroy(tempNormals);
+                
+                Debug.Log("Normal texture created for slope calculations");
             }
         }
         
@@ -472,6 +525,9 @@ namespace GameCraftersGuild.WorldBuilding
             
             // Setup normal texture which isn't in WorldBuildingContext
             SetupNormalTexture(terrainData);
+            
+            // Test slope calculations directly for comparison
+            TestSlopeCalculations(terrainData);
             
             // Calculate bounds in terrain space
             Vector3 terrainPos = context.TerrainPosition;
@@ -586,6 +642,65 @@ namespace GameCraftersGuild.WorldBuilding
             // Get results back from GPU
             resultsBuffer.GetData(results);
             
+            // Log debug info about slopes from all results
+            int sampleSize = Mathf.Min(500, results.Length);
+            float maxSlope = 0f, minSlope = 90f, sumSlope = 0f;
+            int validSlopeCount = 0;
+            int zeroSlopeCount = 0;
+            int specialMarkerCount = 0;
+            int slopeConstraintRejections = 0;
+            
+            for (int i = 0; i < sampleSize; i++)
+            {
+                float slope = results[i].debugSlope;
+                
+                // Check for the special marker for height difference detection
+                if (slope < -100)
+                {
+                    float heightDiff = -(slope + 100); // Convert back to actual height difference
+                    specialMarkerCount++;
+                    Debug.LogWarning($"Position {i}: Significant height difference ({heightDiff:F3}) but slope is near zero!");
+                    continue;
+                }
+                
+                // Check for the special marker for slope constraint rejection
+                if (slope < -10 && slope > -100)
+                {
+                    float actualSlope = -(slope + 10); // Convert back to actual slope value
+                    slopeConstraintRejections++;
+                    Debug.Log($"Position {i}: Slope {actualSlope:F2}° rejected by constraint (min={slopeConstraints[0].x:F2}°, max={slopeConstraints[0].y:F2}°)");
+                    continue;
+                }
+                
+                // Process normal slope values
+                if (slope >= 0)
+                {
+                    if (slope < 0.01f)
+                    {
+                        zeroSlopeCount++;
+                    }
+                    
+                    maxSlope = Mathf.Max(maxSlope, slope);
+                    minSlope = Mathf.Min(minSlope, slope);
+                    sumSlope += slope;
+                    validSlopeCount++;
+                }
+            }
+            
+            if (validSlopeCount > 0)
+            {
+                float avgSlope = sumSlope / validSlopeCount;
+                Debug.Log($"GPU Slope Stats (from sample of {validSlopeCount} points): " +
+                         $"Min={minSlope:F2}°, Max={maxSlope:F2}°, Avg={avgSlope:F2}°, " +
+                         $"Zero slopes={zeroSlopeCount}, Abnormal heights={specialMarkerCount}, " +
+                         $"Slope constraint rejections={slopeConstraintRejections}");
+                
+                if (zeroSlopeCount > 0.8f * validSlopeCount)
+                {
+                    Debug.LogWarning("WARNING: More than 80% of slopes are zero! This suggests an issue with slope calculation.");
+                }
+            }
+            
             // Initialize valid count - IMPORTANT to reset to zero
             validCountArray[0] = 0;
             validCountBuffer.SetData(validCountArray);
@@ -662,11 +777,21 @@ namespace GameCraftersGuild.WorldBuilding
         /// </summary>
         private void CreateBuffers(int numThreads, int maxResults)
         {
+            // Calculate correct stride size for PlacementResult struct:
+            // Vector3 position: 12 bytes (3 floats)
+            // float scale: 4 bytes
+            // float rotation: 4 bytes  
+            // uint prefabIndex: 4 bytes
+            // uint isValid: 4 bytes
+            // float debugSlope: 4 bytes
+            // Total: 32 bytes
+            int placementResultStride = sizeof(float) * 3 + sizeof(float) + sizeof(float) + sizeof(uint) + sizeof(uint) + sizeof(float);
+            
             // Create/resize results buffer for first pass
             if (resultsBuffer == null || resultsBuffer.count != numThreads)
             {
                 ReleaseBuffer(ref resultsBuffer);
-                resultsBuffer = new ComputeBuffer(numThreads, sizeof(float) * 3 + sizeof(float) + sizeof(float) + sizeof(uint) + sizeof(uint));
+                resultsBuffer = new ComputeBuffer(numThreads, placementResultStride);
                 results = new PlacementResult[numThreads];
             }
             
@@ -674,7 +799,7 @@ namespace GameCraftersGuild.WorldBuilding
             if (filteredResultsBuffer == null || filteredResultsBuffer.count != maxResults)
             {
                 ReleaseBuffer(ref filteredResultsBuffer);
-                filteredResultsBuffer = new ComputeBuffer(maxResults, sizeof(float) * 3 + sizeof(float) + sizeof(float) + sizeof(uint) + sizeof(uint));
+                filteredResultsBuffer = new ComputeBuffer(maxResults, placementResultStride);
                 filteredResults = new PlacementResult[maxResults];
             }
             
@@ -786,6 +911,11 @@ namespace GameCraftersGuild.WorldBuilding
             placementComputeShader.SetVector("_TerrainPosition", new Vector4(terrainPosition.x, terrainPosition.y, terrainPosition.z, 0));
             placementComputeShader.SetVector("_HeightmapResolution", new Vector2(terrainData.heightmapResolution, terrainData.heightmapResolution));
             
+            // Additional debug logging for terrain info
+            Debug.Log($"Terrain Parameters: Size=({terrainSize.x:F1},{terrainSize.y:F1},{terrainSize.z:F1}), " +
+                     $"Position=({terrainPosition.x:F1},{terrainPosition.y:F1},{terrainPosition.z:F1}), " +
+                     $"HeightmapRes={terrainData.heightmapResolution}");
+            
             // Set bounds parameters
             placementComputeShader.SetVector("_BoundsMin", new Vector4(boundsMinX, 0, boundsMinZ, 0));
             placementComputeShader.SetVector("_BoundsMax", new Vector4(boundsMaxX, 0, boundsMaxZ, 0));
@@ -802,9 +932,11 @@ namespace GameCraftersGuild.WorldBuilding
             placementComputeShader.SetInt("_PlacedObjectCount", objectCount);
             placementComputeShader.SetFloat("_DefaultMinDistance", defaultMinDistance);
             
-            // Debug logging
-            //Debug.Log($"GPU Placement: _PlacedObjectCount={objectCount}, _DefaultMinDistance={defaultMinDistance}");
-            //Debug.Log($"GPU Placement: Using buffers - placedObjectsBuffer.count={placedObjectsBuffer.count}, minimumDistancesBuffer.count={minimumDistancesBuffer.count}");
+            // For any existing slope constraints, log them for debugging
+            if (slopeConstraints != null && slopeConstraints.Length > 0)
+            {
+                Debug.Log($"Setting slope constraint: Min={slopeConstraints[0].x}°, Max={slopeConstraints[0].y}°");
+            }
             
             // Set texture samplers - use the context render textures directly
             placementComputeShader.SetTexture(generatePositionsKernelId, "_HeightmapTexture", context.HeightmapRenderTexture);
@@ -814,9 +946,6 @@ namespace GameCraftersGuild.WorldBuilding
             {
                 placementComputeShader.SetTexture(generatePositionsKernelId, "_AlphamapTexture", context.SplatRenderTextures[0]);
             }
-            
-            // Set the normal texture we created
-            placementComputeShader.SetTexture(generatePositionsKernelId, "_NormalTexture", normalTexture);
             
             // Set mask texture - use context mask if available
             placementComputeShader.SetTexture(generatePositionsKernelId, "_MaskTexture", mask == null ? Texture2D.whiteTexture : mask);
@@ -839,6 +968,86 @@ namespace GameCraftersGuild.WorldBuilding
             
             // Set buffers for SECOND kernel (FilterObjectCollisions)
             placementComputeShader.SetBuffer(filterObjectCollisionsKernelId, "_PrefabSettings", prefabSettingsBuffer);
+        }
+        
+        /// <summary>
+        /// Test slope calculations on a few points to compare with shader results
+        /// </summary>
+        private void TestSlopeCalculations(TerrainData terrainData)
+        {
+            // Sample some test points
+            float[,] testPoints = new float[,] {
+                {0.25f, 0.25f},
+                {0.5f, 0.5f},
+                {0.75f, 0.75f}
+            };
+            
+            Debug.Log("==== CPU-based Slope Calculation Test ====");
+            
+            for (int i = 0; i < testPoints.GetLength(0); i++)
+            {
+                float normX = testPoints[i, 0];
+                float normZ = testPoints[i, 1];
+                
+                // Get terrain normal using Unity's GetInterpolatedNormal
+                Vector3 normal = terrainData.GetInterpolatedNormal(normX, normZ);
+                float slope = Vector3.Angle(normal, Vector3.up);
+                
+                // Calculate slope manually using height samples
+                float h = terrainData.GetInterpolatedHeight(normX, normZ);
+                float hL = terrainData.GetInterpolatedHeight(Mathf.Max(0, normX - 0.01f), normZ);
+                float hR = terrainData.GetInterpolatedHeight(Mathf.Min(1, normX + 0.01f), normZ);
+                float hU = terrainData.GetInterpolatedHeight(normX, Mathf.Max(0, normZ - 0.01f));
+                float hD = terrainData.GetInterpolatedHeight(normX, Mathf.Min(1, normZ + 0.01f));
+                
+                float slopeX = Mathf.Atan2(hR - hL, 0.02f * terrainData.size.x) * Mathf.Rad2Deg;
+                float slopeZ = Mathf.Atan2(hD - hU, 0.02f * terrainData.size.z) * Mathf.Rad2Deg;
+                float manualSlope = Mathf.Sqrt(slopeX * slopeX + slopeZ * slopeZ);
+                
+                // Compare both approaches
+                Debug.Log($"Point ({normX:F2}, {normZ:F2}): " +
+                         $"Normal = ({normal.x:F3}, {normal.y:F3}, {normal.z:F3}), " +
+                         $"Unity Slope = {slope:F2}°, " +
+                         $"Manual Slope = {manualSlope:F2}°, " +
+                         $"Height = {h:F2}");
+                
+                // Sample the render texture directly (how the shader gets normals)
+                if (normalTexture != null)
+                {
+                    // Create a temporary texture to read the data
+                    Texture2D tempTexture = new Texture2D(normalTexture.width, normalTexture.height, TextureFormat.RGBAFloat, false);
+                    RenderTexture.active = normalTexture;
+                    tempTexture.ReadPixels(new Rect(0, 0, normalTexture.width, normalTexture.height), 0, 0);
+                    tempTexture.Apply();
+                    RenderTexture.active = null;
+                    
+                    // Convert normalized coordinates to texture coordinates
+                    int texX = Mathf.RoundToInt(normX * (normalTexture.width - 1));
+                    int texY = Mathf.RoundToInt(normZ * (normalTexture.height - 1));
+                    
+                    // Sample the texture
+                    Color pixelColor = tempTexture.GetPixel(texX, texY);
+                    Vector3 texNormal = new Vector3(pixelColor.r, pixelColor.g, pixelColor.b);
+                    
+                    // Convert from 0-1 to -1-1 range (as shader does)
+                    texNormal = texNormal * 2 - Vector3.one;
+                    texNormal.Normalize();
+                    
+                    float texSlope = Vector3.Angle(texNormal, Vector3.up);
+                    
+                    Debug.Log($"  Texture-based Normal = ({texNormal.x:F3}, {texNormal.y:F3}, {texNormal.z:F3}), " +
+                             $"Texture-based Slope = {texSlope:F2}°");
+                    
+                    // Clean up
+                    #if UNITY_EDITOR
+                    UnityEngine.Object.DestroyImmediate(tempTexture);
+                    #else
+                    UnityEngine.Object.Destroy(tempTexture);
+                    #endif
+                }
+            }
+            
+            Debug.Log("============================================");
         }
     }
     

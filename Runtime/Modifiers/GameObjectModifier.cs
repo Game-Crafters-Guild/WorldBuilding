@@ -948,6 +948,13 @@ namespace GameCraftersGuild.WorldBuilding
             
             // Calculate angle between normal and up vector (in degrees)
             float angle = Vector3.Angle(normal, Vector3.up);
+            
+            // Debug log (only occasionally to avoid spam)
+            if (Random.value < 0.01f) // Log roughly 1% of checks
+            {
+                Debug.Log($"Terrain Slope: pos=({normX:F3}, {normZ:F3}), normal=({normal.x:F3}, {normal.y:F3}, {normal.z:F3}), angle={angle:F2}°");
+            }
+            
             return angle;
         }
         
