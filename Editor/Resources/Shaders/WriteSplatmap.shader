@@ -18,17 +18,25 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/WriteSplatmap"
 
         CGINCLUDE
             // Falloff functions
-            float ApplyFalloff(float mask, float minFalloff, float maxFalloff, float falloffType, float2 maskRange)
+            float ApplyFalloff(float mask, float minFalloff, float maxFalloff, float falloffType, float2 maskRange, float innerFalloff)
             {
                 // First check if the mask is within the valid range
                 float maskValue = mask;
                 float maskMin = maskRange.x;
                 float maskMax = maskRange.y;
                 
-                // Skip effects if the mask is outside our specified range
+                // Check if the mask is outside the valid range (excluding the falloff regions)
                 if (maskValue < maskMin || maskValue > maskMax)
                 {
                     return 0.0;
+                }
+                
+                // Apply inner falloff (for inner part of crater - higher values)
+                float innerWeight = 1.0;
+                if (innerFalloff > 0.0 && maskValue > maskMax - innerFalloff)
+                {
+                    // Apply a smooth transition at the inner boundary (higher values)
+                    innerWeight = smoothstep(maskMax + 0.001, maskMax - innerFalloff, maskValue);
                 }
                 
                 // Remap the mask value from maskRange to 0-1 range for falloff calculation
@@ -67,7 +75,8 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/WriteSplatmap"
                     result = t * t * (3 - 2 * t);
                 }
                 
-                return result;
+                // Apply the inner weight for a smooth transition at the boundary
+                return result * innerWeight;
             }
         ENDCG
 
@@ -116,7 +125,7 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/WriteSplatmap"
                 float mask = tex2D(_Mask, i.uv).x;
                 if (mask <= 0.005) return float4(0, 0, 0, 0);
                 
-                mask = ApplyFalloff(mask, _Falloff.x, _Falloff.y, _Falloff.z, _MaskRange.xy);
+                mask = ApplyFalloff(mask, _Falloff.x, _Falloff.y, _Falloff.z, _MaskRange.xy, _MaskRange.z);
                 
                 return float4(mask, mask, mask, mask);
             }
@@ -170,7 +179,7 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/WriteSplatmap"
                 float mask = tex2D(_Mask, i.uv).x;
                 if (mask <= 0.005) return float4(0, 0, 0, 0);
 
-                mask = ApplyFalloff(mask, _Falloff.x, _Falloff.y, _Falloff.z, _MaskRange.xy);
+                mask = ApplyFalloff(mask, _Falloff.x, _Falloff.y, _Falloff.z, _MaskRange.xy, _MaskRange.z);
                 
                 // Apply intensity to each channel but preserve interpolation
                 float4 result = _Intensity;

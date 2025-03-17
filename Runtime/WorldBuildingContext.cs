@@ -53,7 +53,7 @@ namespace GameCraftersGuild.WorldBuilding
             get
             {
                 // Mask range values (what part of the mask gets affected)
-                return new float4(MaskFalloff.MaskMin, MaskFalloff.MaskMax, 0.0f, 0.0f);
+                return new float4(MaskFalloff.MaskMin, MaskFalloff.MaskMax, MaskFalloff.InnerFalloff, 0.0f);
             }
         }
         public float3 TerrainPosition => m_TerrainPosition;

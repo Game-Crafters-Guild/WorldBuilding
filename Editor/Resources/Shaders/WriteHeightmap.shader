@@ -25,17 +25,25 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/WriteHeightmap"
         
         CGINCLUDE
             // Falloff functions
-            float ApplyFalloff(float mask, float minFalloff, float maxFalloff, float falloffType, float2 maskRange)
+            float ApplyFalloff(float mask, float minFalloff, float maxFalloff, float falloffType, float2 maskRange, float innerFalloff)
             {
                 // First check if the mask is within the valid range
                 float maskValue = mask;
                 float maskMin = maskRange.x;
                 float maskMax = maskRange.y;
                 
-                // Skip effects if the mask is outside our specified range
+                // Check if the mask is outside the valid range (excluding the falloff regions)
                 if (maskValue < maskMin || maskValue > maskMax)
                 {
                     return 0.0;
+                }
+                
+                // Apply inner falloff (for inner part of crater - higher values)
+                float innerWeight = 1.0;
+                if (innerFalloff > 0.0 && maskValue > maskMax - innerFalloff)
+                {
+                    // Apply a smooth transition at the inner boundary (higher values)
+                    innerWeight = smoothstep(maskMax + 0.001, maskMax - innerFalloff, maskValue);
                 }
                 
                 // Remap the mask value from maskRange to 0-1 range for falloff calculation
@@ -74,7 +82,8 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/WriteHeightmap"
                     result = t * t * (3 - 2 * t);
                 }
                 
-                return result;
+                // Apply the inner weight for a smooth transition at the boundary
+                return result * innerWeight;
             }
         ENDCG
 
@@ -123,7 +132,7 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/WriteHeightmap"
                 // sample the texture
                 float mask = tex2D(_Mask, i.uv).x;
                 if (mask <= 0.01) discard;
-                mask = ApplyFalloff(mask, _Falloff.x, _Falloff.y, _Falloff.z, _MaskRange.xy);
+                mask = ApplyFalloff(mask, _Falloff.x, _Falloff.y, _Falloff.z, _MaskRange.xy, _MaskRange.z);
 
                 float heightData = tex2D(_Data, i.uv).x;
                 float height = lerp(_HeightRange.x, _HeightRange.y, heightData) * 0.5;
@@ -190,7 +199,7 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/WriteHeightmap"
                 if (mask <= 0.005) discard;
                 
                 // Apply falloff
-                mask = ApplyFalloff(mask, _Falloff.x, _Falloff.y, _Falloff.z, _MaskRange.xy);
+                mask = ApplyFalloff(mask, _Falloff.x, _Falloff.y, _Falloff.z, _MaskRange.xy, _MaskRange.z);
                 
                 // The blue channel contains the normalized height from the spline
                 float encodedHeight = maskSample.b;

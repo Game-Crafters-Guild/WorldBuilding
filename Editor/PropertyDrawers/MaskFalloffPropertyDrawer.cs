@@ -14,6 +14,7 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             
             container.Add(CreateSliderForProperty("Falloff", property.FindPropertyRelative("Min"), property.FindPropertyRelative("Max")));
             container.Add(CreateSliderForProperty("Range", property.FindPropertyRelative("MaskMin"), property.FindPropertyRelative("MaskMax")));
+            container.Add(new PropertyField(property.FindPropertyRelative("InnerFalloff")));
             
             return container;
 
