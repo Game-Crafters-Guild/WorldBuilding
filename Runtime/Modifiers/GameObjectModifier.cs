@@ -4,6 +4,13 @@ using System.Collections.Generic;
 using UnityEngine;
 using Random = UnityEngine.Random;
 
+#if UNITY_EDITOR
+using UnityEditor;
+#if UNITY_2019_1_OR_NEWER
+using Unity.EditorCoroutines.Editor;
+#endif
+#endif
+
 namespace GameCraftersGuild.WorldBuilding
 {
     /// <summary>
@@ -164,6 +171,9 @@ namespace GameCraftersGuild.WorldBuilding
         [Tooltip("Maximum number of objects to instantiate per frame when using async instantiation")]
         public int MaxObjectsPerFrame = 10;
         
+        [Tooltip("Use async instantiation for better performance. If disabled, objects will be created using coroutines.")]
+        public bool UseAsyncInstantiation = true;
+        
         // Collection to track spawned objects
         private List<GameObject> m_SpawnedObjects = new List<GameObject>();
         
@@ -176,8 +186,18 @@ namespace GameCraftersGuild.WorldBuilding
         private Queue<InstantiationRequest> m_InstantiationQueue = new Queue<InstantiationRequest>();
         private bool m_ProcessingQueue = false;
         
+        // References for coroutines
+        private Coroutine m_RunningCoroutine;
+        
+        #if UNITY_EDITOR
+        private EditorCoroutine m_EditorCoroutine;
+        #endif
+        
         // Add a reference for the container GameObject
         private GameObject m_ObjectContainer;
+        
+        // Batch counter for creating child containers
+        private int m_BatchCounter = 0;
         
         // Structure to hold pending instantiation requests
         private struct InstantiationRequest
@@ -318,8 +338,42 @@ namespace GameCraftersGuild.WorldBuilding
             }
         }
         
+        // Cancel any running queue processing
+        private void CancelQueueProcessing()
+        {
+            if (m_ProcessingQueue)
+            {
+                Debug.Log("Cancelling previous object placement operation");
+                
+                if (Application.isPlaying && m_RunningCoroutine != null)
+                {
+                    MonoBehaviourHelper.Instance.StopCoroutine(m_RunningCoroutine);
+                    m_RunningCoroutine = null;
+                }
+                #if UNITY_EDITOR
+                else if (!Application.isPlaying && m_EditorCoroutine != null)
+                {
+                    #if UNITY_2019_1_OR_NEWER
+                    EditorCoroutineUtility.StopCoroutine(m_EditorCoroutine);
+                    #else
+                    EditorCoroutineUtility.StopCoroutine(m_EditorCoroutine);
+                    #endif
+                    m_EditorCoroutine = null;
+                }
+                #endif
+                
+                m_ProcessingQueue = false;
+            }
+        }
+        
         public void ClearSpawnedObjects()
         {
+            // Cancel any running coroutines first
+            CancelQueueProcessing();
+            
+            // Clear the instantiation queue
+            m_InstantiationQueue.Clear();
+            
             foreach (var obj in m_SpawnedObjects)
             {
                 if (obj != null)
@@ -365,6 +419,9 @@ namespace GameCraftersGuild.WorldBuilding
         
         public void SpawnGameObjects(WorldBuildingContext context, Bounds worldBounds, Texture mask, Transform parent)
         {
+            // Cancel any in-progress spawning operations
+            CancelQueueProcessing();
+            
             // Try to find the collision constraint if we don't have a reference yet
             m_CollisionConstraint = ConstraintsContainer.FindConstraint<ObjectCollisionConstraint>();
             
@@ -441,16 +498,19 @@ namespace GameCraftersGuild.WorldBuilding
         private IEnumerator ProcessInstantiationQueue()
         {
             m_ProcessingQueue = true;
+            m_BatchCounter = 0;
             
             // Track pending async operations
             List<AsyncInstantiateOperation> pendingOperations = new List<AsyncInstantiateOperation>();
             List<InstantiationRequest> pendingRequests = new List<InstantiationRequest>();
+            GameObject currentBatchParent = null;
             
             // Progress tracking
             int totalObjects = m_InstantiationQueue.Count;
             int completedObjects = 0;
             int skippedObjects = 0;
             int lastReportedPercentage = 0;
+            int batchSize = 0;
             
             // Cache real-time object positions for collision checking
             List<Vector3> placedPositions = new List<Vector3>();
@@ -463,11 +523,27 @@ namespace GameCraftersGuild.WorldBuilding
             
             while (m_InstantiationQueue.Count > 0 || pendingOperations.Count > 0)
             {
+                // Create a new batch parent if needed
+                if (currentBatchParent == null)
+                {
+                    m_BatchCounter++;
+                    string batchName = $"Batch_{m_BatchCounter}";
+                    currentBatchParent = new GameObject(batchName);
+                    currentBatchParent.transform.SetParent(m_ObjectContainer.transform);
+                    currentBatchParent.SetActive(false); // Start disabled to prevent popping
+                    batchSize = 0;
+                }
+                
                 // Check if we can start more async operations
-                while (pendingOperations.Count < MaxObjectsPerFrame * 2 && m_InstantiationQueue.Count > 0)
+                bool processingNewBatch = pendingOperations.Count == 0;
+                int maxOpsThisFrame = processingNewBatch ? MaxObjectsPerFrame : 0;
+                
+                while (pendingOperations.Count < MaxObjectsPerFrame * 2 && 
+                       m_InstantiationQueue.Count > 0 && 
+                       batchSize < maxOpsThisFrame)
                 {
                     // Pull requests from the queue up to our per-frame limit
-                    int batchCount = Mathf.Min(MaxObjectsPerFrame, m_InstantiationQueue.Count);
+                    int batchCount = Mathf.Min(MaxObjectsPerFrame - batchSize, m_InstantiationQueue.Count);
                     List<InstantiationRequest> validRequests = new List<InstantiationRequest>();
                     
                     // For each request, check runtime collisions before instantiating
@@ -506,6 +582,17 @@ namespace GameCraftersGuild.WorldBuilding
                         if (validPosition)
                         {
                             validRequests.Add(request);
+                            batchSize++;
+                            
+                            // Immediately add to our collision tracking to prevent future placements from overlapping
+                            placedPositions.Add(request.position);
+                            placedMinDistances.Add(effectiveMinDistance);
+                            
+                            // Also add to permanent constraint tracking if constraint exists
+                            if (collisionConstraint != null)
+                            {
+                                collisionConstraint.AddObject(request.position, effectiveMinDistance);
+                            }
                         }
                         else
                         {
@@ -516,74 +603,114 @@ namespace GameCraftersGuild.WorldBuilding
                     // Instantiate valid requests
                     foreach (var request in validRequests)
                     {
-                        // Create the async operation
-                        AsyncInstantiateOperation asyncOp = UnityEngine.Object.InstantiateAsync(
-                            request.prefab, 
-                            request.position, 
-                            request.rotation);
-                        
-                        // Track the operation and its request data
-                        pendingOperations.Add(asyncOp);
-                        pendingRequests.Add(request);
-                    }
-                }
-                
-                // Process completed operations
-                for (int i = pendingOperations.Count - 1; i >= 0; i--)
-                {
-                    var asyncOp = pendingOperations[i];
-                    if (asyncOp.isDone)
-                    {
-                        var request = pendingRequests[i];
-                        GameObject newObject = asyncOp.Result[0] as GameObject;
-                        
-                        if (newObject != null)
+                        if (UseAsyncInstantiation)
                         {
+                            // Use the overload that takes parent, position, and rotation directly
+                            AsyncInstantiateOperation asyncOp = UnityEngine.Object.InstantiateAsync(
+                                request.prefab, 
+                                currentBatchParent.transform, // Use the batch parent
+                                request.position,
+                                request.rotation);
+                            
+                            // Track the operation and its request data
+                            pendingOperations.Add(asyncOp);
+                            pendingRequests.Add(request);
+                        }
+                        else
+                        {
+                            // Use synchronous instantiation with coroutine
+                            GameObject newObject = UnityEngine.Object.Instantiate(
+                                request.prefab,
+                                request.position,
+                                request.rotation,
+                                currentBatchParent.transform); // Use the batch parent
+                            
                             // Set scale
                             newObject.transform.localScale = request.scale;
-                            
-                            // Parent to container if available
-                            if (m_ObjectContainer != null)
-                            {
-                                newObject.transform.SetParent(m_ObjectContainer.transform, true);
-                            }
                             
                             // Keep track of spawned objects
                             m_SpawnedObjects.Add(newObject);
                             
-                            // Add to collision tracking for future objects
-                            float effectiveMinDistance = request.minimumDistance;
-                            if (effectiveMinDistance <= 0 && collisionConstraint != null)
-                                effectiveMinDistance = collisionConstraint.DefaultMinDistance;
-                            
-                            // Scale by object's scale
-                            effectiveMinDistance *= request.scale.x;
-                            
-                            // Add to our runtime collision tracking
-                            placedPositions.Add(request.position);
-                            placedMinDistances.Add(effectiveMinDistance);
-                            
-                            // Add to permanent constraint tracking if constraint exists
-                            if (collisionConstraint != null)
-                            {
-                                collisionConstraint.AddObject(request.position, effectiveMinDistance);
-                            }
+                            // Update progress immediately
+                            completedObjects++;
                         }
-                        
-                        // Remove from pending lists
-                        pendingOperations.RemoveAt(i);
-                        pendingRequests.RemoveAt(i);
-                        
-                        // Update progress
-                        completedObjects++;
+                    }
+                }
+                
+                // For non-async mode, check if we need to activate the batch parent
+                if (!UseAsyncInstantiation && batchSize > 0 && (batchSize >= MaxObjectsPerFrame || m_InstantiationQueue.Count == 0))
+                {
+                    // Update progress reporting
+                    int currentPercentage = Mathf.RoundToInt((float)completedObjects / totalObjects * 100);
+                    if (currentPercentage >= lastReportedPercentage + 10)
+                    {
+                        lastReportedPercentage = currentPercentage / 10 * 10; // Round to nearest 10%
+                        Debug.Log($"Spawning progress: {lastReportedPercentage}% ({completedObjects}/{totalObjects})");
+                    }
+                    
+                    // Enable the batch once it's full or we're done with all objects
+                    currentBatchParent.SetActive(true);
+                    currentBatchParent = null; // Create a new batch next time
+                    
+                    // Wait for next frame before processing more
+                    yield return null;
+                    continue;
+                }
+                
+                // Process completed operations for async mode
+                if (UseAsyncInstantiation && pendingOperations.Count > 0)
+                {
+                    bool allDone = true;
+                    int completedInBatch = 0;
+                    
+                    // Process completed operations
+                    for (int i = pendingOperations.Count - 1; i >= 0; i--)
+                    {
+                        var asyncOp = pendingOperations[i];
+                        if (asyncOp.isDone)
+                        {
+                            var request = pendingRequests[i];
+                            GameObject newObject = asyncOp.Result[0] as GameObject;
+                            
+                            if (newObject != null)
+                            {
+                                // Set scale
+                                newObject.transform.localScale = request.scale;
+                                
+                                // Keep track of spawned objects
+                                m_SpawnedObjects.Add(newObject);
+                            }
+                            
+                            // Remove from pending lists
+                            pendingOperations.RemoveAt(i);
+                            pendingRequests.RemoveAt(i);
+                            
+                            // Update progress
+                            completedObjects++;
+                            completedInBatch++;
+                        }
+                        else
+                        {
+                            allDone = false;
+                        }
+                    }
+                    
+                    // Update progress reporting
+                    if (completedInBatch > 0)
+                    {
                         int currentPercentage = Mathf.RoundToInt((float)completedObjects / totalObjects * 100);
-                        
-                        // Log progress every 10%
                         if (currentPercentage >= lastReportedPercentage + 10)
                         {
                             lastReportedPercentage = currentPercentage / 10 * 10; // Round to nearest 10%
                             Debug.Log($"Spawning progress: {lastReportedPercentage}% ({completedObjects}/{totalObjects})");
                         }
+                    }
+                    
+                    // If all operations in current batch are done, activate the batch parent and reset
+                    if (allDone && batchSize > 0)
+                    {
+                        currentBatchParent.SetActive(true);
+                        currentBatchParent = null; // Create a new batch next time
                     }
                 }
                 
@@ -591,8 +718,18 @@ namespace GameCraftersGuild.WorldBuilding
                 yield return null;
             }
             
+            // Ensure the last batch is activated
+            if (currentBatchParent != null)
+            {
+                currentBatchParent.SetActive(true);
+            }
+            
             Debug.Log($"Completed spawning {completedObjects} objects, skipped {skippedObjects} due to collisions");
             m_ProcessingQueue = false;
+            m_RunningCoroutine = null;
+            #if UNITY_EDITOR
+            m_EditorCoroutine = null;
+            #endif
         }
         
         private void SpawnGameObjectsGPU(WorldBuildingContext context, Bounds worldBounds, Texture mask)
@@ -607,6 +744,8 @@ namespace GameCraftersGuild.WorldBuilding
             // Generate placements on GPU
             List<GameObjectPlacementInfo> placements = m_GPUPlacement.GenerateObjectPlacements(
                 this, context, worldBounds, mask);
+            
+            if (placements == null) return;
                 
             // Prepare objects for instantiation
             foreach (var placement in placements)
@@ -659,49 +798,104 @@ namespace GameCraftersGuild.WorldBuilding
             }
             
             // Start processing the queue if not already processing
-            if (!m_ProcessingQueue && m_InstantiationQueue.Count > 0)
+            if (m_InstantiationQueue.Count > 0)
             {
                 if (Application.isPlaying)
                 {
-                    MonoBehaviourHelper.Instance.StartCoroutine(ProcessInstantiationQueue());
+                    m_RunningCoroutine = MonoBehaviourHelper.Instance.StartCoroutine(ProcessInstantiationQueue());
                 }
+                #if UNITY_EDITOR
+                else if (!Application.isPlaying)
+                {
+                    // Use EditorCoroutine in Edit mode
+                    #if UNITY_2019_1_OR_NEWER
+                    m_EditorCoroutine = EditorCoroutineUtility.StartCoroutineOwnerless(ProcessInstantiationQueue());
+                    #else
+                    m_EditorCoroutine = EditorCoroutineUtility.StartCoroutine(ProcessInstantiationQueue(), this);
+                    #endif
+                }
+                #endif
                 else
                 {
-                    // In Edit mode, instantiate synchronously
-                    while (m_InstantiationQueue.Count > 0)
-                    {
-                        var request = m_InstantiationQueue.Dequeue();
-                        
-                        GameObject newObject = UnityEngine.Object.Instantiate(
-                            request.prefab,
-                            request.position,
-                            request.rotation
-                        );
-                        
-                        // Set scale
-                        newObject.transform.localScale = request.scale;
-                        
-                        // Parent to container if available
-                        if (m_ObjectContainer != null)
-                        {
-                            newObject.transform.SetParent(m_ObjectContainer.transform, true);
-                        }
-                        
-                        // Keep track of spawned objects
-                        m_SpawnedObjects.Add(newObject);
-                        
-                        // Add to collision tracking if constraint exists
-                        if (m_CollisionConstraint != null)
-                        {
-                            // Get the scale factor from the request.scale (using x component since it's a uniform scale)
-                            float scaleFactor = request.scale.x;
-                            // Add the object with its pre-scaled minimum distance, also accounting for object scale
-                            float effectiveMinDistance = request.minimumDistance * GlobalScale * scaleFactor;
-                            m_CollisionConstraint.AddObject(request.position, effectiveMinDistance);
-                        }
-                    }
+                    // Fallback for non-editor builds when not playing
+                    ProcessSynchronously();
                 }
             }
+        }
+        
+        /// <summary>
+        /// Process queue synchronously when coroutines aren't available
+        /// </summary>
+        private void ProcessSynchronously()
+        {
+            Debug.Log($"Processing {m_InstantiationQueue.Count} objects synchronously");
+            m_BatchCounter = 0;
+            
+            // Simple list for tracking placed objects and distances
+            List<Vector3> placedPositions = new List<Vector3>();
+            List<float> placedMinDistances = new List<float>();
+            
+            // Create a parent for the whole batch since we're doing this all at once
+            string batchName = $"Batch_Sync";
+            GameObject batchParent = new GameObject(batchName);
+            batchParent.transform.SetParent(m_ObjectContainer.transform);
+            batchParent.SetActive(false); // Start disabled to prevent popping
+            
+            // Process the entire queue synchronously
+            while (m_InstantiationQueue.Count > 0)
+            {
+                var request = m_InstantiationQueue.Dequeue();
+                
+                // Check for collision with already placed objects
+                bool validPosition = true;
+                float effectiveMinDistance = request.minimumDistance > 0 ? 
+                    request.minimumDistance : 
+                    (m_CollisionConstraint != null ? m_CollisionConstraint.DefaultMinDistance : 2.0f);
+                
+                // Apply scale factor
+                effectiveMinDistance *= request.scale.x;
+                
+                // Check against objects already placed
+                for (int i = 0; i < placedPositions.Count; i++)
+                {
+                    float requiredDistance = Mathf.Max(effectiveMinDistance, placedMinDistances[i]);
+                    if (Vector3.Distance(request.position, placedPositions[i]) < requiredDistance)
+                    {
+                        validPosition = false;
+                        break;
+                    }
+                }
+                
+                // Skip invalid positions
+                if (!validPosition)
+                    continue;
+                
+                // Add to collision tracking before instantiation
+                placedPositions.Add(request.position);
+                placedMinDistances.Add(effectiveMinDistance);
+                
+                // Add to collision tracking if constraint exists
+                if (m_CollisionConstraint != null)
+                {
+                    m_CollisionConstraint.AddObject(request.position, effectiveMinDistance);
+                }
+                
+                GameObject newObject = UnityEngine.Object.Instantiate(
+                    request.prefab,
+                    request.position,
+                    request.rotation,
+                    batchParent.transform // Parent to batch container
+                );
+                
+                // Set scale
+                newObject.transform.localScale = request.scale;
+                
+                // Keep track of spawned objects
+                m_SpawnedObjects.Add(newObject);
+            }
+            
+            // Enable the batch when all objects are ready
+            batchParent.SetActive(true);
         }
 
         protected PlacementConstraintContext CreateConstraintContext(
@@ -794,4 +988,68 @@ namespace GameCraftersGuild.WorldBuilding
             }
         }
     }
+    
+    #if UNITY_EDITOR && !UNITY_2019_1_OR_NEWER
+    /// <summary>
+    /// Editor coroutine wrapper for non-play mode
+    /// </summary>
+    public class EditorCoroutine
+    {
+        public readonly IEnumerator _routine;
+        
+        public EditorCoroutine(IEnumerator routine)
+        {
+            _routine = routine;
+        }
+    }
+    
+    /// <summary>
+    /// Utility class for editor coroutines
+    /// </summary>
+    public static class EditorCoroutineUtility
+    {
+        private static Dictionary<EditorCoroutine, bool> _runningCoroutines = new Dictionary<EditorCoroutine, bool>();
+        
+        public static EditorCoroutine StartCoroutine(IEnumerator routine, object owner)
+        {
+            // In the editor, we'll use our custom EditorCoroutine implementation
+            var coroutine = new EditorCoroutine(routine);
+            _runningCoroutines[coroutine] = true;
+            UnityEditor.EditorApplication.update += () => EditorUpdate(routine, coroutine);
+            return coroutine;
+        }
+        
+        public static void StopCoroutine(EditorCoroutine coroutine)
+        {
+            if (coroutine == null) return;
+            
+            // Mark this coroutine as stopped
+            if (_runningCoroutines.ContainsKey(coroutine))
+            {
+                _runningCoroutines[coroutine] = false;
+            }
+        }
+        
+        private static void EditorUpdate(IEnumerator routine, EditorCoroutine coroutine)
+        {
+            // If coroutine is marked as stopped, remove the update callback
+            if (_runningCoroutines.TryGetValue(coroutine, out bool isRunning) && !isRunning)
+            {
+                _runningCoroutines.Remove(coroutine);
+                UnityEditor.EditorApplication.update -= () => EditorUpdate(routine, coroutine);
+                return;
+            }
+            
+            if (routine.MoveNext())
+            {
+                // Continue execution next frame
+                return;
+            }
+            
+            // Coroutine finished, remove update callback
+            _runningCoroutines.Remove(coroutine);
+            UnityEditor.EditorApplication.update -= () => EditorUpdate(routine, coroutine);
+        }
+    }
+    #endif
 } 

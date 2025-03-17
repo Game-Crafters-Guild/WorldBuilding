@@ -454,7 +454,7 @@ namespace GameCraftersGuild.WorldBuilding
             if (placementComputeShader == null)
             {
                 Debug.LogError("GPU Placement: Compute shader is missing!");
-                return new List<GameObjectPlacementInfo>();
+                return null;
             }
             
             // Setup constraints from modifier
@@ -463,12 +463,12 @@ namespace GameCraftersGuild.WorldBuilding
             // Get terrain data
             TerrainData terrainData = context.TerrainData;
             if (terrainData == null || modifier.GameObjects.Count == 0) 
-                return new List<GameObjectPlacementInfo>();
+                return null;
                 
             // Get terrain
             Terrain terrain = Terrain.activeTerrain;
             if (terrain == null)
-                return new List<GameObjectPlacementInfo>();
+                return null;
             
             // Setup normal texture which isn't in WorldBuildingContext
             SetupNormalTexture(terrainData);
@@ -502,6 +502,8 @@ namespace GameCraftersGuild.WorldBuilding
             
             // Apply density to determine how many objects to actually spawn
             int numObjects = Mathf.FloorToInt(potentialTotalObjects * modifier.Density);
+            if (numObjects == 0)
+                return null;
             
             // Apply max objects limit if set
             if (modifier.MaxObjects > 0)
