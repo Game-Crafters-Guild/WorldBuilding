@@ -13,6 +13,7 @@ namespace GameCraftersGuild.WorldBuilding
         [Range(0.0f, 1.0f)] public float Intensity = 1.0f;
         public TerrainLayer TerrainLayer;
         public MaskFalloff Fallof;
+        public FalloffType FalloffFunction = FalloffType.Linear;
         public override string FilePath => GetFilePath();
 
         [Header("Optional custom mask texture to use instead of the shape.")]
@@ -21,6 +22,7 @@ namespace GameCraftersGuild.WorldBuilding
         public override void ApplySplatmap(WorldBuildingContext context, Bounds worldBounds, Texture mask)
         {
             context.MaskFalloff = Fallof;
+            context.FalloffFunction = FalloffFunction;
             context.ApplySplatmap(worldBounds, TerrainLayer, MaskTexture == null ? mask : MaskTexture, Intensity);
         }
 

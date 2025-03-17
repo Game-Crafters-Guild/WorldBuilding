@@ -8,12 +8,14 @@ namespace GameCraftersGuild.WorldBuilding
     {
         public HeightWriteMode Mode;
         public MaskFalloff Fallof;
+        public FalloffType FalloffFunction = FalloffType.Linear;
         [SerializeReference] public NoiseProperties NoiseProperties = new NoiseProperties();
         public override string FilePath => GetFilePath();
 
         public override void ApplyHeightmap(WorldBuildingContext context, Bounds worldBounds, Texture mask)
         {
             context.MaskFalloff = Fallof;
+            context.FalloffFunction = FalloffFunction;
             context.ApplyHeightmap(worldBounds, NoiseProperties.NoiseTexture, mask, Mode, NoiseProperties.HeightMin,
                 NoiseProperties.HeightMax);
         }
