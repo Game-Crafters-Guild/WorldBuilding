@@ -303,8 +303,11 @@ namespace GameCraftersGuild.WorldBuilding
             
             float segmentStepT = 1f / segmentCount;
             int steps = segmentCount + 1;
-            int vertexCount = steps * 2;
-            int triangleCount = segmentCount * 6;
+            
+            // Add 4 more vertices for the extra segments (2 at start, 2 at end)
+            int vertexCount = (steps + 2) * 2;
+            // We need one extra quad at the start and one at the end (12 more indices)
+            int triangleCount = (segmentCount + 2) * 6;
             int prevVertexCount = positions.Length;
 
             positions.Capacity += vertexCount;
@@ -320,77 +323,109 @@ namespace GameCraftersGuild.WorldBuilding
             float uvScaleFactor = isStraightLine ? 1.0f : 
                 (length > Width * 10 ? Width / (length * 0.1f) : 1.0f);
 
+            // Define a small delta for the points immediately after start and before end
+            float smallDelta = 0.005f;
+
+            // First, add the segment at t=0 with v=0.0f
+            AddSegmentVertex(spline, 0f, 0f, true, widthDataIndex, ref positions, ref normals, ref uvs);
+            
+            // Add the segment immediately after the start with a small delta
+            AddSegmentVertex(spline, smallDelta, 1f, false, widthDataIndex, ref positions, ref normals, ref uvs);
+
             // PERFORMANCE: Sample each point in one loop instead of calculating repeatedly
             for (int i = 0; i < steps; i++)
             {
                 float t = (float)i / (steps - 1);
-                float3 pos, dir, up;
+                // Skip the first and last points as we handle them separately
+                if (t < smallDelta || t > (1f - smallDelta))
+                    continue;
                 
-                // Evaluate spline at this point - preserving EXACT height
-                SplineUtility.Evaluate(spline, t, out pos, out dir, out up);
-                
-                // Quick fixes for invalid directions
-                if (math.length(dir) < 0.001f)
-                {
-                    dir = isStraightLine ? 
-                        math.normalize(new float3(endPos.x - startPos.x, 0, endPos.z - startPos.z)) : 
-                        new float3(0, 0, 1);
-                }
-                
-                // Always use consistent up vector for stability
-                up = new float3(0, 1, 0);
-                
-                // Calculate tangent vector
-                var scale = transform.lossyScale;
-                var tangent = math.normalizesafe(math.cross(up, dir)) *
-                              new float3(1f / scale.x, 1f / scale.y, 1f / scale.z);
-                
-                if (math.length(tangent) < 0.001f)
-                {
-                    tangent = math.normalizesafe(new float3(dir.z, 0, -dir.x)) * 
-                              new float3(1f / scale.x, 1f / scale.y, 1f / scale.z);
-                }
-                
-                // Get width - PERFORMANCE: Simplified width calculation
-                float width = Width * 0.5f;
-                if (widthDataIndex < m_Widths.Count && m_Widths[widthDataIndex] != null && 
-                    m_Widths[widthDataIndex].Count > 0)
-                {
-                    width = m_Widths[widthDataIndex].Evaluate(spline, t, PathIndexUnit.Normalized,
-                        new UnityEngine.Splines.Interpolators.LerpFloat());
-                    width = math.clamp(width, .001f, 10000f) * 0.5f;
-                }
-                
-                // Add vertex positions
-                float3 leftPos = pos - (tangent * width);
-                float3 rightPos = pos + (tangent * width);
-                
-                // Preserve exact height
-                leftPos.y = rightPos.y = pos.y;
-                
-                // Add positions and normals
-                positions.Add(leftPos);
-                positions.Add(rightPos);
-                normals.Add(up);
-                normals.Add(up);
-                
-                // Simplified UV calculation
-                //float v = isStraightLine ? t : (t * length / Width) * uvScaleFactor;
-                float v = 1.0f;
-                uvs.Add(new float2(-1f, v));
-                uvs.Add(new float2(1f, v));
+                AddSegmentVertex(spline, t, 1f, false, widthDataIndex, ref positions, ref normals, ref uvs);
             }
             
+            // Add the segment immediately before the end with a small delta
+            AddSegmentVertex(spline, 1f - smallDelta, 1f, false, widthDataIndex, ref positions, ref normals, ref uvs);
+            
+            // Add the segment at t=1 with v=0.0f
+            AddSegmentVertex(spline, 1f, 0f, true, widthDataIndex, ref positions, ref normals, ref uvs);
+            
             // Create triangles
-            for (int i = 0, n = prevVertexCount; i < triangleCount; i += 6, n += 2)
+            int vertCount = positions.Length - prevVertexCount;
+            for (int i = 0; i < vertCount - 2; i += 2)
             {
-                indices.Add((n + 2) % (prevVertexCount + vertexCount));
-                indices.Add((n + 1) % (prevVertexCount + vertexCount));
-                indices.Add((n + 0) % (prevVertexCount + vertexCount));
-                indices.Add((n + 2) % (prevVertexCount + vertexCount));
-                indices.Add((n + 3) % (prevVertexCount + vertexCount));
-                indices.Add((n + 1) % (prevVertexCount + vertexCount));
+                int baseIdx = prevVertexCount + i;
+                
+                indices.Add(baseIdx);
+                indices.Add(baseIdx + 3);
+                indices.Add(baseIdx + 1);
+                
+                indices.Add(baseIdx);
+                indices.Add(baseIdx + 2);
+                indices.Add(baseIdx + 3);
             }
+        }
+        
+        // Helper method to add a segment vertex with proper UV
+        private void AddSegmentVertex(Spline spline, float t, float v, bool isEndpoint, int widthDataIndex,
+            ref NativeList<float3> positions, ref NativeList<float3> normals, ref NativeList<float2> uvs)
+        {
+            float3 pos, dir, up;
+            
+            // Evaluate spline at this point - preserving EXACT height
+            SplineUtility.Evaluate(spline, t, out pos, out dir, out up);
+            
+            // Quick fixes for invalid directions
+            if (math.length(dir) < 0.001f)
+            {
+                SplineUtility.Evaluate(spline, 0, out var startPos, out _, out _);
+                SplineUtility.Evaluate(spline, 1, out var endPos, out _, out _);
+                
+                bool isStraightLine = spline.Count == 2;
+                dir = isStraightLine ? 
+                    math.normalize(new float3(endPos.x - startPos.x, 0, endPos.z - startPos.z)) : 
+                    new float3(0, 0, 1);
+            }
+            
+            // Always use consistent up vector for stability
+            up = new float3(0, 1, 0);
+            
+            // Calculate tangent vector
+            var scale = transform.lossyScale;
+            var tangent = math.normalizesafe(math.cross(up, dir)) *
+                          new float3(1f / scale.x, 1f / scale.y, 1f / scale.z);
+            
+            if (math.length(tangent) < 0.001f)
+            {
+                tangent = math.normalizesafe(new float3(dir.z, 0, -dir.x)) * 
+                          new float3(1f / scale.x, 1f / scale.y, 1f / scale.z);
+            }
+            
+            // Get width - PERFORMANCE: Simplified width calculation
+            float width = Width * 0.5f;
+            if (widthDataIndex < m_Widths.Count && m_Widths[widthDataIndex] != null && 
+                m_Widths[widthDataIndex].Count > 0)
+            {
+                width = m_Widths[widthDataIndex].Evaluate(spline, t, PathIndexUnit.Normalized,
+                    new UnityEngine.Splines.Interpolators.LerpFloat());
+                width = math.clamp(width, .001f, 10000f) * 0.5f;
+            }
+            
+            // Add vertex positions
+            float3 leftPos = pos - (tangent * width);
+            float3 rightPos = pos + (tangent * width);
+            
+            // Preserve exact height
+            leftPos.y = rightPos.y = pos.y;
+            
+            // Add positions and normals
+            positions.Add(leftPos);
+            positions.Add(rightPos);
+            normals.Add(up);
+            normals.Add(up);
+            
+            // Set UV with specified v value
+            uvs.Add(new float2(-1f, v));
+            uvs.Add(new float2(1f, v));
         }
     }
 }

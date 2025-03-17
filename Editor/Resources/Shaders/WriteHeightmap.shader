@@ -52,8 +52,6 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/WriteHeightmap"
             sampler2D _Data;
             float4 _HeightRange;
             float4 _Falloff;
-            float4 _TerrainWorldHeightRange;
-            float4 _SplineMeshBoundsY;
 
             v2f vert (appdata v)
             {
@@ -65,58 +63,15 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/WriteHeightmap"
 
             float4 frag (v2f i) : SV_Target
             {
-                // Higher precision sampling
-                float4 mask = tex2D(_Mask, i.uv);
-                float maskIntensity = mask.r;
-                
-                // Early exit if mask is too weak
-                if (maskIntensity <= 0.005)
-                    return tex2D(_Data, i.uv);
-                
-                // Apply falloff to make path blend nicely with surroundings
-                float falloff = smoothstep(_Falloff.x, _Falloff.y, maskIntensity);
-                
-                // CRITICAL FIX: Extract height from the mask texture
-                // If available, use direct height value from green channel
-                float rawHeight = mask.g;
-                float encodedHeight = mask.b;
-                
-                // Get both the base height and the spline height
-                float baseHeight = tex2D(_Data, i.uv).r;
-                
-                // Note that _SplineMeshBoundsY is defined in the properties section
-                float worldMinY = _SplineMeshBoundsY.x; 
-                float worldMaxY = _SplineMeshBoundsY.y;
-                
-                // Calculate final world space height based on encoding
-                float worldSplineHeight;
-                
-                // If direct height (green channel) is available and non-zero, use it
-                if (rawHeight > 0.001) {
-                    // Use the direct height from the green channel
-                    worldSplineHeight = rawHeight;
-                } else {
-                    // Fall back to normalized height from blue channel
-                    worldSplineHeight = lerp(worldMinY, worldMaxY, encodedHeight);
-                }
-                
-                // Convert from world space to terrain space (0-1 range for heightmap)
-                float terrainMinY = _TerrainWorldHeightRange.x;
-                float terrainMaxY = _TerrainWorldHeightRange.y;
-                float terrainRange = terrainMaxY - terrainMinY;
-                
-                // Normalize to terrain space (0-1)
-                float normalizedTerrainHeight = (worldSplineHeight - terrainMinY) / terrainRange;
-                
-                // Clamp to ensure we stay within valid range
-                normalizedTerrainHeight = saturate(normalizedTerrainHeight);
-                
-                // CRITICAL: For paths, we want to REPLACE the height, not blend it
-                // This ensures the exact height is used without being affected by existing terrain
-                float finalHeight = lerp(baseHeight, normalizedTerrainHeight, falloff);
-                
-                // Return the calculated height
-                return finalHeight;
+                // sample the texture
+                float mask = tex2D(_Mask, i.uv).x;
+                if (mask <= 0.01) discard;
+                mask = smoothstep(_Falloff.x, _Falloff.y, mask);
+
+                float heightData = tex2D(_Data, i.uv).x;
+                float height = lerp(_HeightRange.x, _HeightRange.y, heightData) * 0.5;
+                float4 packedHeight = PackHeightmap(height);
+                return float4(packedHeight.x, packedHeight.y, packedHeight.z, mask);
             }
             ENDCG
         }
@@ -177,10 +132,9 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/WriteHeightmap"
                 if (mask <= 0.005) discard;
                 
                 // Apply falloff
-                float falloffRange = max(0.01, _Falloff.y - _Falloff.x);
-                mask = saturate(smoothstep(_Falloff.x, _Falloff.y, mask));
+                mask = smoothstep(_Falloff.x, _Falloff.y, mask);
                 
-                // CRITICAL: The blue channel contains the normalized height from the spline
+                // The blue channel contains the normalized height from the spline
                 float encodedHeight = maskSample.b;
                 
                 // Convert from normalized spline height (0-1) to world space
@@ -189,9 +143,6 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/WriteHeightmap"
                 // Convert from world space to terrain space (0-0.5)
                 float terrainRange = max(0.001, _TerrainWorldHeightRange.y - _TerrainWorldHeightRange.x);
                 float terrainHeight = (splineWorldHeight - _TerrainWorldHeightRange.x) / terrainRange * 0.5;
-                
-                // Ensure valid height
-                terrainHeight = clamp(terrainHeight, 0.0, 0.5);
                 
                 // Pack height for output (no blending with base height)
                 float4 packedHeight = PackHeightmap(terrainHeight);
