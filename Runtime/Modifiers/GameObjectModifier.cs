@@ -442,24 +442,101 @@ namespace GameCraftersGuild.WorldBuilding
         {
             m_ProcessingQueue = true;
             
-            while (m_InstantiationQueue.Count > 0)
+            // Track pending async operations
+            List<AsyncInstantiateOperation> pendingOperations = new List<AsyncInstantiateOperation>();
+            List<InstantiationRequest> pendingRequests = new List<InstantiationRequest>();
+            
+            // Progress tracking
+            int totalObjects = m_InstantiationQueue.Count;
+            int completedObjects = 0;
+            int skippedObjects = 0;
+            int lastReportedPercentage = 0;
+            
+            // Cache real-time object positions for collision checking
+            List<Vector3> placedPositions = new List<Vector3>();
+            List<float> placedMinDistances = new List<float>();
+            
+            // Get collision constraint if we have one
+            var collisionConstraint = ConstraintsContainer.FindConstraint<ObjectCollisionConstraint>();
+            
+            Debug.Log($"Starting to spawn {totalObjects} objects (max {MaxObjectsPerFrame} per frame)");
+            
+            while (m_InstantiationQueue.Count > 0 || pendingOperations.Count > 0)
             {
-                int count = 0;
-                
-                // Process a batch of instantiations
-                while (count < MaxObjectsPerFrame && m_InstantiationQueue.Count > 0)
+                // Check if we can start more async operations
+                while (pendingOperations.Count < MaxObjectsPerFrame * 2 && m_InstantiationQueue.Count > 0)
                 {
-                    var request = m_InstantiationQueue.Dequeue();
+                    // Pull requests from the queue up to our per-frame limit
+                    int batchCount = Mathf.Min(MaxObjectsPerFrame, m_InstantiationQueue.Count);
+                    List<InstantiationRequest> validRequests = new List<InstantiationRequest>();
                     
-                    // Create the async operation
-                    AsyncInstantiateOperation asyncOp = UnityEngine.Object.InstantiateAsync(
-                        request.prefab, 
-                        request.position, 
-                        request.rotation);
+                    // For each request, check runtime collisions before instantiating
+                    for (int i = 0; i < batchCount; i++)
+                    {
+                        if (m_InstantiationQueue.Count == 0)
+                            break;
+                            
+                        var request = m_InstantiationQueue.Dequeue();
+                        
+                        // Check if this position would collide with objects already placed during this session
+                        bool validPosition = true;
+                        
+                        // Calculate effective minimum distance with scale
+                        float effectiveMinDistance = request.minimumDistance;
+                        if (effectiveMinDistance <= 0 && collisionConstraint != null)
+                            effectiveMinDistance = collisionConstraint.DefaultMinDistance;
+                        
+                        // Apply scale factor to minimum distance
+                        effectiveMinDistance *= request.scale.x;
+                        
+                        // Check against objects placed during this coroutine
+                        for (int j = 0; j < placedPositions.Count; j++)
+                        {
+                            // Use the maximum of the two distances
+                            float requiredDistance = Mathf.Max(effectiveMinDistance, placedMinDistances[j]);
+                            
+                            if (Vector3.Distance(request.position, placedPositions[j]) < requiredDistance)
+                            {
+                                validPosition = false;
+                                break;
+                            }
+                        }
+                        
+                        // If position is valid, add to batch for instantiation
+                        if (validPosition)
+                        {
+                            validRequests.Add(request);
+                        }
+                        else
+                        {
+                            skippedObjects++;
+                        }
+                    }
                     
-                    // We need to wait for completion to set scale and add to tracked objects
-                    asyncOp.completed += (op) => {
+                    // Instantiate valid requests
+                    foreach (var request in validRequests)
+                    {
+                        // Create the async operation
+                        AsyncInstantiateOperation asyncOp = UnityEngine.Object.InstantiateAsync(
+                            request.prefab, 
+                            request.position, 
+                            request.rotation);
+                        
+                        // Track the operation and its request data
+                        pendingOperations.Add(asyncOp);
+                        pendingRequests.Add(request);
+                    }
+                }
+                
+                // Process completed operations
+                for (int i = pendingOperations.Count - 1; i >= 0; i--)
+                {
+                    var asyncOp = pendingOperations[i];
+                    if (asyncOp.isDone)
+                    {
+                        var request = pendingRequests[i];
                         GameObject newObject = asyncOp.Result[0] as GameObject;
+                        
                         if (newObject != null)
                         {
                             // Set scale
@@ -474,25 +551,47 @@ namespace GameCraftersGuild.WorldBuilding
                             // Keep track of spawned objects
                             m_SpawnedObjects.Add(newObject);
                             
-                            // Add to collision tracking if constraint exists
-                            if (m_CollisionConstraint != null)
+                            // Add to collision tracking for future objects
+                            float effectiveMinDistance = request.minimumDistance;
+                            if (effectiveMinDistance <= 0 && collisionConstraint != null)
+                                effectiveMinDistance = collisionConstraint.DefaultMinDistance;
+                            
+                            // Scale by object's scale
+                            effectiveMinDistance *= request.scale.x;
+                            
+                            // Add to our runtime collision tracking
+                            placedPositions.Add(request.position);
+                            placedMinDistances.Add(effectiveMinDistance);
+                            
+                            // Add to permanent constraint tracking if constraint exists
+                            if (collisionConstraint != null)
                             {
-                                // Get the scale factor from the request.scale (using x component since it's a uniform scale)
-                                float scaleFactor = request.scale.x;
-                                // Add the object with its pre-scaled minimum distance, accounting for object scale
-                                float effectiveMinDistance = request.minimumDistance * scaleFactor;
-                                m_CollisionConstraint.AddObject(request.position, effectiveMinDistance);
+                                collisionConstraint.AddObject(request.position, effectiveMinDistance);
                             }
                         }
-                    };
-                    
-                    count++;
+                        
+                        // Remove from pending lists
+                        pendingOperations.RemoveAt(i);
+                        pendingRequests.RemoveAt(i);
+                        
+                        // Update progress
+                        completedObjects++;
+                        int currentPercentage = Mathf.RoundToInt((float)completedObjects / totalObjects * 100);
+                        
+                        // Log progress every 10%
+                        if (currentPercentage >= lastReportedPercentage + 10)
+                        {
+                            lastReportedPercentage = currentPercentage / 10 * 10; // Round to nearest 10%
+                            Debug.Log($"Spawning progress: {lastReportedPercentage}% ({completedObjects}/{totalObjects})");
+                        }
+                    }
                 }
                 
                 // Wait for next frame before processing more
                 yield return null;
             }
             
+            Debug.Log($"Completed spawning {completedObjects} objects, skipped {skippedObjects} due to collisions");
             m_ProcessingQueue = false;
         }
         

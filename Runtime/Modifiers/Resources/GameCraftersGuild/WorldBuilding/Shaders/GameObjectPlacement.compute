@@ -1,5 +1,6 @@
 // Compute shader for game object placement with constraints
 #pragma kernel GeneratePositions
+#pragma kernel FilterObjectCollisions
 
 // Input terrain parameters
 float4 _TerrainParams; // x: width, y: height, z: length, w: unused
@@ -70,7 +71,12 @@ struct PlacementResult
     uint isValid;       // 1 if valid position, 0 if not
 };
 
+// Buffers for filter pass
 RWStructuredBuffer<PlacementResult> _Results;
+RWStructuredBuffer<PlacementResult> _FilteredResults;
+RWStructuredBuffer<int> _ValidCount;
+int _MaxResults;
+int _InputResultsCount;
 
 // Helper functions
 float GetRandomFloat(uint id, uint seed)
@@ -188,10 +194,6 @@ bool CheckMaskConstraint(float2 boundsNorm)
     float4 maskColor = _MaskTexture.SampleLevel(sampler_MaskTexture, boundsNorm, 0);
     
     // Use the actual threshold from MaskConstraint
-    // Get mask value across all relevant channels
-    //float maskValue = dot(maskColor, float4(1,1,1,1));
-
-    // Use the actual threshold from MaskConstraint.
     float maskValue = maskColor.r;
     
     // Compare with the threshold from the constraint
@@ -245,17 +247,17 @@ bool CheckCollisionConstraint(float3 worldPos, float currentMinDistance, float o
     minDist *= objectScale;
     
     // Check against all placed objects
-    for (uint i = 0; i < _PlacedObjectCount; i++)
+    for (uint p = 0; p < _PlacedObjectCount; p++)
     {
         // Get position from flattened array
         float3 objPos = float3(
-            _PlacedObjectPositions[i*3],
-            _PlacedObjectPositions[i*3+1],
-            _PlacedObjectPositions[i*3+2]
+            _PlacedObjectPositions[p*3],
+            _PlacedObjectPositions[p*3+1],
+            _PlacedObjectPositions[p*3+2]
         );
         
         // Get minimum distance for this object (already includes GlobalScale and that object's scale)
-        float objMinDist = _MinimumDistances[i];
+        float objMinDist = _MinimumDistances[p];
         
         // Use maximum of the two distances
         float requiredDist = max(minDist, objMinDist);
@@ -305,9 +307,9 @@ bool CheckLayerConstraint(float2 normPos)
     }
     
     // Check if the dominant layer is in our allowed layers
-    for (uint i = 0; i < _LayerConstraintCount; i++)
+    for (uint k = 0; k < _LayerConstraintCount; k++)
     {
-        if (_LayerConstraintIndices[i] == dominantLayerIndex)
+        if (_LayerConstraintIndices[k] == dominantLayerIndex)
             return true;
     }
     
@@ -321,18 +323,12 @@ bool CheckAllConstraints(float2 normPos, float2 boundsNorm, float height, float 
         return false;
     
     // Check height constraints
-    for (uint i = 0; i < 1; i++) // Assuming 1 height constraint for now
-    {
-        if (!CheckHeightConstraint(height, i))
-            return false;
-    }
+    if (!CheckHeightConstraint(height, 0))
+        return false;
     
     // Check slope constraints
-    for (uint i = 0; i < 1; i++) // Assuming 1 slope constraint for now
-    {
-        if (!CheckSlopeConstraint(slope, i))
-            return false;
-    }
+    if (!CheckSlopeConstraint(slope, 0))
+        return false;
     
     // Check noise constraints
     if (!CheckNoiseConstraint(boundsNorm))
@@ -361,8 +357,9 @@ void GeneratePositions(uint3 id : SV_DispatchThreadID)
     if (_MaxObjectCount > 0 && index >= _MaxObjectCount)
         return;
     
-    // Apply density-based filtering
-    if (GetRandomFloat(index * 13 + 9, _RandomSeed) > _Density)
+    // Apply density-based filtering only if density is less than 1.0
+    // With higher object counts and two-pass filtering, we can be less aggressive here
+    if (_Density < 0.99f && GetRandomFloat(index * 13 + 9, _RandomSeed) > _Density)
         return;
     
     // Generate grid-based random position with hashing for better distribution
@@ -438,5 +435,114 @@ void GeneratePositions(uint3 id : SV_DispatchThreadID)
         }
         _Results[index].prefabIndex = prefabIndex;
         _Results[index].isValid = 1;
+    }
+}
+
+// Kernel for filtering object collisions
+[numthreads(64,1,1)]
+void FilterObjectCollisions(uint3 id : SV_DispatchThreadID)
+{
+    uint index = id.x;
+    
+    // Skip if beyond input results count
+    if (index >= _InputResultsCount)
+        return;
+    
+    // Skip invalid objects
+    if (_Results[index].isValid == 0)
+        return;
+    
+    // Get this object's position, scale, and prefab index
+    float3 position = _Results[index].position;
+    float scale = _Results[index].scale;
+    uint prefabIndex = _Results[index].prefabIndex;
+    
+    // Get minimum distance for this object
+    PrefabSettings settings = _PrefabSettings[prefabIndex];
+    float minDist = settings.minimumDistance;
+    if (minDist <= 0)
+        minDist = _DefaultMinDistance;
+    
+    // Scale the minimum distance by the object's scale, slightly reduced for the filtering pass
+    // to make filtering less aggressive
+    minDist *= scale * 0.8; // Reduce by 20% to prevent over-filtering
+    
+    // Check against all other valid objects we've seen so far
+    bool validPosition = true;
+    
+    // First, check against existing objects (from previous iterations)
+    // This is already done in the GeneratePositions kernel via CheckCollisionConstraint
+    
+    // Next, check against other objects already in the filtered results buffer
+    uint validCount = 0;
+    InterlockedAdd(_ValidCount[0], 0, validCount); // Atomic read of current valid count
+    
+    // Early exit for the first object (always valid and nothing to check against)
+    if (validCount == 0)
+    {
+        // This is the first valid object, add it
+        uint slotIndex = 0;
+        InterlockedAdd(_ValidCount[0], 1, slotIndex);
+        
+        if (slotIndex < _MaxResults)
+        {
+            _FilteredResults[slotIndex] = _Results[index];
+        }
+        return;
+    }
+    
+    // Check against previously filtered objects
+    for (uint j = 0; j < validCount && validPosition; j++)
+    {
+        // Skip if the other object is invalid (should not happen, but just in case)
+        if (_FilteredResults[j].isValid == 0)
+            continue;
+            
+        // Get the other object's position, scale, and minimum distance
+        float3 otherPos = _FilteredResults[j].position;
+        float otherScale = _FilteredResults[j].scale;
+        uint otherPrefabIndex = _FilteredResults[j].prefabIndex;
+        
+        // Skip distance check for far away objects (optimization)
+        float3 diff = position - otherPos;
+        float sqrDist = dot(diff, diff);
+        if (sqrDist > 100.0) // Skip if more than 10 units away
+            continue;
+        
+        // Get other object's minimum distance
+        PrefabSettings otherSettings = _PrefabSettings[otherPrefabIndex];
+        float otherMinDist = otherSettings.minimumDistance;
+        if (otherMinDist <= 0)
+            otherMinDist = _DefaultMinDistance;
+            
+        // Scale by object's scale, also reduced for filtering pass
+        otherMinDist *= otherScale * 0.8; // Reduce by 20% 
+        
+        // Use maximum of the two distances
+        float requiredDist = max(minDist, otherMinDist);
+        
+        // Calculate squared distance for performance
+        float sqrRequiredDist = requiredDist * requiredDist;
+        
+        // Check distance
+        if (sqrDist < sqrRequiredDist)
+        {
+            validPosition = false;
+        }
+    }
+    
+    // If position is valid, add to filtered results
+    if (validPosition)
+    {
+        // Atomically increment valid count to get our "slot"
+        uint slotIndex = 0;
+        InterlockedAdd(_ValidCount[0], 1, slotIndex);
+        
+        // Check if we're still under the max objects limit
+        if (slotIndex < _MaxResults)
+        {
+            // Copy result to filtered array
+            _FilteredResults[slotIndex] = _Results[index];
+        }
     }
 } 
