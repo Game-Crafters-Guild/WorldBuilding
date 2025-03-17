@@ -19,15 +19,13 @@ namespace GameCraftersGuild.WorldBuilding
         [SerializeField, HideInInspector] private Material m_SplineToMaskMaterial;
         
         [Tooltip("Higher resolution gives smoother edges but uses more memory")]
-        [SerializeField] private int m_MaskResolution = 256;
+        private const int kMaskResolution = 512;
 
         private static readonly int kMaterialColorId = Shader.PropertyToID("_Color");
-        private static readonly int kBlurStrengthId = Shader.PropertyToID("_BlurStrength");
 
         [SerializeField] List<SplineData<float>> m_Widths = new List<SplineData<float>>();
 
         [SerializeField] private bool m_DebugMode = false;
-        [SerializeField] private bool m_ForceExactHeights = true;
 
         public List<SplineData<float>> Widths
         {
@@ -51,25 +49,7 @@ namespace GameCraftersGuild.WorldBuilding
 
             // Adjust resolution based on spline characteristics
             bool isStraightLine = m_SplineContainer.Splines.Count == 1 && m_SplineContainer.Splines[0].Count == 2;
-            float splineLength = 0;
-            for (int i = 0; i < m_SplineContainer.Splines.Count; i++)
-            {
-                splineLength += m_SplineContainer.Splines[i].GetLength();
-            }
-            bool isLongPath = splineLength > 50f;
-            
-            // PERFORMANCE: Use adaptive resolution based on path length
-            // Smaller resolution for better performance, still high enough for quality
-            int maskTextureWidth;
-            if (isLongPath) {
-                // For very long paths, use reasonable scaling (not too high)
-                maskTextureWidth = Mathf.Min(1024, Mathf.CeilToInt(splineLength * 4));
-            } else {
-                maskTextureWidth = Mathf.Min(1024, Mathf.Max(512, m_MaskResolution));
-            }
-            
-            // Make power of 2 for better GPU performance
-            maskTextureWidth = Mathf.NextPowerOfTwo(maskTextureWidth);
+            int maskTextureWidth = kMaskResolution;
             int maskTextureHeight = maskTextureWidth;
 
             RenderTexture renderTexture = RenderTexture.GetTemporary(maskTextureWidth, maskTextureHeight, 0,
@@ -78,8 +58,16 @@ namespace GameCraftersGuild.WorldBuilding
 
             FindSplineMaskMaterial();
 
-            MaskTexture = new Texture2D(maskTextureWidth, maskTextureHeight, TextureFormat.ARGB32, false, true);
-            MaskTexture.wrapMode = TextureWrapMode.Clamp;
+            if (MaskTexture == null)
+            {
+                MaskTexture = new Texture2D(maskTextureWidth, maskTextureHeight, TextureFormat.ARGB32, false, true);
+                MaskTexture.wrapMode = TextureWrapMode.Clamp;
+            }
+            else if (MaskTexture.width != maskTextureWidth || MaskTexture.height != maskTextureHeight)
+            {
+                MaskTexture.Reinitialize(maskTextureWidth, maskTextureHeight, TextureFormat.ARGB32, false);
+                MaskTexture.Apply();
+            }
 
             // Use our optimized mesh generation
             Mesh splineMesh = GenerateSplineMeshOptimized();
@@ -87,7 +75,7 @@ namespace GameCraftersGuild.WorldBuilding
             Bounds meshBounds = splineMesh.bounds;
             Bounds splineBounds = CalculateSplineBoundsWithHeight();
 
-            // CRITICAL FIX: Preserve the exact height information from the spline
+            // Preserve the exact height information from the spline
             LocalBounds = new Bounds(new Vector3(meshBounds.center.x, splineBounds.center.y, meshBounds.center.z),
                 new Vector3(meshBounds.size.x, splineBounds.size.y, meshBounds.size.z));
             
@@ -99,7 +87,7 @@ namespace GameCraftersGuild.WorldBuilding
 
             CommandBuffer cmd = new CommandBuffer();
             cmd.SetRenderTarget(renderTexture);
-            cmd.ClearRenderTarget(true, true, Color.clear);
+            cmd.ClearRenderTarget(false, true, Color.clear);
             cmd.SetProjectionMatrix(projectionMatrix);
 
             // This is needed because Unity uses OpenGL conventions for rendering.
@@ -111,7 +99,7 @@ namespace GameCraftersGuild.WorldBuilding
             MaterialPropertyBlock materialPropertyBlock = new MaterialPropertyBlock();
             materialPropertyBlock.SetColor(kMaterialColorId, Color.white);
             
-            // CRITICAL FIX: Set the exact Y bounds values to preserve height information
+            // Set the exact Y bounds values to preserve height information
             float actualMinY = splineBounds.min.y;
             float actualMaxY = splineBounds.max.y;
             
@@ -150,9 +138,6 @@ namespace GameCraftersGuild.WorldBuilding
             }
 
             FindSplineMaskMaterial();
-            
-            // Ensure mask resolution is a power of 2
-            m_MaskResolution = Mathf.NextPowerOfTwo(Mathf.Clamp(m_MaskResolution, 512, 4096));
         }
 
         private void FindSplineMaskMaterial()
