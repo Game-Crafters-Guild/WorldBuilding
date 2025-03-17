@@ -18,7 +18,6 @@ namespace GameCraftersGuild.WorldBuilding
         private float3 m_TerrainPosition;
         private float2 m_TerrainSize;
         public MaskFalloff MaskFalloff { get; set; }
-        public FalloffType FalloffFunction { get; set; } = FalloffType.Linear;
         public bool MaintainMaskAspectRatio { get; set; } = false;
 
         private RenderTexture m_HeightmapRenderTexture;
@@ -38,11 +37,11 @@ namespace GameCraftersGuild.WorldBuilding
             get
             {
                 // Base values for min and max
-                float min = 1.0f - MaskFalloff.Max;
-                float max = 1.0f - MaskFalloff.Min;
+                float min = 1.0f - MaskFalloff.MaxIntensity;
+                float max = 1.0f - MaskFalloff.MinIntensity;
                 
                 // Encode the falloff type in the z component
-                float falloffTypeEncoded = (float)FalloffFunction;
+                float falloffTypeEncoded = (float)MaskFalloff.FalloffFunction;
                 
                 return new float4(min, max, falloffTypeEncoded, 0.0f);
             }

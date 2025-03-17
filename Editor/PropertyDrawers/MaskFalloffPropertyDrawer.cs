@@ -12,16 +12,17 @@ namespace GameCraftersGuild.WorldBuilding.Editor
         {
             VisualElement container = new VisualElement();
             
-            container.Add(CreateSliderForProperty("Falloff", property.FindPropertyRelative("Min"), property.FindPropertyRelative("Max")));
-            container.Add(CreateSliderForProperty("Range", property.FindPropertyRelative("MaskMin"), property.FindPropertyRelative("MaskMax")));
-            container.Add(new PropertyField(property.FindPropertyRelative("InnerFalloff")));
+            container.Add(new PropertyField(property.FindPropertyRelative(nameof(MaskFalloff.FalloffFunction))));
+            container.Add(CreateSliderForProperty("Falloff Intensity", property.FindPropertyRelative(nameof(MaskFalloff.MinIntensity)), property.FindPropertyRelative(nameof(MaskFalloff.MaxIntensity))));
+            container.Add(CreateSliderForProperty("Falloff Area", property.FindPropertyRelative(nameof(MaskFalloff.MaskMin)), property.FindPropertyRelative(nameof(MaskFalloff.MaskMax)), "Only mask values between MaskMin and MaskMax will be affected"));
+            container.Add(new PropertyField(property.FindPropertyRelative(nameof(MaskFalloff.InnerFalloff))));
             
             return container;
 
             
         }
 
-        private MinMaxSlider CreateSliderForProperty(string label, SerializedProperty minProperty, SerializedProperty maxProperty)
+        private MinMaxSlider CreateSliderForProperty(string label, SerializedProperty minProperty, SerializedProperty maxProperty, string tooltip = null)
         {
             float currentMin = minProperty.floatValue;
             float currentMax = maxProperty.floatValue;
@@ -40,6 +41,8 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                 maxProperty.floatValue = evt.newValue.y;
                 maxProperty.serializedObject.ApplyModifiedProperties();
             }
+            
+            slider.tooltip = tooltip;
             
             return slider;
         }
