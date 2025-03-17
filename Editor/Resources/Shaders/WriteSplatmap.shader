@@ -59,9 +59,7 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/WriteSplatmap"
                 float mask = tex2D(_Mask, i.uv).x;
                 if (mask <= 0.005) return float4(0, 0, 0, 0);
                 
-                mask = smoothstep(_Falloff.x, _Falloff.y, mask);
-                
-                //mask = pow(mask, 0.9);
+                mask = saturate((mask - _Falloff.x) / (_Falloff.y - _Falloff.x));
                 
                 return float4(mask, mask, mask, mask);
             }
@@ -114,11 +112,13 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/WriteSplatmap"
                 float mask = tex2D(_Mask, i.uv).x;
                 if (mask <= 0.005) return float4(0, 0, 0, 0);
 
-                mask = smoothstep(_Falloff.x, _Falloff.y, mask);
+                mask = saturate((mask - _Falloff.x) / (_Falloff.y - _Falloff.x));
                 
-                //mask = pow(mask, 0.9);
+                // Apply intensity to each channel but preserve interpolation
+                float4 result = _Intensity;
+                result *= mask;
                 
-                return _Intensity * mask;
+                return result;
             }
             ENDCG
         }
