@@ -18,7 +18,7 @@ namespace GameCraftersGuild.WorldBuilding
         private bool showMaskPreview = false;
         private float debugHeight = 0;
         
-        [MenuItem("Tools/World Building/Spline Height Debug")]
+        //[MenuItem("Tools/World Building/Spline Height Debug")]
         public static void ShowWindow()
         {
             GetWindow<SplineHeightDebugTool>("Spline Height Debug");
