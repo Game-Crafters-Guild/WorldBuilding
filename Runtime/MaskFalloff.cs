@@ -22,7 +22,7 @@ namespace GameCraftersGuild.WorldBuilding
         // Define how the inner boundary should be handled
         //[UnityEngine.Header("Inner Boundary")]
         [UnityEngine.Tooltip("Controls how smoothly to transition at the high-value boundary (MaskMax)")]
-        [UnityEngine.Range(0.0f, 0.5f)] public float InnerFalloff = 0.05f;
+        [UnityEngine.Range(0.0f, 0.5f)] public float InnerFalloff = 0.0f;
     }
 
     public enum FalloffType
