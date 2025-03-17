@@ -11,7 +11,7 @@ namespace GameCraftersGuild.WorldBuilding
         
         [UnityEngine.Header("Falloff")]
         [UnityEngine.Tooltip("Controls how the transition between values is calculated")]
-        public FalloffType FalloffFunction = FalloffType.Linear;
+        public FalloffType FalloffFunction = FalloffType.Smoothstep;
         
         // Define the range of mask values that will be affected
         [UnityEngine.Header("Mask Range")]
