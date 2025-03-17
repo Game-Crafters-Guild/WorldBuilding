@@ -12,26 +12,35 @@ namespace GameCraftersGuild.WorldBuilding.Editor
         {
             VisualElement container = new VisualElement();
             
-            float currentMin = property.FindPropertyRelative("Min").floatValue;
-            float currentMax = property.FindPropertyRelative("Max").floatValue;
+            container.Add(CreateSliderForProperty("Falloff", property.FindPropertyRelative("Min"), property.FindPropertyRelative("Max")));
+            container.Add(CreateSliderForProperty("Range", property.FindPropertyRelative("MaskMin"), property.FindPropertyRelative("MaskMax")));
+            
+            return container;
+
+            
+        }
+
+        private MinMaxSlider CreateSliderForProperty(string label, SerializedProperty minProperty, SerializedProperty maxProperty)
+        {
+            float currentMin = minProperty.floatValue;
+            float currentMax = maxProperty.floatValue;
             MinMaxSlider slider = new MinMaxSlider();
             slider.AddToClassList("unity-base-field__aligned");
-            slider.label = "Falloff";
+            slider.label = label;
             slider.SetValueWithoutNotify(new Vector2(currentMin, currentMax));
             slider.lowLimit = 0.0f;
             slider.highLimit = 1.0f;
             slider.style.paddingRight = 4;
-            slider.RegisterValueChangedCallback(OnValueChanged); 
-            container.Add(slider);
-            
-            return container;
+            slider.RegisterValueChangedCallback(OnValueChanged);
 
             void OnValueChanged(ChangeEvent<Vector2> evt)
             {
-                property.FindPropertyRelative("Min").floatValue = evt.newValue.x;
-                property.FindPropertyRelative("Max").floatValue = evt.newValue.y;
-                property.serializedObject.ApplyModifiedProperties();
+                minProperty.floatValue = evt.newValue.x;
+                maxProperty.floatValue = evt.newValue.y;
+                maxProperty.serializedObject.ApplyModifiedProperties();
             }
+            
+            return slider;
         }
     }
 }

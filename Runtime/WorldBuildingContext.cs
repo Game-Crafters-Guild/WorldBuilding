@@ -47,6 +47,15 @@ namespace GameCraftersGuild.WorldBuilding
                 return new float4(min, max, falloffTypeEncoded, 0.0f);
             }
         }
+        
+        private float4 MaskRangeVector
+        {
+            get
+            {
+                // Mask range values (what part of the mask gets affected)
+                return new float4(MaskFalloff.MaskMin, MaskFalloff.MaskMax, 0.0f, 0.0f);
+            }
+        }
         public float3 TerrainPosition => m_TerrainPosition;
         public float2 TerrainSize => m_TerrainSize;
 
@@ -75,6 +84,7 @@ namespace GameCraftersGuild.WorldBuilding
             materialPropertyBlock.SetTexture("_Data", Texture2D.blackTexture);
             materialPropertyBlock.SetVector("_HeightRange", Vector4.zero);
             materialPropertyBlock.SetVector("_Falloff", FallOffVector);
+            materialPropertyBlock.SetVector("_MaskRange", MaskRangeVector);
             materialPropertyBlock.SetVector("_SplineMeshBoundsY", splineMeshBoundsY);
             materialPropertyBlock.SetVector("_TerrainWorldHeightRange", terrainWorldHeightRange);
             SetBlendMode(mode, m_ApplyHeightmapMaterial);
@@ -97,6 +107,7 @@ namespace GameCraftersGuild.WorldBuilding
             materialPropertyBlock.SetTexture("_Data", heightmap != null ? heightmap : Texture2D.whiteTexture);
             materialPropertyBlock.SetVector("_HeightRange", heightRangeNormalized);
             materialPropertyBlock.SetVector("_Falloff", FallOffVector);
+            materialPropertyBlock.SetVector("_MaskRange", MaskRangeVector);
             materialPropertyBlock.SetVector("_SplineMeshBoundsY", splineMeshBoundsY);
             materialPropertyBlock.SetVector("_TerrainWorldHeightRange", terrainWorldHeightRange);
             SetBlendMode(mode, m_ApplyHeightmapMaterial);
@@ -224,6 +235,7 @@ namespace GameCraftersGuild.WorldBuilding
             intensityVector[terrainLayerIndex % 4] = intensity;
             materialPropertyBlock.SetVector("_Intensity", intensityVector);
             materialPropertyBlock.SetVector("_Falloff", FallOffVector);
+            materialPropertyBlock.SetVector("_MaskRange", MaskRangeVector);
             DrawQuadSplat(worldBounds, layerRenderTarget, m_ApplySplatmapMaterial, materialPropertyBlock);
         }
 
