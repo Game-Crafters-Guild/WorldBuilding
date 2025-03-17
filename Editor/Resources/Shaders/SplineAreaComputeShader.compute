@@ -123,19 +123,41 @@ Texture2D<float4> SDF;
 [numthreads(8,8,1)]
 void CSBlurSDF(uint3 id : SV_DispatchThreadID)
 {
-    const int kBlurSize = 3;
+    uint width, height;
+    SDF.GetDimensions(width, height);
+    
+    // Use a larger, weighted Gaussian blur for better quality
+    const int kBlurSize = 4;
     float total = 0.0;
-    float count = 0;
+    float weightSum = 0.0;
+    
     for (int x = -kBlurSize; x <= kBlurSize; x++)
     {
         for (int y = -kBlurSize; y <= kBlurSize; y++)
         {
+            // Skip if we're sampling outside the texture
+            if ((int)id.x + x < 0 || (int)id.x + x >= (int)width || (int)id.y + y < 0 || (int)id.y + y >= (int)height)
+                continue;
+                
+            // Calculate Gaussian weight based on distance from center
+            float distSquared = float(x*x + y*y);
+            float sigma = kBlurSize * 0.5;
+            float weight = exp(-distSquared / (2.0 * sigma * sigma));
+            
             int3 pos = int3(id.x + x, id.y + y, 0);
-            total += SDF.Load(pos).x;
-            count += 1;
+            float value = SDF.Load(pos).x;
+            
+            total += value * weight;
+            weightSum += weight;
         }
     }
-    float average = total / count;
-    Result[id.xy] = float4(average, average, 0.0f, average);
+    
+    // Normalize by the total weight
+    float average = (weightSum > 0.0) ? total / weightSum : 0.0;
+    
+    // Additional smoothstep to remove any remaining artifacts
+    float smoothedValue = smoothstep(0.0, 1.0, average);
+    
+    Result[id.xy] = float4(smoothedValue, smoothedValue, 0.0f, smoothedValue);
 }
 

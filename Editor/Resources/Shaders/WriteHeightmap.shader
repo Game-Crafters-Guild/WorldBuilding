@@ -56,29 +56,34 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/WriteHeightmap"
                     maskValue = 0.0;
                 }
                 
+                // Ensure there's a minimum difference between min and max falloff to prevent precision issues
+                const float MIN_FALLOFF_RANGE = 0.01;
+                float falloffRange = max(maxFalloff - minFalloff, MIN_FALLOFF_RANGE);
+                float adjustedMaxFalloff = minFalloff + falloffRange;
+                
                 // FalloffType enum: Linear = 0, Smoothstep = 1, EaseIn = 2, EaseOut = 3, SmoothEaseInOut = 4
                 int type = round(falloffType);
                 
                 // Linear
-                float result = saturate((maskValue - minFalloff) / (maxFalloff - minFalloff));
+                float result = saturate((maskValue - minFalloff) / falloffRange);
                 
                 if (type == 1) // Smoothstep
                 {
-                    result = smoothstep(minFalloff, maxFalloff, maskValue);
+                    result = smoothstep(minFalloff, adjustedMaxFalloff, maskValue);
                 }
                 else if (type == 2) // EaseIn - quadratic
                 {
-                    float t = saturate((maskValue - minFalloff) / (maxFalloff - minFalloff));
+                    float t = saturate((maskValue - minFalloff) / falloffRange);
                     result = t * t;
                 }
                 else if (type == 3) // EaseOut - inverse quadratic
                 {
-                    float t = saturate((maskValue - minFalloff) / (maxFalloff - minFalloff));
+                    float t = saturate((maskValue - minFalloff) / falloffRange);
                     result = t * (2 - t);
                 }
                 else if (type == 4) // SmoothEaseInOut - cubic
                 {
-                    float t = saturate((maskValue - minFalloff) / (maxFalloff - minFalloff));
+                    float t = saturate((maskValue - minFalloff) / falloffRange);
                     result = t * t * (3 - 2 * t);
                 }
                 
