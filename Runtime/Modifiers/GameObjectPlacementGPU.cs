@@ -483,8 +483,8 @@ namespace GameCraftersGuild.WorldBuilding
                 numObjects = 1;
             }
             
-            Debug.Log($"GPU Placement: Area size={areaSize:F2} square units, Total square units={totalSquareUnits}, " +
-                    $"Potential objects={potentialTotalObjects}, Density={modifier.Density:F2}, Objects to place={numObjects}");
+            //Debug.Log($"GPU Placement: Area size={areaSize:F2} square units, Total square units={totalSquareUnits}, " +
+              //      $"Potential objects={potentialTotalObjects}, Density={modifier.Density:F2}, Objects to place={numObjects}");
             
             // Calculate grid dimensions for square unit based placement
             // For very large terrains, we may not need a 1:1 grid cell to square unit ratio
@@ -519,7 +519,7 @@ namespace GameCraftersGuild.WorldBuilding
                 Mathf.Min(totalSquareUnits * potentialObjectsPerSquareUnit * 2, 1000000)  // Double the potential objects but cap at 1M
             );
             
-            Debug.Log($"GPU Placement: Using {numThreads} threads for {gridWidth}x{gridDepth} grid");
+            //Debug.Log($"GPU Placement: Using {numThreads} threads for {gridWidth}x{gridDepth} grid");
             
             // Create buffers
             CreateBuffers(numThreads, numObjects);
@@ -575,7 +575,7 @@ namespace GameCraftersGuild.WorldBuilding
                     validPreFilterCount++;
             }
             
-            Debug.Log($"GPU Placement: Found {validPreFilterCount} valid positions before collision filtering");
+            //Debug.Log($"GPU Placement: Found {validPreFilterCount} valid positions before collision filtering");
             
             // Skip GPU filtering and use valid results directly
             // This allows the coroutine to handle collisions during placement
@@ -592,7 +592,7 @@ namespace GameCraftersGuild.WorldBuilding
             validCountArray[0] = validIdx;
             
             int validCount = Mathf.Min(validCountArray[0], numObjects * 3); // Generate extra candidates
-            Debug.Log($"GPU Placement: Generated {validCount} candidates for placement");
+            //Debug.Log($"GPU Placement: Generated {validCount} candidates for placement");
             
             // Process results
             List<GameObjectPlacementInfo> placements = new List<GameObjectPlacementInfo>(validCount);
@@ -618,7 +618,7 @@ namespace GameCraftersGuild.WorldBuilding
                 }
             }
             
-            Debug.Log($"GPU Placement: Returning {placements.Count} candidates for runtime filtering");
+            //Debug.Log($"GPU Placement: Returning {placements.Count} candidates for runtime filtering");
             
             return placements;
         }
@@ -763,9 +763,9 @@ namespace GameCraftersGuild.WorldBuilding
             placementComputeShader.SetVector("_HeightmapResolution", new Vector2(terrainData.heightmapResolution, terrainData.heightmapResolution));
             
             // Additional debug logging for terrain info
-            Debug.Log($"Terrain Parameters: Size=({terrainSize.x:F1},{terrainSize.y:F1},{terrainSize.z:F1}), " +
+            /*Debug.Log($"Terrain Parameters: Size=({terrainSize.x:F1},{terrainSize.y:F1},{terrainSize.z:F1}), " +
                      $"Position=({terrainPosition.x:F1},{terrainPosition.y:F1},{terrainPosition.z:F1}), " +
-                     $"HeightmapRes={terrainData.heightmapResolution}");
+                     $"HeightmapRes={terrainData.heightmapResolution}");*/
             
             // Set bounds parameters
             placementComputeShader.SetVector("_BoundsMin", new Vector4(boundsMinX, 0, boundsMinZ, 0));
@@ -784,10 +784,10 @@ namespace GameCraftersGuild.WorldBuilding
             placementComputeShader.SetFloat("_DefaultMinDistance", defaultMinDistance);
             
             // For any existing slope constraints, log them for debugging
-            if (slopeConstraints != null && slopeConstraints.Length > 0)
+            /*if (slopeConstraints != null && slopeConstraints.Length > 0)
             {
                 Debug.Log($"Setting slope constraint: Min={slopeConstraints[0].x}°, Max={slopeConstraints[0].y}°");
-            }
+            }*/
             
             // Set texture samplers - use the context render textures directly
             placementComputeShader.SetTexture(generatePositionsKernelId, "_HeightmapTexture", context.HeightmapRenderTexture);

@@ -343,8 +343,6 @@ namespace GameCraftersGuild.WorldBuilding
         {
             if (m_ProcessingQueue)
             {
-                Debug.Log("Cancelling previous object placement operation");
-                
                 if (Application.isPlaying && m_RunningCoroutine != null)
                 {
                     MonoBehaviourHelper.Instance.StopCoroutine(m_RunningCoroutine);
@@ -519,7 +517,7 @@ namespace GameCraftersGuild.WorldBuilding
             // Get collision constraint if we have one
             var collisionConstraint = ConstraintsContainer.FindConstraint<ObjectCollisionConstraint>();
             
-            Debug.Log($"Starting to spawn {totalObjects} objects (max {MaxObjectsPerFrame} per frame)");
+            //Debug.Log($"Starting to spawn {totalObjects} objects (max {MaxObjectsPerFrame} per frame)");
             
             while (m_InstantiationQueue.Count > 0 || pendingOperations.Count > 0)
             {
@@ -645,7 +643,7 @@ namespace GameCraftersGuild.WorldBuilding
                     if (currentPercentage >= lastReportedPercentage + 10)
                     {
                         lastReportedPercentage = currentPercentage / 10 * 10; // Round to nearest 10%
-                        Debug.Log($"Spawning progress: {lastReportedPercentage}% ({completedObjects}/{totalObjects})");
+                        //Debug.Log($"Spawning progress: {lastReportedPercentage}% ({completedObjects}/{totalObjects})");
                     }
                     
                     // Enable the batch once it's full or we're done with all objects
@@ -702,7 +700,7 @@ namespace GameCraftersGuild.WorldBuilding
                         if (currentPercentage >= lastReportedPercentage + 10)
                         {
                             lastReportedPercentage = currentPercentage / 10 * 10; // Round to nearest 10%
-                            Debug.Log($"Spawning progress: {lastReportedPercentage}% ({completedObjects}/{totalObjects})");
+                            //Debug.Log($"Spawning progress: {lastReportedPercentage}% ({completedObjects}/{totalObjects})");
                         }
                     }
                     
@@ -724,7 +722,7 @@ namespace GameCraftersGuild.WorldBuilding
                 currentBatchParent.SetActive(true);
             }
             
-            Debug.Log($"Completed spawning {completedObjects} objects, skipped {skippedObjects} due to collisions");
+            //Debug.Log($"Completed spawning {completedObjects} objects, skipped {skippedObjects} due to collisions");
             m_ProcessingQueue = false;
             m_RunningCoroutine = null;
             #if UNITY_EDITOR
@@ -828,7 +826,7 @@ namespace GameCraftersGuild.WorldBuilding
         /// </summary>
         private void ProcessSynchronously()
         {
-            Debug.Log($"Processing {m_InstantiationQueue.Count} objects synchronously");
+            //Debug.Log($"Processing {m_InstantiationQueue.Count} objects synchronously");
             m_BatchCounter = 0;
             
             // Simple list for tracking placed objects and distances
@@ -896,80 +894,6 @@ namespace GameCraftersGuild.WorldBuilding
             
             // Enable the batch when all objects are ready
             batchParent.SetActive(true);
-        }
-
-        protected PlacementConstraintContext CreateConstraintContext(
-            TerrainData terrainData, 
-            float normX, 
-            float normZ, 
-            float boundsNormX, 
-            float boundsNormZ, 
-            float[,,] alphamaps, 
-            Texture mask,
-            float minimumDistance = 0)
-        {
-            // Get height at position
-            float height = terrainData.GetHeight(
-                Mathf.RoundToInt(normX * terrainData.heightmapResolution), 
-                Mathf.RoundToInt(normZ * terrainData.heightmapResolution)
-            );
-
-            // Get slope at this position
-            float slope = GetTerrainSlope(terrainData, normX, normZ);
-            
-            // Apply global scale to minimum distance
-            minimumDistance = minimumDistance > 0 ? minimumDistance * GlobalScale : minimumDistance;
-            
-            // Create context for constraint checking
-            return new PlacementConstraintContext
-            {
-                TerrainHeight = height,
-                TerrainSlope = slope,
-                AlphaMaps = alphamaps,
-                BoundsNormX = boundsNormX,
-                BoundsNormZ = boundsNormZ,
-                MaskTexture = mask,
-                MinimumDistance = minimumDistance
-            };
-        }
-        
-        protected float GetTerrainSlope(TerrainData terrainData, float normX, float normZ)
-        {
-            // Get slope at the specified normalized position
-            int heightMapX = Mathf.RoundToInt(normX * terrainData.heightmapResolution);
-            int heightMapZ = Mathf.RoundToInt(normZ * terrainData.heightmapResolution);
-            
-            // Clamp to valid range
-            heightMapX = Mathf.Clamp(heightMapX, 0, terrainData.heightmapResolution - 1);
-            heightMapZ = Mathf.Clamp(heightMapZ, 0, terrainData.heightmapResolution - 1);
-            
-            // Get terrain normal
-            Vector3 normal = terrainData.GetInterpolatedNormal(normX, normZ);
-            
-            // Calculate angle between normal and up vector (in degrees)
-            float angle = Vector3.Angle(normal, Vector3.up);
-            
-            // Debug log (only occasionally to avoid spam)
-            if (Random.value < 0.01f) // Log roughly 1% of checks
-            {
-                Debug.Log($"Terrain Slope: pos=({normX:F3}, {normZ:F3}), normal=({normal.x:F3}, {normal.y:F3}, {normal.z:F3}), angle={angle:F2}°");
-            }
-            
-            return angle;
-        }
-        
-        // Helper method to sample a texture at normalized coordinates
-        protected float SampleTexture(Texture texture, float normX, float normZ)
-        {
-            // Sample texture at normalized position
-            if (texture is Texture2D texture2D)
-            {
-                Color color = texture2D.GetPixelBilinear(normX, normZ);
-                return color.r;
-            }
-            
-            // Fallback
-            return 1.0f;
         }
     }
     
