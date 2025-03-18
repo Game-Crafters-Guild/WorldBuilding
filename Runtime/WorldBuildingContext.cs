@@ -15,6 +15,10 @@ namespace GameCraftersGuild.WorldBuilding
         public RenderTexture MaskRenderTexture => m_MaskRenderTexture;
         internal RenderTexture m_MaskRenderTexture;
 
+        // Add normal render texture for GPU-based object placement
+        public RenderTexture NormalRenderTexture { get; private set; }
+        internal ComputeShader NormalGenerationShader { get; set; }
+
         private float3 m_TerrainPosition;
         private float2 m_TerrainSize;
         public MaskFalloff MaskFalloff { get; set; }
@@ -278,7 +282,12 @@ namespace GameCraftersGuild.WorldBuilding
         {
             RenderTexture.ReleaseTemporary(m_HeightmapRenderTexture);
             m_HeightmapRenderTexture = null;
-            //
+
+            if (NormalRenderTexture != null)
+            {
+                RenderTexture.ReleaseTemporary(NormalRenderTexture);
+                NormalRenderTexture = null;
+            }
 
             if (SplatRenderTextures == null) return;
             foreach (var renderTexture in SplatRenderTextures)
@@ -443,6 +452,57 @@ namespace GameCraftersGuild.WorldBuilding
         public List<DetailPrototype> GetDetailPrototypes()
         {
             return m_DetailPrototypes;
+        }
+
+        /// <summary>
+        /// Generates a normal map from the heightmap using compute shader
+        /// </summary>
+        public void GenerateNormalMap()
+        {
+            if (NormalGenerationShader == null)
+            {
+                Debug.LogWarning("Normal generation shader is missing.");
+                return;
+            }
+
+            // Create normal render texture if it doesn't exist
+            if (NormalRenderTexture == null || 
+                NormalRenderTexture.width != m_HeightmapRenderTexture.width || 
+                NormalRenderTexture.height != m_HeightmapRenderTexture.height)
+            {
+                // Release existing texture if it exists
+                if (NormalRenderTexture != null)
+                {
+                    RenderTexture.ReleaseTemporary(NormalRenderTexture);
+                }
+                
+                // Create new normal map render texture with RGBA format for normal vectors
+                NormalRenderTexture = RenderTexture.GetTemporary(
+                    m_HeightmapRenderTexture.width, 
+                    m_HeightmapRenderTexture.height,
+                    0, 
+                    RenderTextureFormat.ARGBFloat,
+                    RenderTextureReadWrite.Linear);
+                
+                NormalRenderTexture.enableRandomWrite = true;
+                NormalRenderTexture.Create();
+            }
+
+            // Find the kernel
+            int kernelHandle = NormalGenerationShader.FindKernel("GenerateNormals");
+            
+            // Set shader parameters
+            NormalGenerationShader.SetTexture(kernelHandle, "HeightMap", m_HeightmapRenderTexture);
+            NormalGenerationShader.SetTexture(kernelHandle, "NormalMap", NormalRenderTexture);
+            NormalGenerationShader.SetVector("_HeightmapSize", new Vector4(m_HeightmapRenderTexture.width, m_HeightmapRenderTexture.height, 0, 0));
+            NormalGenerationShader.SetVector("_TerrainSize", new Vector4(TerrainSize.x, MaxTerrainHeight, TerrainSize.y, 0));
+            
+            // Calculate thread groups - 8x8 is a common thread group size
+            int threadGroupsX = Mathf.CeilToInt(m_HeightmapRenderTexture.width / 8.0f);
+            int threadGroupsY = Mathf.CeilToInt(m_HeightmapRenderTexture.height / 8.0f);
+            
+            // Dispatch the compute shader
+            NormalGenerationShader.Dispatch(kernelHandle, threadGroupsX, threadGroupsY, 1);
         }
     }
 }

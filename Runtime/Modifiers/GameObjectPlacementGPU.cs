@@ -24,9 +24,12 @@ namespace GameCraftersGuild.WorldBuilding
         
         // References to kernel IDs
         private int generatePositionsKernelId;
+        private int filterObjectCollisionsKernelId;
         
         // Buffers for GPU data
         private ComputeBuffer resultsBuffer;
+        private ComputeBuffer filteredResultsBuffer;
+        private ComputeBuffer validCountBuffer;
         private ComputeBuffer heightConstraintsBuffer;
         private ComputeBuffer slopeConstraintsBuffer;
         private ComputeBuffer noiseConstraintsBuffer;
@@ -47,6 +50,7 @@ namespace GameCraftersGuild.WorldBuilding
             public float rotation;
             public uint prefabIndex;
             public uint isValid;
+            public float debugSlope;
         }
         
         // Structure for prefab settings in compute shader
@@ -64,6 +68,8 @@ namespace GameCraftersGuild.WorldBuilding
         
         // Array to hold results
         private PlacementResult[] results;
+        private PlacementResult[] filteredResults;
+        private int[] validCountArray;
         
         // Arrays for constraints data
         private Vector2[] heightConstraints;
@@ -76,7 +82,7 @@ namespace GameCraftersGuild.WorldBuilding
         private int[] layerConstraintIndices;
         
         // Cached properties for efficient reuse
-        private RenderTexture normalTexture;
+        private Texture2D normalTexture;
         
         // Temporary textures we create (should be destroyed when done)
         private Texture2D tempWhiteTexture;
@@ -97,6 +103,7 @@ namespace GameCraftersGuild.WorldBuilding
             
             // Get kernel IDs
             generatePositionsKernelId = placementComputeShader.FindKernel("GeneratePositions");
+            filterObjectCollisionsKernelId = placementComputeShader.FindKernel("FilterObjectCollisions");
         }
         
         /// <summary>
@@ -106,6 +113,8 @@ namespace GameCraftersGuild.WorldBuilding
         {
             // Release buffers
             ReleaseBuffer(ref resultsBuffer);
+            ReleaseBuffer(ref filteredResultsBuffer);
+            ReleaseBuffer(ref validCountBuffer);
             ReleaseBuffer(ref heightConstraintsBuffer);
             ReleaseBuffer(ref slopeConstraintsBuffer);
             ReleaseBuffer(ref noiseConstraintsBuffer);
@@ -116,7 +125,7 @@ namespace GameCraftersGuild.WorldBuilding
             ReleaseBuffer(ref layerConstraintIndicesBuffer);
             
             // Release textures
-            ReleaseTexture(ref normalTexture);
+            //ReleaseTexture(ref normalTexture);
             
             // Destroy temporary textures
             if (tempWhiteTexture != null)
@@ -391,45 +400,10 @@ namespace GameCraftersGuild.WorldBuilding
         /// </summary>
         private void SetupNormalTexture(TerrainData terrainData)
         {
-            // Create normal map texture if needed
-            if (normalTexture == null || 
-                normalTexture.width != terrainData.heightmapResolution || 
-                normalTexture.height != terrainData.heightmapResolution)
-            {
-                ReleaseTexture(ref normalTexture);
-                
-                normalTexture = new RenderTexture(
-                    terrainData.heightmapResolution,
-                    terrainData.heightmapResolution,
-                    0,
-                    RenderTextureFormat.ARGBFloat);
-                normalTexture.enableRandomWrite = true;
-                normalTexture.Create();
-                
-                // Create normals from heightmap
-                Texture2D tempNormals = new Texture2D(terrainData.heightmapResolution, terrainData.heightmapResolution, TextureFormat.RGBAFloat, false);
-                
-                // Calculate normals based on heightmap - a simplified approach
-                for (int y = 0; y < terrainData.heightmapResolution; y++)
-                {
-                    for (int x = 0; x < terrainData.heightmapResolution; x++)
-                    {
-                        Vector3 normal = terrainData.GetInterpolatedNormal(
-                            (float)x / terrainData.heightmapResolution, 
-                            (float)y / terrainData.heightmapResolution);
-                        
-                        // Convert from -1,1 to 0,1 range for storage in texture
-                        normal = normal * 0.5f + new Vector3(0.5f, 0.5f, 0.5f);
-                        tempNormals.SetPixel(x, y, new Color(normal.x, normal.y, normal.z, 1));
-                    }
-                }
-                
-                tempNormals.Apply();
-                Graphics.Blit(tempNormals, normalTexture);
-                
-                // Safely destroy the temporary texture
-                SafeDestroy(tempNormals);
-            }
+            // This method is no longer needed as we now use the normal map from WorldBuildingContext
+            // It remains for backward compatibility but doesn't do anything
+            
+            // Old implementation removed
         }
         
         /// <summary>
@@ -446,7 +420,7 @@ namespace GameCraftersGuild.WorldBuilding
             if (placementComputeShader == null)
             {
                 Debug.LogError("GPU Placement: Compute shader is missing!");
-                return new List<GameObjectPlacementInfo>();
+                return null;
             }
             
             // Setup constraints from modifier
@@ -454,16 +428,16 @@ namespace GameCraftersGuild.WorldBuilding
             
             // Get terrain data
             TerrainData terrainData = context.TerrainData;
-            if (terrainData == null || modifier.GameObjects.Count == 0)
-                return new List<GameObjectPlacementInfo>();
+            if (terrainData == null || modifier.GameObjects.Count == 0) 
+                return null;
                 
             // Get terrain
             Terrain terrain = Terrain.activeTerrain;
             if (terrain == null)
-                return new List<GameObjectPlacementInfo>();
+                return null;
             
-            // Setup normal texture which isn't in WorldBuildingContext
-            SetupNormalTexture(terrainData);
+            // No longer need to setup normal texture, we'll use the one from context
+            // SetupNormalTexture(terrainData);
             
             // Calculate bounds in terrain space
             Vector3 terrainPos = context.TerrainPosition;
@@ -485,17 +459,17 @@ namespace GameCraftersGuild.WorldBuilding
             float areaDepth = (boundsMaxZ - boundsMinZ) * terrainSize.z;
             float areaSize = areaWidth * areaDepth;
             
-            // Calculate density/fillness factor - density 1.0 means objects are placed at a distance of their minimum distance apart
-            // This is approximately the maximum possible density
-            var collisionConstraint = FindConstraint<GameObjectModifier.ObjectCollisionConstraint>(modifier.ConstraintsContainer.Constraints);
-            float defaultDistance = (collisionConstraint != null ? collisionConstraint.DefaultMinDistance : 2.0f) * modifier.GlobalScale;
+            // Calculate number of square units in the area
+            int totalSquareUnits = Mathf.CeilToInt(areaSize);
             
-            // Calculate theoretical maximum number of objects that could be placed based on minimum distances
-            // For a grid of objects with spacing = defaultDistance, we get approximately:
-            float maxPossibleObjects = areaSize / (defaultDistance * defaultDistance);
+            // Calculate potential number of objects based on ObjectsPerSquareUnit
+            int potentialObjectsPerSquareUnit = modifier.ObjectsPerSquareUnit;
+            int potentialTotalObjects = totalSquareUnits * potentialObjectsPerSquareUnit;
             
-            // Now use Density as a direct scaling factor from 0 to maximum
-            int numObjects = Mathf.FloorToInt(maxPossibleObjects * modifier.Density);
+            // Apply density to determine how many objects to actually spawn
+            int numObjects = Mathf.FloorToInt(potentialTotalObjects * modifier.Density);
+            if (numObjects == 0)
+                return null;
             
             // Apply max objects limit if set
             if (modifier.MaxObjects > 0)
@@ -509,21 +483,61 @@ namespace GameCraftersGuild.WorldBuilding
                 numObjects = 1;
             }
             
-            //Debug.Log($"GPU Placement: Area size={areaSize:F2}, Max possible objects={maxPossibleObjects:F2}, " +
-                     //$"Density={modifier.Density:F2}, Objects to place={numObjects}");
+            //Debug.Log($"GPU Placement: Area size={areaSize:F2} square units, Total square units={totalSquareUnits}, " +
+              //      $"Potential objects={potentialTotalObjects}, Density={modifier.Density:F2}, Objects to place={numObjects}");
+            
+            // Calculate grid dimensions for square unit based placement
+            // For very large terrains, we may not need a 1:1 grid cell to square unit ratio
+            // Limit to a maximum reasonable grid size
+            const int MaxGridDimension = 500; // Maximum grid cells in any dimension
+            
+            int gridWidth, gridDepth;
+            if (areaWidth > MaxGridDimension || areaDepth > MaxGridDimension)
+            {
+                // Scale down grid for very large terrains
+                float scaleFactor = Mathf.Min(MaxGridDimension / areaWidth, MaxGridDimension / areaDepth);
+                gridWidth = Mathf.CeilToInt(areaWidth * scaleFactor);
+                gridDepth = Mathf.CeilToInt(areaDepth * scaleFactor);
+                
+                Debug.Log($"GPU Placement: Scaling down grid from {Mathf.CeilToInt(areaWidth)}x{Mathf.CeilToInt(areaDepth)} " +
+                          $"to {gridWidth}x{gridDepth} for performance");
+            }
+            else
+            {
+                gridWidth = Mathf.CeilToInt(areaWidth);
+                gridDepth = Mathf.CeilToInt(areaDepth);
+            }
+            
+            // Ensure minimum grid dimensions
+            gridWidth = Mathf.Max(1, gridWidth);
+            gridDepth = Mathf.Max(1, gridDepth);
             
             // Limit the number of parallel calculations for performance
-            int numThreads = Mathf.Min(maxAttempts, 1000000);
+            // Ensure we spawn enough threads for effective hashed distribution - increased multiplier for better results
+            int numThreads = Mathf.Max(
+                numObjects * 10,  // At least 10x the objects we want to place for better distribution
+                Mathf.Min(totalSquareUnits * potentialObjectsPerSquareUnit * 2, 1000000)  // Double the potential objects but cap at 1M
+            );
+            
+            //Debug.Log($"GPU Placement: Using {numThreads} threads for {gridWidth}x{gridDepth} grid");
             
             // Create buffers
-            CreateBuffers(numThreads);
+            CreateBuffers(numThreads, numObjects);
+            
+            // Additional parameters for grid-based placement
+            placementComputeShader.SetInt("_GridWidth", gridWidth);
+            placementComputeShader.SetInt("_GridDepth", gridDepth);
+            placementComputeShader.SetInt("_ObjectsPerSquareUnit", potentialObjectsPerSquareUnit);
+
+            GameObjectModifier.ObjectCollisionConstraint collisionConstraint =
+                modifier.ConstraintsContainer.FindConstraint<GameObjectModifier.ObjectCollisionConstraint>();
             
             // Set compute shader parameters using context
             SetShaderParameters(
                 context, 
                 terrainData,
                 boundsMinX, boundsMinZ, boundsMaxX, boundsMaxZ,
-                modifier.Density, modifier.MaxObjects, 
+                modifier.Density, numObjects, 
                 modifier.GameObjects.Count, 
                 modifier.RandomSeed, 
                 modifier.RandomOffset,
@@ -531,122 +545,80 @@ namespace GameCraftersGuild.WorldBuilding
                 mask
             );
             
-            // Dispatch the compute shader
+            // FIRST PASS: Generate potential positions
             int threadGroupsX = Mathf.CeilToInt(numThreads / 64f);
             placementComputeShader.Dispatch(generatePositionsKernelId, threadGroupsX, 1, 1);
             
             // Get results back from GPU
             resultsBuffer.GetData(results);
             
-            // Process results
-            List<GameObjectPlacementInfo> placements = new List<GameObjectPlacementInfo>();
+            // Initialize valid count - IMPORTANT to reset to zero
+            validCountArray[0] = 0;
+            validCountBuffer.SetData(validCountArray);
             
-            // First pass: collect all valid placements returned by GPU
-            List<GameObjectPlacementInfo> validGPUResults = new List<GameObjectPlacementInfo>();
+            // Set kernel parameters for the filtering pass
+            placementComputeShader.SetBuffer(filterObjectCollisionsKernelId, "_Results", resultsBuffer);
+            placementComputeShader.SetBuffer(filterObjectCollisionsKernelId, "_FilteredResults", filteredResultsBuffer);
+            placementComputeShader.SetBuffer(filterObjectCollisionsKernelId, "_ValidCount", validCountBuffer);
+            placementComputeShader.SetInt("_MaxResults", numObjects);
+            placementComputeShader.SetInt("_InputResultsCount", numThreads);
+            
+            // IMPORTANT: Set all required buffers for the second kernel as well
+            placementComputeShader.SetBuffer(filterObjectCollisionsKernelId, "_PrefabSettings", prefabSettingsBuffer);
+            placementComputeShader.SetFloat("_DefaultMinDistance", collisionConstraint != null ? collisionConstraint.DefaultMinDistance : 2.0f);
+            
+            // Count valid results from first pass to check if filtering is needed
+            int validPreFilterCount = 0;
             for (int i = 0; i < results.Length; i++)
             {
-                if (results[i].isValid == 1 && validGPUResults.Count < numObjects)
+                if (results[i].isValid == 1)
+                    validPreFilterCount++;
+            }
+            
+            //Debug.Log($"GPU Placement: Found {validPreFilterCount} valid positions before collision filtering");
+            
+            // Skip GPU filtering and use valid results directly
+            // This allows the coroutine to handle collisions during placement
+            int validIdx = 0;
+            for (int i = 0; i < results.Length && validIdx < numObjects * 3; i++) // Get more candidates than needed
+            {
+                if (results[i].isValid == 1)
+                {
+                    filteredResults[validIdx] = results[i];
+                    validIdx++;
+                }
+            }
+            
+            validCountArray[0] = validIdx;
+            
+            int validCount = Mathf.Min(validCountArray[0], numObjects * 3); // Generate extra candidates
+            //Debug.Log($"GPU Placement: Generated {validCount} candidates for placement");
+            
+            // Process results
+            List<GameObjectPlacementInfo> placements = new List<GameObjectPlacementInfo>(validCount);
+            
+            // Add all valid objects directly from the filtered results
+            for (int i = 0; i < validCount; i++)
+            {
+                if (i >= filteredResults.Length)
+                    break;
+                    
+                var result = filteredResults[i];
+                if (result.isValid == 1)
                 {
                     GameObjectPlacementInfo info = new GameObjectPlacementInfo
                     {
-                        Position = results[i].position,
-                        Scale = results[i].scale,
-                        Rotation = results[i].rotation,
-                        PrefabIndex = (int)results[i].prefabIndex % modifier.GameObjects.Count
+                        Position = result.position,
+                        Scale = result.scale,
+                        Rotation = result.rotation,
+                        PrefabIndex = (int)result.prefabIndex % modifier.GameObjects.Count
                     };
                     
-                    validGPUResults.Add(info);
-                }
-            }
-            
-            // Second pass: CPU-side collision detection between objects generated in this batch
-            // Get existing collision constraint
-            /*if (collisionConstraint == null)
-            {
-                Debug.LogWarning("No collision constraint found. Creating a new one.");
-                collisionConstraint = new GameObjectModifier.ObjectCollisionConstraint { DefaultMinDistance = 2.0f };
-                modifier.ConstraintsContainer.Constraints.Add(collisionConstraint);
-            }*/
-            
-            // Keep track of objects we've added in this pass
-            List<Vector3> newlyAddedPositions = new List<Vector3>();
-            List<float> newlyAddedDistances = new List<float>();
-            
-            // Process each placement from GPU
-            foreach (var info in validGPUResults)
-            {
-                if (placements.Count >= numObjects)
-                    break;
-                    
-                float minimumDistance = modifier.GameObjects[info.PrefabIndex].MinimumDistance;
-                if (minimumDistance <= 0)
-                    minimumDistance = collisionConstraint != null ? collisionConstraint.DefaultMinDistance : 2.0f;
-                
-                // Scale by object's scale
-                minimumDistance *= info.Scale;
-                
-                // Check against previously added objects in this batch
-                bool validPosition = true;
-                if (collisionConstraint != null)
-                {
-                    for (int i = 0; i < newlyAddedPositions.Count; i++)
-                    {
-                        Vector3 existingPos = newlyAddedPositions[i];
-
-                        // Use pre-scaled distances without applying GlobalScale again
-                        float requiredDist = Mathf.Max(minimumDistance, newlyAddedDistances[i]);
-
-                        if (Vector3.Distance(info.Position, existingPos) < requiredDist)
-                        {
-                            validPosition = false;
-                            break;
-                        }
-                    }
-
-                    // Check against previously placed objects (from previous batches)
-                    if (validPosition && collisionConstraint.PlacedObjects.Count > 0)
-                    {
-                        foreach (var placedObj in collisionConstraint.PlacedObjects)
-                        {
-                            // Use pre-scaled distances without applying GlobalScale again
-                            float requiredDist = Mathf.Max(minimumDistance, placedObj.MinDistance);
-
-                            if (Vector3.Distance(info.Position, placedObj.Position) < requiredDist)
-                            {
-                                validPosition = false;
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                // If it passed all checks, add to final placements
-                if (validPosition)
-                {
                     placements.Add(info);
-                    
-                    // Track this position for checking against subsequent objects
-                    newlyAddedPositions.Add(info.Position);
-                    newlyAddedDistances.Add(minimumDistance); // Already has global scale applied
-                    
-                    // Add to collision constraint for future passes
-                    collisionConstraint?.AddObject(info.Position, minimumDistance); // Already has global scale applied
-                    
-                    // Debug - only for the first few objects
-                    /*if (placements.Count <= 5)
-                    {
-                        Debug.Log($"Added object {placements.Count-1} to collision constraint: Position={info.Position}, MinDistance={minimumDistance}");
-                    }
-                    
-                    // Log total count periodically
-                    if (placements.Count % 50 == 0)
-                    {
-                        Debug.Log($"Collision constraint now has {collisionConstraint.PlacedObjects.Count} objects");
-                    }*/
                 }
             }
             
-            //Debug.Log($"GPU Placement: Generated {placements.Count} valid placements after CPU-side collision filtering (rejected {validGPUResults.Count - placements.Count})");
+            //Debug.Log($"GPU Placement: Returning {placements.Count} candidates for runtime filtering");
             
             return placements;
         }
@@ -654,14 +626,40 @@ namespace GameCraftersGuild.WorldBuilding
         /// <summary>
         /// Create or resize buffers for compute shader
         /// </summary>
-        private void CreateBuffers(int numThreads)
+        private void CreateBuffers(int numThreads, int maxResults)
         {
-            // Create/resize results buffer
+            // Calculate correct stride size for PlacementResult struct:
+            // Vector3 position: 12 bytes (3 floats)
+            // float scale: 4 bytes
+            // float rotation: 4 bytes  
+            // uint prefabIndex: 4 bytes
+            // uint isValid: 4 bytes
+            // float debugSlope: 4 bytes
+            // Total: 32 bytes
+            int placementResultStride = sizeof(float) * 3 + sizeof(float) + sizeof(float) + sizeof(uint) + sizeof(uint) + sizeof(float);
+            
+            // Create/resize results buffer for first pass
             if (resultsBuffer == null || resultsBuffer.count != numThreads)
             {
                 ReleaseBuffer(ref resultsBuffer);
-                resultsBuffer = new ComputeBuffer(numThreads, sizeof(float) * 3 + sizeof(float) + sizeof(float) + sizeof(uint) + sizeof(uint));
+                resultsBuffer = new ComputeBuffer(numThreads, placementResultStride);
                 results = new PlacementResult[numThreads];
+            }
+            
+            // Create/resize filtered results buffer for second pass (collision filtering)
+            if (filteredResultsBuffer == null || filteredResultsBuffer.count != maxResults)
+            {
+                ReleaseBuffer(ref filteredResultsBuffer);
+                filteredResultsBuffer = new ComputeBuffer(maxResults, placementResultStride);
+                filteredResults = new PlacementResult[maxResults];
+            }
+            
+            // Create/resize valid count buffer (used to track how many valid objects we have)
+            if (validCountBuffer == null)
+            {
+                ReleaseBuffer(ref validCountBuffer);
+                validCountBuffer = new ComputeBuffer(1, sizeof(int));
+                validCountArray = new int[1];
             }
             
             // Create/resize height constraints buffer
@@ -764,6 +762,11 @@ namespace GameCraftersGuild.WorldBuilding
             placementComputeShader.SetVector("_TerrainPosition", new Vector4(terrainPosition.x, terrainPosition.y, terrainPosition.z, 0));
             placementComputeShader.SetVector("_HeightmapResolution", new Vector2(terrainData.heightmapResolution, terrainData.heightmapResolution));
             
+            // Additional debug logging for terrain info
+            /*Debug.Log($"Terrain Parameters: Size=({terrainSize.x:F1},{terrainSize.y:F1},{terrainSize.z:F1}), " +
+                     $"Position=({terrainPosition.x:F1},{terrainPosition.y:F1},{terrainPosition.z:F1}), " +
+                     $"HeightmapRes={terrainData.heightmapResolution}");*/
+            
             // Set bounds parameters
             placementComputeShader.SetVector("_BoundsMin", new Vector4(boundsMinX, 0, boundsMinZ, 0));
             placementComputeShader.SetVector("_BoundsMax", new Vector4(boundsMaxX, 0, boundsMaxZ, 0));
@@ -780,9 +783,11 @@ namespace GameCraftersGuild.WorldBuilding
             placementComputeShader.SetInt("_PlacedObjectCount", objectCount);
             placementComputeShader.SetFloat("_DefaultMinDistance", defaultMinDistance);
             
-            // Debug logging
-            //Debug.Log($"GPU Placement: _PlacedObjectCount={objectCount}, _DefaultMinDistance={defaultMinDistance}");
-            //Debug.Log($"GPU Placement: Using buffers - placedObjectsBuffer.count={placedObjectsBuffer.count}, minimumDistancesBuffer.count={minimumDistancesBuffer.count}");
+            // For any existing slope constraints, log them for debugging
+            /*if (slopeConstraints != null && slopeConstraints.Length > 0)
+            {
+                Debug.Log($"Setting slope constraint: Min={slopeConstraints[0].x}°, Max={slopeConstraints[0].y}°");
+            }*/
             
             // Set texture samplers - use the context render textures directly
             placementComputeShader.SetTexture(generatePositionsKernelId, "_HeightmapTexture", context.HeightmapRenderTexture);
@@ -793,8 +798,26 @@ namespace GameCraftersGuild.WorldBuilding
                 placementComputeShader.SetTexture(generatePositionsKernelId, "_AlphamapTexture", context.SplatRenderTextures[0]);
             }
             
-            // Set the normal texture we created
-            placementComputeShader.SetTexture(generatePositionsKernelId, "_NormalTexture", normalTexture);
+            // Set the normal texture from context instead of the one we created
+            if (context.NormalRenderTexture != null)
+            {
+                placementComputeShader.SetTexture(generatePositionsKernelId, "_NormalTexture", context.NormalRenderTexture);
+            }
+            else
+            {
+                // Fallback to our old method if context doesn't have a normal map
+                if (normalTexture == null)
+                {
+                    normalTexture = new Texture2D(2, 2);
+                    normalTexture.SetPixel(0, 0, new Color(0.5f, 1.0f, 0.5f, 1)); // Default normal pointing up
+                    normalTexture.SetPixel(0, 1, new Color(0.5f, 1.0f, 0.5f, 1));
+                    normalTexture.SetPixel(1, 0, new Color(0.5f, 1.0f, 0.5f, 1));
+                    normalTexture.SetPixel(1, 1, new Color(0.5f, 1.0f, 0.5f, 1));
+                    normalTexture.Apply();
+                }
+                placementComputeShader.SetTexture(generatePositionsKernelId, "_NormalTexture", normalTexture);
+                Debug.LogWarning("GPU Placement: Using fallback normal texture - context does not have NormalRenderTexture");
+            }
             
             // Set mask texture - use context mask if available
             placementComputeShader.SetTexture(generatePositionsKernelId, "_MaskTexture", mask == null ? Texture2D.whiteTexture : mask);
@@ -803,7 +826,7 @@ namespace GameCraftersGuild.WorldBuilding
             placementComputeShader.SetTexture(generatePositionsKernelId, "_NoiseTexture", 
                 noiseTexture != null ? noiseTexture : Texture2D.whiteTexture);
             
-            // Set buffers
+            // Set buffers for FIRST kernel (GeneratePositions)
             placementComputeShader.SetBuffer(generatePositionsKernelId, "_Results", resultsBuffer);
             placementComputeShader.SetBuffer(generatePositionsKernelId, "_HeightConstraints", heightConstraintsBuffer);
             placementComputeShader.SetBuffer(generatePositionsKernelId, "_SlopeConstraints", slopeConstraintsBuffer);
@@ -814,6 +837,9 @@ namespace GameCraftersGuild.WorldBuilding
             placementComputeShader.SetBuffer(generatePositionsKernelId, "_PlacedObjectPositions", placedObjectsBuffer);
             placementComputeShader.SetBuffer(generatePositionsKernelId, "_MinimumDistances", minimumDistancesBuffer);
             placementComputeShader.SetBuffer(generatePositionsKernelId, "_PrefabSettings", prefabSettingsBuffer);
+            
+            // Set buffers for SECOND kernel (FilterObjectCollisions)
+            placementComputeShader.SetBuffer(filterObjectCollisionsKernelId, "_PrefabSettings", prefabSettingsBuffer);
         }
     }
     
