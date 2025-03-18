@@ -164,45 +164,19 @@ float2 GetRandomPosition(uint id)
 
 float GetTerrainHeight(float2 normPos)
 {
-    return _HeightmapTexture.SampleLevel(sampler_HeightmapTexture, normPos, 0).r * _TerrainParams.y;
+    return _HeightmapTexture.SampleLevel(sampler_HeightmapTexture, normPos, 0).r * _TerrainParams.y * 2.0;
 }
 
 float3 GetTerrainNormal(float2 normPos)
 {
-    // Sample heights at neighboring points (with small offset)
-    const float delta = 1.0 / max(_HeightmapResolution.x, _HeightmapResolution.y);
-    
-    float h = GetTerrainHeight(normPos);
-    float hL = GetTerrainHeight(float2(max(0.0, normPos.x - delta), normPos.y));
-    float hR = GetTerrainHeight(float2(min(1.0, normPos.x + delta), normPos.y));
-    float hD = GetTerrainHeight(float2(normPos.x, min(1.0, normPos.y + delta)));
-    float hU = GetTerrainHeight(float2(normPos.x, max(0.0, normPos.y - delta)));
-    
-    // Calculate world-space distances between sample points
-    float worldDeltaX = delta * _TerrainParams.x;
-    float worldDeltaZ = delta * _TerrainParams.z;
-    
-    // Calculate terrain normal using central differences
-    float3 normal;
-    normal.x = -(hR - hL) / (2.0 * worldDeltaX);
-    normal.z = -(hD - hU) / (2.0 * worldDeltaZ);
-    normal.y = 1.0;
-    normal = normalize(normal);
-    
-    return normal;
+    float3 normal = _NormalTexture.SampleLevel(sampler_NormalTexture, normPos, 0).xyz;
+    return normalize(normal * 2 - 1); // Convert from 0-1 to -1-1 range
 }
 
 float GetTerrainSlope(float2 normPos)
 {
-    // Calculate the terrain normal directly from heightmap
     float3 normal = GetTerrainNormal(normPos);
-    
-    // Calculate angle between normal and up vector (in degrees)
-    float cosAngle = dot(normal, float3(0, 1, 0));
-    cosAngle = clamp(cosAngle, -1.0, 1.0);
-    float angle = degrees(acos(cosAngle));
-    
-    return angle;
+    return degrees(acos(dot(normal, float3(0, 1, 0))));
 }
 
 bool CheckHeightConstraint(float height, uint constraintIndex)
