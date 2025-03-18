@@ -313,5 +313,111 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/WriteSplatmap"
             }
             ENDCG
         }
+
+        Pass
+        {
+            Name "InverseSlopeMask"
+            
+            Cull Off
+            BlendOp Add
+            Blend Zero OneMinusSrcColor, Zero OneMinusSrcAlpha
+            ZTest Never
+            ZWrite Off
+            
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+
+            #include "UnityCG.cginc"
+
+            struct appdata
+            {
+                float4 vertex : POSITION;
+                float2 uv : TEXCOORD0;
+            };
+
+            struct v2f
+            {
+                float2 uv : TEXCOORD0;
+                float2 normalUV : TEXCOORD1;
+                float4 vertex : SV_POSITION;
+            };
+
+            sampler2D _Mask;
+            sampler2D _NormalMap;
+            float4 _Falloff;
+            float4 _MaskRange;
+            float4 _SlopeRange;
+            float4 _TerrainUVParams;
+
+            v2f vert (appdata v)
+            {
+                v2f o;
+                o.vertex = UnityObjectToClipPos(v.vertex);
+                o.uv = v.uv;
+                
+                // Get the object-to-world transformation matrix
+                float4x4 objectToWorld = unity_ObjectToWorld;
+                
+                // Create a 2x2 transformation matrix for the XZ plane
+                float2x2 transformXZ = float2x2(
+                    objectToWorld._11, objectToWorld._13,
+                    objectToWorld._31, objectToWorld._33
+                );
+                
+                // Center the UV coordinates
+                float2 centeredUV = v.uv - 0.5;
+                
+                // Apply the transformation
+                float2 transformedUV = mul(transformXZ, centeredUV);
+                
+                // Map the transformed UV to terrain space
+                float2 normalUV = _TerrainUVParams.xy + transformedUV;
+                
+                o.normalUV = normalUV;
+                
+                return o;
+            }
+
+            float4 frag (v2f i) : SV_Target
+            {
+                // Sample mask and normal
+                float mask = tex2D(_Mask, i.uv).x;
+                if (mask <= 0.005) return float4(0, 0, 0, 0);
+                
+                // Sample the normal map using terrain-space UV coordinates
+                float3 normal = tex2D(_NormalMap, i.normalUV).xyz;
+                
+                // Convert normal from 0-1 range to -1 to 1 range
+                normal = normal * 2.0 - 1.0;
+                
+                // Calculate slope as cosine of angle from up vector
+                float slope = normal.y;
+                
+                // Check if slope is within range
+                float slopeFactor = 0;
+                if (slope >= _SlopeRange.x && slope <= _SlopeRange.y)
+                {
+                    // Calculate smooth transition at slope boundaries
+                    const float SLOPE_SMOOTH = 0.05;
+                    
+                    // Lower and upper boundary blends
+                    float lowerBlend = smoothstep(_SlopeRange.x - SLOPE_SMOOTH, _SlopeRange.x + SLOPE_SMOOTH, slope);
+                    float upperBlend = smoothstep(_SlopeRange.y + SLOPE_SMOOTH, _SlopeRange.y - SLOPE_SMOOTH, slope);
+                    
+                    // Combine blend factors
+                    slopeFactor = lowerBlend * upperBlend;
+                }
+                
+                // Apply mask falloff
+                mask = ApplyFalloff(mask, _Falloff.x, _Falloff.y, _Falloff.z, _MaskRange.xy, _MaskRange.z);
+                
+                // Combine slope factor with mask
+                mask *= slopeFactor;
+                
+                return float4(mask, mask, mask, mask);
+            }
+            ENDCG
+        }
     }
 }
