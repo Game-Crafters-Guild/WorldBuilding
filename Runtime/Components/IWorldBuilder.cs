@@ -8,6 +8,7 @@ namespace GameCraftersGuild.WorldBuilding
     public interface IWorldBuilder : ITerrainVegetationProvider
     {
         public float4x4 TransformMatrix { get; set; }
+        public Transform Transform { get; }
         public int Priority { get; }
 
         public bool IsDirty { get; set; }

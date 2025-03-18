@@ -241,18 +241,24 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/WriteSplatmap"
                 o.vertex = UnityObjectToClipPos(v.vertex);
                 o.uv = v.uv;
                 
-                // Calculate the correct UV for sampling the normal map based on the terrain position and size
-                // Convert v.uv from 0-1 quad space to -0.5 to 0.5 centered space
-                float2 centeredUV = v.uv - 0.5;
+                // Transform reference points to world space to calculate scale
+                float3 origin = mul(unity_ObjectToWorld, float4(0, 0, 0, 1)).xyz;
+                float3 unitX = mul(unity_ObjectToWorld, float4(1, 0, 0, 1)).xyz;
+                float3 unitZ = mul(unity_ObjectToWorld, float4(0, 0, 1, 1)).xyz;
                 
-                // Scale by the shape's terrain-space dimensions
-                float2 scaledUV = centeredUV * _TerrainUVParams.zw;
+                // Calculate actual world-space scale
+                float scaleX = length(unitX - origin);
+                float scaleZ = length(unitZ - origin);
                 
-                // Offset to the shape's terrain-space center position
-                float2 terrainUV = scaledUV + _TerrainUVParams.xy;
+                // Simple direct mapping with scale correction
+                // Since we're going from smaller to larger when scaled down, we need to divide
+                // We need to multiply the terrain size by the inverse of the object scale
+                float2 correctedTerrainSize = float2(scaleX, scaleZ);
                 
-                // This gives us UVs in terrain space (0-1 across entire terrain)
-                o.normalUV = terrainUV;
+                // Apply corrected UV mapping
+                float2 normalUV = _TerrainUVParams.xy + (v.uv - 0.5) * correctedTerrainSize;
+                
+                o.normalUV = normalUV;
                 
                 return o;
             }

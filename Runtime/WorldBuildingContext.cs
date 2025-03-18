@@ -28,6 +28,8 @@ namespace GameCraftersGuild.WorldBuilding
         private float MaxTerrainHeight { get; set; }
         public TerrainData TerrainData { get; private set; }
         public Matrix4x4 CurrentTransform { get; internal set; }
+        
+        public Transform CurrentTransformComponent { get; internal set; }
         public Dictionary<TerrainLayer, int> TerrainLayersIndexMap { get; internal set; }
         public RenderTexture[] SplatRenderTextures { get; private set; }
         public RenderTexture HeightmapRenderTexture => m_HeightmapRenderTexture;

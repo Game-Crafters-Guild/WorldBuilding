@@ -10,9 +10,11 @@ namespace GameCraftersGuild.WorldBuilding
     public class Stamp : MonoBehaviour, IWorldBuilder
     {
         public float4x4 TransformMatrix { get; set; }
+        public Transform Transform => transform;
 
         [Tooltip("Priority is used as a fallback when scene hierarchy position is not sufficient for determining processing order")]
         [SerializeField] private int m_Priority = 0;
+
         public int Priority
         {
             get => m_Priority;

@@ -587,6 +587,7 @@ namespace GameCraftersGuild.WorldBuilding
             foreach (var builder in m_RelevantWorldBuilders)
             {
                 m_WorldBuildingContext.CurrentTransform = builder.TransformMatrix;
+                m_WorldBuildingContext.CurrentTransformComponent = builder.Transform;
                 bool heightChangesApplied = builder.ApplyHeights(m_WorldBuildingContext);
                 
                 // Track builders that modified the terrain
@@ -604,6 +605,7 @@ namespace GameCraftersGuild.WorldBuilding
             foreach (var builder in m_RelevantWorldBuilders)
             {
                 m_WorldBuildingContext.CurrentTransform = builder.TransformMatrix;
+                m_WorldBuildingContext.CurrentTransformComponent = builder.Transform;
                 bool splatChangesApplied = builder.ApplySplatmap(m_WorldBuildingContext);
                 
                 // Track builders that modified the terrain
@@ -639,6 +641,7 @@ namespace GameCraftersGuild.WorldBuilding
             foreach (var builder in m_RelevantWorldBuilders)
             {
                 m_WorldBuildingContext.CurrentTransform = builder.TransformMatrix;
+                m_WorldBuildingContext.CurrentTransformComponent = builder.Transform;
                 builder.GenerateVegetation(m_WorldBuildingContext);
             }
             
@@ -671,6 +674,7 @@ namespace GameCraftersGuild.WorldBuilding
                 if (shouldSpawn)
                 {
                     m_WorldBuildingContext.CurrentTransform = builder.TransformMatrix;
+                    m_WorldBuildingContext.CurrentTransformComponent = builder.Transform;
                     builder.SpawnGameObjects(m_WorldBuildingContext);
                 }
             }

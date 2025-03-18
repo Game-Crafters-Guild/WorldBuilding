@@ -54,6 +54,12 @@ namespace GameCraftersGuild.WorldBuilding
                 terrainSize.x, // size X in terrain space (0-1)
                 terrainSize.y  // size Y in terrain space (0-1)
             ));
+            context.m_ApplySplatmapMaterial.SetVector("_TerrainUVParams", new Vector4(
+                terrainPos.x, // center X in terrain space (0-1)
+                terrainPos.y, // center Y in terrain space (0-1)
+                terrainSize.x, // size X in terrain space (0-1)
+                terrainSize.y  // size Y in terrain space (0-1)
+            ));
             
             // Set slope parameters
             materialPropertyBlock.SetVector("_SlopeRange", new Vector4(minCos, maxCos, 0, 0));
