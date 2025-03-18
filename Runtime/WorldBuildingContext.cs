@@ -147,7 +147,7 @@ namespace GameCraftersGuild.WorldBuilding
             }
         }
 
-        private void DrawQuad(Bounds worldBounds, RenderTexture renderTexture, Material material,
+        public void DrawQuad(Bounds worldBounds, RenderTexture renderTexture, Material material,
             MaterialPropertyBlock materialPropertyBlock, int shaderPass = 0)
         {
             float2 positionToTerrainSpace = WorldPositionToTerrainSpace(worldBounds.center) - new float2(0.5f, 0.5f);
@@ -300,7 +300,7 @@ namespace GameCraftersGuild.WorldBuilding
             ClearVegetation();
         }
 
-        float2 WorldPositionToTerrainSpace(float3 worldPosition)
+        public float2 WorldPositionToTerrainSpace(float3 worldPosition)
         {
             float2 positionOnTerrain =
                 new Vector2(worldPosition.x - m_TerrainPosition.x, worldPosition.z - m_TerrainPosition.z);

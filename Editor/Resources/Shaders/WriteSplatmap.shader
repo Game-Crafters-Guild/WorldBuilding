@@ -4,9 +4,12 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/WriteSplatmap"
     {
         [NoScaleOffset]_Mask("Mask", 2D) = "white" {}
         [NoScaleOffset]_Splatmap("Splatmap", 2D) = "black" {}
+        [NoScaleOffset]_NormalMap("Normal Map", 2D) = "bump" {}
         _Intensity("Intensity", Color) = (0, 0, 0, 0)
         _Falloff("Falloff", Vector) = (0, 1, 0, 0)
         _MaskRange("MaskRange", Vector) = (0, 1, 0, 0)
+        _SlopeRange("SlopeRange", Vector) = (0, 1, 0, 0)
+        _TerrainUVParams("TerrainUVParams (CenterX, CenterY, SizeX, SizeY)", Vector) = (0.5, 0.5, 1, 1)
     }
     SubShader
     {
@@ -187,6 +190,114 @@ Shader "Hidden/GameCraftersGuild/TerrainGen/WriteSplatmap"
                 mask = ApplyFalloff(mask, _Falloff.x, _Falloff.y, _Falloff.z, _MaskRange.xy, _MaskRange.z);
                 
                 // Apply intensity to each channel but preserve interpolation
+                float4 result = _Intensity;
+                result *= mask;
+                
+                return result;
+            }
+            ENDCG
+        }
+        
+        Pass
+        {
+            Name "WriteSplatSlope"
+            
+            Cull Off
+            BlendOp Add
+            Blend One One, One One
+            ZTest Never
+            ZWrite Off
+            
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+
+            #include "UnityCG.cginc"
+
+            struct appdata
+            {
+                float4 vertex : POSITION;
+                float2 uv : TEXCOORD0;
+            };
+
+            struct v2f
+            {
+                float2 uv : TEXCOORD0;
+                float2 normalUV : TEXCOORD1;
+                float4 vertex : SV_POSITION;
+            };
+
+            sampler2D _Mask;
+            sampler2D _NormalMap;
+            float4 _Intensity;
+            float4 _Falloff;
+            float4 _MaskRange;
+            float4 _SlopeRange; // x = min cosine (max angle), y = max cosine (min angle)
+            float4 _TerrainUVParams; // x = center X, y = center Y, z = size X, w = size Y in terrain space
+
+            v2f vert (appdata v)
+            {
+                v2f o;
+                o.vertex = UnityObjectToClipPos(v.vertex);
+                o.uv = v.uv;
+                
+                // Calculate the correct UV for sampling the normal map based on the terrain position and size
+                // Convert v.uv from 0-1 quad space to -0.5 to 0.5 centered space
+                float2 centeredUV = v.uv - 0.5;
+                
+                // Scale by the shape's terrain-space dimensions
+                float2 scaledUV = centeredUV * _TerrainUVParams.zw;
+                
+                // Offset to the shape's terrain-space center position
+                float2 terrainUV = scaledUV + _TerrainUVParams.xy;
+                
+                // This gives us UVs in terrain space (0-1 across entire terrain)
+                o.normalUV = terrainUV;
+                
+                return o;
+            }
+
+            float4 frag (v2f i) : SV_Target
+            {
+                // Sample mask and normal
+                float mask = tex2D(_Mask, i.uv).x;
+                if (mask <= 0.005) return float4(0, 0, 0, 0);
+                
+                // Sample the normal map using terrain-space UV coordinates
+                float3 normal = tex2D(_NormalMap, i.normalUV).xyz;
+                
+                // Convert normal from 0-1 range to -1 to 1 range
+                normal = normal * 2.0 - 1.0;
+                
+                // Calculate slope as the cosine of the angle from up vector (dot product)
+                float slope = normal.y; // This is the cosine of the angle
+                
+                // Check if slope is within range
+                // _SlopeRange.x = min cosine (steepest angle allowed)
+                // _SlopeRange.y = max cosine (shallowest angle allowed)
+                float slopeFactor = 0;
+                if (slope >= _SlopeRange.x && slope <= _SlopeRange.y)
+                {
+                    // Calculate smooth transition at slope boundaries
+                    const float SLOPE_SMOOTH = 0.05; // Blend width for smooth transition
+                    
+                    // Lower boundary (max angle/min cosine)
+                    float lowerBlend = smoothstep(_SlopeRange.x - SLOPE_SMOOTH, _SlopeRange.x + SLOPE_SMOOTH, slope);
+                    
+                    // Upper boundary (min angle/max cosine)
+                    float upperBlend = smoothstep(_SlopeRange.y + SLOPE_SMOOTH, _SlopeRange.y - SLOPE_SMOOTH, slope);
+                    
+                    // Combine the two blend factors
+                    slopeFactor = lowerBlend * upperBlend;
+                }
+                
+                // Apply mask falloff
+                mask = ApplyFalloff(mask, _Falloff.x, _Falloff.y, _Falloff.z, _MaskRange.xy, _MaskRange.z);
+                
+                // Combine slope factor with mask
+                mask *= slopeFactor;
+                
+                // Apply intensity to each channel
                 float4 result = _Intensity;
                 result *= mask;
                 
