@@ -351,11 +351,7 @@ namespace GameCraftersGuild.WorldBuilding
                 #if UNITY_EDITOR
                 else if (!Application.isPlaying && m_EditorCoroutine != null)
                 {
-                    #if UNITY_2019_1_OR_NEWER
                     EditorCoroutineUtility.StopCoroutine(m_EditorCoroutine);
-                    #else
-                    EditorCoroutineUtility.StopCoroutine(m_EditorCoroutine);
-                    #endif
                     m_EditorCoroutine = null;
                 }
                 #endif
