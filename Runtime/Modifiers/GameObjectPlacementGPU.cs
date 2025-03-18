@@ -43,27 +43,37 @@ namespace GameCraftersGuild.WorldBuilding
         private Texture2D noiseTexture;
         
         // Structure for results from compute shader
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
         private struct PlacementResult
         {
-            public Vector3 position;
-            public float scale;
-            public float rotation;
-            public uint prefabIndex;
-            public uint isValid;
-            public float debugSlope;
+            public Vector3 position;       // 12 bytes
+            public float scale;            // 4 bytes
+            public float rotation;         // 4 bytes
+            public uint prefabIndex;       // 4 bytes
+            public uint isValid;           // 4 bytes
+            public float normalAlignmentFactor; // 4 bytes
+            public Vector3 normal;         // 12 bytes
+            public float padding;          // 4 bytes padding to match GPU 48-byte alignment
+            // Total: 48 bytes
         }
         
         // Structure for prefab settings in compute shader
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
         private struct PrefabSettings
         {
-            public float minScale;
-            public float maxScale;
-            public float yOffset;
-            public uint alignToNormal;
-            public uint randomYRotation;
-            public float minRotation;
-            public float maxRotation;
-            public float minimumDistance;
+            public float minScale;            // 4 bytes
+            public float maxScale;            // 4 bytes
+            public float yOffset;             // 4 bytes
+            public uint alignToNormal;        // 4 bytes
+            public uint randomYRotation;      // 4 bytes
+            public float minRotation;         // 4 bytes
+            public float maxRotation;         // 4 bytes
+            public float minimumDistance;     // 4 bytes
+            public float minNormalAlignment;  // 4 bytes
+            public float maxNormalAlignment;  // 4 bytes
+            public float padding1;            // 4 bytes padding
+            public float padding2;            // 4 bytes padding
+            // Total: 48 bytes to match shader memory layout
         }
         
         // Array to hold results
@@ -375,7 +385,9 @@ namespace GameCraftersGuild.WorldBuilding
                     randomYRotation = gameObj.RandomYRotation ? 1u : 0u,
                     minRotation = gameObj.MinRotation,
                     maxRotation = gameObj.MaxRotation,
-                    minimumDistance = minDist // Store unscaled distance
+                    minimumDistance = minDist, // Store unscaled distance
+                    minNormalAlignment = gameObj.MinNormalAlignment,
+                    maxNormalAlignment = gameObj.MaxNormalAlignment
                 };
             }
         }
@@ -611,7 +623,9 @@ namespace GameCraftersGuild.WorldBuilding
                         Position = result.position,
                         Scale = result.scale,
                         Rotation = result.rotation,
-                        PrefabIndex = (int)result.prefabIndex % modifier.GameObjects.Count
+                        PrefabIndex = (int)result.prefabIndex % modifier.GameObjects.Count,
+                        Normal = result.normal,
+                        NormalAlignmentFactor = result.normalAlignmentFactor
                     };
                     
                     placements.Add(info);
@@ -628,16 +642,11 @@ namespace GameCraftersGuild.WorldBuilding
         /// </summary>
         private void CreateBuffers(int numThreads, int maxResults)
         {
-            // Calculate correct stride size for PlacementResult struct:
-            // Vector3 position: 12 bytes (3 floats)
-            // float scale: 4 bytes
-            // float rotation: 4 bytes  
-            // uint prefabIndex: 4 bytes
-            // uint isValid: 4 bytes
-            // float debugSlope: 4 bytes
-            // Total: 32 bytes
-            int placementResultStride = sizeof(float) * 3 + sizeof(float) + sizeof(float) + sizeof(uint) + sizeof(uint) + sizeof(float);
-            
+            // For compute shaders, HLSL packs data differently than C#
+            // The shader struct is 44 bytes, but with 16-byte alignment, it becomes 48 bytes
+            // Vector3/float3 elements are aligned to 16 bytes in the shader
+            const int placementResultStride = 48; // Fixed stride to match shader memory layout
+
             // Create/resize results buffer for first pass
             if (resultsBuffer == null || resultsBuffer.count != numThreads)
             {
@@ -712,7 +721,6 @@ namespace GameCraftersGuild.WorldBuilding
             {
                 ReleaseBuffer(ref placedObjectsBuffer);
                 placedObjectsBuffer = new ComputeBuffer(requiredElementCount, sizeof(float));
-                //Debug.Log($"Created placedObjectsBuffer with {requiredElementCount} elements (for {requiredElementCount/3} objects), stride={sizeof(float)}");
             }
             
             // Setup minimum distances buffer - for each object we need 1 float
@@ -728,12 +736,13 @@ namespace GameCraftersGuild.WorldBuilding
                 minimumDistancesBuffer.SetData(minimumDistances);
             }
             
-            // Setup prefab settings buffer
+            // Setup prefab settings buffer with proper struct stride
+            // PrefabSettings has floats and uints which should be aligned properly
+            const int prefabSettingsStride = 48; // Use fixed stride for consistent memory layout
             if (prefabSettingsBuffer == null || prefabSettingsBuffer.count != prefabSettings.Length)
             {
                 ReleaseBuffer(ref prefabSettingsBuffer);
-                // 5 floats + 3 uints 
-                prefabSettingsBuffer = new ComputeBuffer(Mathf.Max(1, prefabSettings.Length), sizeof(float) * 5 + sizeof(uint) * 3);
+                prefabSettingsBuffer = new ComputeBuffer(Mathf.Max(1, prefabSettings.Length), prefabSettingsStride);
             }
             prefabSettingsBuffer.SetData(prefabSettings);
         }
@@ -852,5 +861,7 @@ namespace GameCraftersGuild.WorldBuilding
         public float Scale;
         public float Rotation;
         public int PrefabIndex;
+        public Vector3 Normal;
+        public float NormalAlignmentFactor;
     }
 } 

@@ -36,6 +36,14 @@ namespace GameCraftersGuild.WorldBuilding
             [Tooltip("Align rotation to terrain normal")]
             public bool AlignToNormal = false;
             
+            [Tooltip("Minimum normal alignment factor (0 = no alignment, 1 = full alignment)")]
+            [Range(0f, 1f)]
+            public float MinNormalAlignment = 0.7f;
+            
+            [Tooltip("Maximum normal alignment factor (0 = no alignment, 1 = full alignment)")]
+            [Range(0f, 1f)]
+            public float MaxNormalAlignment = 1.0f;
+            
             [Tooltip("Random rotation around Y axis")]
             public bool RandomYRotation = true;
             
@@ -756,15 +764,20 @@ namespace GameCraftersGuild.WorldBuilding
                     
                 if (objectSettings.AlignToNormal)
                 {
-                    // Get terrain normal at position
-                    Vector3 terrainPosition = context.TerrainPosition;
-                    Vector3 terrainSize = context.TerrainData.size;
+                    // Instead of getting the terrain normal, use the normal from the GPU
+                    Vector3 normal = placement.Normal;
                     
-                    Vector3 normal = context.TerrainData.GetInterpolatedNormal(
-                        (placement.Position.x - terrainPosition.x) / terrainSize.x,
-                        (placement.Position.z - terrainPosition.z) / terrainSize.z
-                    );
-                    Quaternion normalRotation = Quaternion.FromToRotation(Vector3.up, normal);
+                    // Apply normal alignment factor (lerp between identity and full normal alignment)
+                    Quaternion normalRotation = Quaternion.identity;
+                    
+                    if (placement.NormalAlignmentFactor > 0)
+                    {
+                        // Full normal alignment
+                        Quaternion fullNormalRot = Quaternion.FromToRotation(Vector3.up, normal);
+                        
+                        // Interpolate between identity and full normal alignment
+                        normalRotation = Quaternion.Slerp(Quaternion.identity, fullNormalRot, placement.NormalAlignmentFactor);
+                    }
                     
                     if (objectSettings.RandomYRotation)
                     {

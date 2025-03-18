@@ -34,6 +34,8 @@ struct PrefabSettings
     float minRotation;
     float maxRotation;
     float minimumDistance;
+    float minNormalAlignment; // 0-1 value for minimum normal alignment
+    float maxNormalAlignment; // 0-1 value for maximum normal alignment
 };
 StructuredBuffer<PrefabSettings> _PrefabSettings;
 
@@ -69,8 +71,9 @@ struct PlacementResult
     float rotation;     // rotation around Y axis in degrees (4 bytes)
     uint prefabIndex;   // index of the prefab to spawn (4 bytes)
     uint isValid;       // 1 if valid position, 0 if not (4 bytes)
-    float debugSlope;   // Debug value for slope (4 bytes)
-    // Total: 32 bytes
+    float normalAlignmentFactor; // How much to align to normal (0-1) (4 bytes)
+    float3 normal;      // Surface normal at this point (12 bytes)
+    // Total: 44 bytes
 };
 
 // Buffers for filter pass
@@ -359,7 +362,7 @@ void GeneratePositions(uint3 id : SV_DispatchThreadID)
     
     // Initialize result as invalid
     _Results[index].isValid = 0;
-    _Results[index].debugSlope = -1.0; // Initialize debug value
+    _Results[index].normalAlignmentFactor = 0.0; // Initialize normal alignment factor
     
     // Skip if beyond the maximum number of objects
     if (_MaxObjectCount > 0 && index >= _MaxObjectCount)
@@ -413,22 +416,8 @@ void GeneratePositions(uint3 id : SV_DispatchThreadID)
     float height = GetTerrainHeight(normPos);
     float slope = GetTerrainSlope(normPos);
     
-    // Store slope for debugging (even if position is invalid)
-    _Results[index].debugSlope = slope;
-    
-    // Sample neighboring heights for validation
-    float h = height;
-    const float delta = 0.01;
-    float hL = GetTerrainHeight(float2(max(0.0, normPos.x - delta), normPos.y));
-    float hR = GetTerrainHeight(float2(min(1.0, normPos.x + delta), normPos.y));
-    float heightDiff = abs(hR - hL);
-    
-    // If significant height difference, we should have non-zero slope
-    if (heightDiff > 0.1 && slope < 1.0)
-    {
-        // Store height difference instead of slope for debugging
-        _Results[index].debugSlope = -100.0 - heightDiff; // Special marker to detect this condition
-    }
+    // Get terrain normal for alignment
+    float3 normal = GetTerrainNormal(normPos);
     
     // Choose prefab index
     uint prefabIndex = floor(GetRandomFloat(index * 7 + 5, _RandomSeed) * _NumberOfGameObjects);
@@ -447,6 +436,14 @@ void GeneratePositions(uint3 id : SV_DispatchThreadID)
     // Calculate random scale based on prefab settings
     float scale = lerp(settings.minScale, settings.maxScale, GetRandomFloat(index * 9 + 6, _RandomSeed));
     
+    // Calculate normal alignment factor (0-1) if normal alignment is enabled
+    float normalAlignmentFactor = 0.0;
+    if (settings.alignToNormal > 0)
+    {
+        normalAlignmentFactor = lerp(settings.minNormalAlignment, settings.maxNormalAlignment, 
+                                     GetRandomFloat(index * 15 + 8, _RandomSeed));
+    }
+    
     // Check all constraints and mark if slope constraint fails
     bool allConstraintsValid = true;
     bool slopeValid = CheckSlopeConstraint(slope, 0);
@@ -454,7 +451,7 @@ void GeneratePositions(uint3 id : SV_DispatchThreadID)
     // Store the raw slope with a special marker if slope constraint fails
     if (!slopeValid)
     {
-        _Results[index].debugSlope = -10.0 - slope; // Negative value with offset to signal slope constraint failure
+        _Results[index].normalAlignmentFactor = -10.0; // Use this field for debugging since we're not using debugSlope anymore
         allConstraintsValid = false;
     }
     
@@ -480,6 +477,8 @@ void GeneratePositions(uint3 id : SV_DispatchThreadID)
         }
         _Results[index].prefabIndex = prefabIndex;
         _Results[index].isValid = 1;
+        _Results[index].normalAlignmentFactor = normalAlignmentFactor;
+        _Results[index].normal = normal;
     }
 }
 
