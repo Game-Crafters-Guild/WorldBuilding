@@ -400,25 +400,10 @@ namespace GameCraftersGuild.WorldBuilding
         /// </summary>
         private void SetupNormalTexture(TerrainData terrainData)
         {
-            // Create normals from heightmap
-            normalTexture = new Texture2D(terrainData.heightmapResolution, terrainData.heightmapResolution, TextureFormat.RGBAFloat, false);
+            // This method is no longer needed as we now use the normal map from WorldBuildingContext
+            // It remains for backward compatibility but doesn't do anything
             
-            // Calculate normals based on heightmap - a simplified approach
-            for (int y = 0; y < terrainData.heightmapResolution; y++)
-            {
-                for (int x = 0; x < terrainData.heightmapResolution; x++)
-                {
-                    Vector3 normal = terrainData.GetInterpolatedNormal(
-                        (float)x / (terrainData.heightmapResolution-1), 
-                        (float)y / (terrainData.heightmapResolution-1));
-                    
-                    // Convert from -1,1 to 0,1 range for storage in texture
-                    normal = normal * 0.5f + new Vector3(0.5f, 0.5f, 0.5f);
-                    normalTexture.SetPixel(x, y, new Color(normal.x, normal.y, normal.z, 1));
-                }
-            }
-            
-            normalTexture.Apply();
+            // Old implementation removed
         }
         
         /// <summary>
@@ -451,8 +436,8 @@ namespace GameCraftersGuild.WorldBuilding
             if (terrain == null)
                 return null;
             
-            // Setup normal texture which isn't in WorldBuildingContext
-            SetupNormalTexture(terrainData);
+            // No longer need to setup normal texture, we'll use the one from context
+            // SetupNormalTexture(terrainData);
             
             // Calculate bounds in terrain space
             Vector3 terrainPos = context.TerrainPosition;
@@ -813,8 +798,26 @@ namespace GameCraftersGuild.WorldBuilding
                 placementComputeShader.SetTexture(generatePositionsKernelId, "_AlphamapTexture", context.SplatRenderTextures[0]);
             }
             
-            // Set the normal texture we created
-            placementComputeShader.SetTexture(generatePositionsKernelId, "_NormalTexture", normalTexture);
+            // Set the normal texture from context instead of the one we created
+            if (context.NormalRenderTexture != null)
+            {
+                placementComputeShader.SetTexture(generatePositionsKernelId, "_NormalTexture", context.NormalRenderTexture);
+            }
+            else
+            {
+                // Fallback to our old method if context doesn't have a normal map
+                if (normalTexture == null)
+                {
+                    normalTexture = new Texture2D(2, 2);
+                    normalTexture.SetPixel(0, 0, new Color(0.5f, 1.0f, 0.5f, 1)); // Default normal pointing up
+                    normalTexture.SetPixel(0, 1, new Color(0.5f, 1.0f, 0.5f, 1));
+                    normalTexture.SetPixel(1, 0, new Color(0.5f, 1.0f, 0.5f, 1));
+                    normalTexture.SetPixel(1, 1, new Color(0.5f, 1.0f, 0.5f, 1));
+                    normalTexture.Apply();
+                }
+                placementComputeShader.SetTexture(generatePositionsKernelId, "_NormalTexture", normalTexture);
+                Debug.LogWarning("GPU Placement: Using fallback normal texture - context does not have NormalRenderTexture");
+            }
             
             // Set mask texture - use context mask if available
             placementComputeShader.SetTexture(generatePositionsKernelId, "_MaskTexture", mask == null ? Texture2D.whiteTexture : mask);

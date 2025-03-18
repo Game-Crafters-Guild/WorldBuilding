@@ -1,0 +1,70 @@
+#pragma kernel GenerateNormals
+
+// Input heightmap texture
+Texture2D<float4> HeightMap;
+// Output normal map texture
+RWTexture2D<float4> NormalMap;
+
+// Define a sampler state for the heightmap
+SamplerState sampler_HeightMap;
+
+// Size of the heightmap
+float4 _HeightmapSize;
+// Terrain dimensions (x, y, z) where y is the height
+float4 _TerrainSize;
+
+[numthreads(8, 8, 1)]
+void GenerateNormals(uint3 id : SV_DispatchThreadID)
+{
+    // Check if the thread ID is within the texture bounds
+    if (id.x >= (uint)_HeightmapSize.x || id.y >= (uint)_HeightmapSize.y)
+        return;
+    
+    // Calculate the texel size
+    float2 texelSize = 1.0 / float2(_HeightmapSize.x, _HeightmapSize.y);
+    
+    // Sample neighboring height values
+    float2 uv = float2(id.xy) * texelSize;
+    
+    // Read height at current pixel
+    float height = HeightMap.SampleLevel(sampler_HeightMap, uv, 0).r;
+    
+    // Calculate horizontal and vertical derivatives for normal
+    // Use central differences for better accuracy
+    float2 offset = float2(1.0, 0.0) * texelSize;
+    
+    // Sample left and right pixels (x-direction)
+    float heightLeft = id.x > 0 ? 
+        HeightMap.SampleLevel(sampler_HeightMap, uv - offset, 0).r : 
+        height;
+    float heightRight = id.x < _HeightmapSize.x - 1 ? 
+        HeightMap.SampleLevel(sampler_HeightMap, uv + offset, 0).r : 
+        height;
+    
+    // Sample top and bottom pixels (z-direction)
+    offset = float2(0.0, 1.0) * texelSize;
+    float heightBottom = id.y > 0 ? 
+        HeightMap.SampleLevel(sampler_HeightMap, uv - offset, 0).r : 
+        height;
+    float heightTop = id.y < _HeightmapSize.y - 1 ? 
+        HeightMap.SampleLevel(sampler_HeightMap, uv + offset, 0).r : 
+        height;
+    
+    // Calculate change in height in world units
+    float dhdx = (heightRight - heightLeft) * _TerrainSize.y;
+    float dhdz = (heightTop - heightBottom) * _TerrainSize.y;
+    
+    // Calculate world-space steps (accounting for terrain size)
+    float worldStepX = 2.0 * _TerrainSize.x / _HeightmapSize.x;
+    float worldStepZ = 2.0 * _TerrainSize.z / _HeightmapSize.y;
+    
+    // Calculate normal using cross product of tangent vectors
+    float3 tangentX = float3(worldStepX, dhdx, 0);
+    float3 tangentZ = float3(0, dhdz, worldStepZ);
+    
+    float3 normal = normalize(cross(tangentZ, tangentX));
+    
+    // Store normal in texture (convert from -1,1 to 0,1 range)
+    float4 normalColor = float4(normal * 0.5 + 0.5, 1.0);
+    NormalMap[id.xy] = normalColor;
+} 

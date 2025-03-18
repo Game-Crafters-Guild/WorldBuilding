@@ -21,6 +21,7 @@ namespace GameCraftersGuild.WorldBuilding
         [SerializeField] public Material m_HeightmapMaterial;
         [SerializeField] public Material m_SplatmapMaterial;
         [SerializeField] private Mesh m_Quad;
+        [SerializeField] private ComputeShader m_NormalMapGenerationShader;
         private List<Terrain> m_ActiveTerrains = new List<Terrain>();
         private Queue<Terrain> m_TerrainsToUpdate = new Queue<Terrain>();
 
@@ -105,9 +106,23 @@ namespace GameCraftersGuild.WorldBuilding
             {
                 m_SplatmapMaterial = new Material(Shader.Find("Hidden/GameCraftersGuild/TerrainGen/WriteSplatmap"));
             }
+
+            FindShaders();
 #endif
 
             CreateFullScreenQuad();
+        }
+
+        private void FindShaders()
+        {
+            if (m_NormalMapGenerationShader == null)
+            {
+                m_NormalMapGenerationShader = Resources.Load<ComputeShader>("NormalMapGenerator");
+                if (m_NormalMapGenerationShader == null)
+                {
+                    Debug.LogWarning("Could not find NormalMapGenerator compute shader in Resources folder!");
+                }
+            }
         }
 
         private void CreateFullScreenQuad()
@@ -353,6 +368,8 @@ namespace GameCraftersGuild.WorldBuilding
                 return;
             }
 
+            FindShaders();
+
             // If there are no dirty builders, nothing to do
             if (m_DirtyBuilders.Count == 0)
             {
@@ -578,6 +595,10 @@ namespace GameCraftersGuild.WorldBuilding
                     m_ModifiedRegionBuilders.Add(builder);
                 }
             }
+
+            // Generate normal map from the heightmap once all height changes are applied
+            m_WorldBuildingContext.NormalGenerationShader = m_NormalMapGenerationShader;
+            m_WorldBuildingContext.GenerateNormalMap();
 
             // Track which builders applied splatmap changes
             foreach (var builder in m_RelevantWorldBuilders)
