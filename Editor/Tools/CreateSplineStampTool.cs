@@ -327,16 +327,28 @@ namespace GameCraftersGuild.WorldBuilding.Editor
         // Helper method to draw a cursor at a specific position
         private void DrawCursorAtPosition(Vector3 position)
         {
-            // Draw a crosshair cursor with increased size
-            float cursorSize = 1.2f; // Increased from 0.5f
+            // Calculate cursor size based on camera distance to maintain consistent pixel size
+            Camera camera = SceneView.lastActiveSceneView.camera;
+            if (camera == null) return;
+            
+            // Get the distance from the camera to the cursor position
+            float distanceToCamera = Vector3.Distance(camera.transform.position, position);
+            
+            // Calculate how many world units = desired pixel size at this distance
+            // This uses the camera's field of view and the scene view's height
+            float desiredPixelSize = 120f; // The cursor size in pixels we want to maintain
+            float pixelSizeInWorldUnits = 2.0f * distanceToCamera * Mathf.Tan(camera.fieldOfView * 0.5f * Mathf.Deg2Rad) / camera.pixelHeight;
+            
+            // Final cursor size in world units to maintain consistent pixel size
+            float cursorSize = pixelSizeInWorldUnits * desiredPixelSize;
             
             // Draw outer wire circle
             Handles.color = new Color(0.2f, 0.8f, 0.2f, 0.8f); // Brighter, more opaque green
-            Handles.DrawWireDisc(position, Vector3.up, cursorSize);
+            Handles.DrawWireDisc(position, Vector3.up, cursorSize * 0.5f);
             
             // Draw inner filled circle for better visibility
             Handles.color = new Color(0.2f, 0.8f, 0.2f, 0.3f); // Semi-transparent green
-            Handles.DrawSolidDisc(position, Vector3.up, cursorSize * 0.8f);
+            Handles.DrawSolidDisc(position, Vector3.up, cursorSize * 0.4f);
             
             // Draw an X shape with multiple lines for thickness
             Handles.color = Color.white;
@@ -344,24 +356,26 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             // Draw multiple slightly offset lines to create thicker lines
             for (int i = 0; i < 3; i++)
             {
-                float offset = i * 0.03f; // Small offset for each line
+                float offset = i * pixelSizeInWorldUnits * 0.5f; // Scale offset by pixel size
                 
                 // First diagonal of X
                 Handles.DrawLine(
-                    position + new Vector3(-cursorSize + offset, 0, -cursorSize + offset), 
-                    position + new Vector3(cursorSize - offset, 0, cursorSize - offset)
+                    position + new Vector3(-cursorSize * 0.5f + offset, 0, -cursorSize * 0.5f + offset), 
+                    position + new Vector3(cursorSize * 0.5f - offset, 0, cursorSize * 0.5f - offset)
                 );
                 
                 // Second diagonal of X
                 Handles.DrawLine(
-                    position + new Vector3(-cursorSize + offset, 0, cursorSize - offset), 
-                    position + new Vector3(cursorSize - offset, 0, -cursorSize + offset)
+                    position + new Vector3(-cursorSize * 0.5f + offset, 0, cursorSize * 0.5f - offset), 
+                    position + new Vector3(cursorSize * 0.5f - offset, 0, -cursorSize * 0.5f + offset)
                 );
             }
             
             // Draw a small filled sphere at the center for precise positioning
             Handles.color = Color.white;
-            Handles.SphereHandleCap(0, position, Quaternion.identity, 0.3f, EventType.Repaint); // Increased size
+            // Scale center point size based on pixel size to maintain consistent appearance
+            float centerPointSize = pixelSizeInWorldUnits * 5f; // About 5 pixels in diameter
+            Handles.SphereHandleCap(0, position, Quaternion.identity, centerPointSize, EventType.Repaint);
         }
         
         // Helper method to draw the cursor indicator
