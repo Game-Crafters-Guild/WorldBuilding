@@ -13,7 +13,7 @@ namespace GameCraftersGuild.WorldBuilding.Editor
 #else
     [EditorTool("Create Spline Stamp")]
 #endif
-    public class CreateSplineStampTool : SplineTool
+    public class CreateSplineStampTool : BaseStampTool
     {
         // Reusable collections to reduce allocations
         private List<float3> m_DrawnPoints = new List<float3>(128); // Pre-allocate capacity
@@ -31,14 +31,8 @@ namespace GameCraftersGuild.WorldBuilding.Editor
         private bool m_IsDrawing = false;
         private readonly float m_MinimumDistanceBetweenPoints = 0.25f;
         private readonly float m_BaseClosingThreshold = 1.0f; // Base threshold for close proximity
-        private GUIContent m_IconContent;
         
-        // Cached ray and hit info to reduce allocation
-        private RaycastHit m_RaycastHitInfo;
-        
-        public override GUIContent toolbarIcon => m_IconContent;
-        
-        private void OnEnable()
+        protected override void OnToolEnable()
         {
             m_IconContent = new GUIContent
             {
@@ -64,22 +58,28 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             
             Event evt = Event.current;
             
+            // Call base implementation when not in drawing mode
+            if (!m_IsDrawing)
+            {
+                base.OnToolGUI(window);
+                
+                // Handle Escape key to cancel even when not drawing
+                if (evt.type == EventType.KeyDown && evt.keyCode == KeyCode.Escape)
+                {
+                    CancelDrawing();
+                    evt.Use();
+                }
+                
+                return;
+            }
+            
+            // Below this point we're in drawing mode
+            
             // Handle input events
             HandleUtility.AddDefaultControl(GUIUtility.GetControlID(FocusType.Passive));
             
             switch (evt.type)
             {
-                case EventType.MouseDown:
-                    if (evt.button == 0) // Left mouse button
-                    {
-                        if (!m_IsDrawing)
-                        {
-                            StartDrawing(evt);
-                            evt.Use();
-                        }
-                    }
-                    break;
-                    
                 case EventType.MouseDrag:
                     if (evt.button == 0 && m_IsDrawing)
                     {
@@ -122,11 +122,10 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             }
             else
             {
-                // If we didn't hit anything, use a plane with normal = up vector at y=0
-                Plane plane = new Plane(Vector3.up, Vector3.zero);
-                if (plane.Raycast(ray, out float distance))
+                // Get a point on a plane at y=0
+                Vector3 pointOnPlane = GetMousePositionOnPlane(evt.mousePosition, 0f);
+                if (pointOnPlane != Vector3.zero)
                 {
-                    float3 pointOnPlane = ray.GetPoint(distance);
                     m_DrawnPoints.Add(pointOnPlane);
                 }
             }
@@ -146,20 +145,17 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             }
             else
             {
-                // If we didn't hit anything, use a plane with normal = up vector
-                // Y position is the last drawn point's Y to maintain consistent height
+                // Get a point on a plane at the same Y as the last point
                 float planeY = m_DrawnPoints[m_DrawnPoints.Count - 1].y;
+                Vector3 pointOnPlane = GetMousePositionOnPlane(evt.mousePosition, planeY);
                 
-                Plane plane = new Plane(Vector3.up, new Vector3(0, planeY, 0));
-                if (plane.Raycast(ray, out float distance))
-                {
-                    newPoint = ray.GetPoint(distance);
-                }
-                else
+                if (pointOnPlane == Vector3.zero)
                 {
                     // Fallback if plane raycast fails
                     return;
                 }
+                
+                newPoint = pointOnPlane;
             }
             
             // Only add point if it's far enough from the last one
@@ -241,10 +237,21 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             m_DrawnPoints.Clear();
         }
         
-        private void DrawPreview()
+        protected override void DrawPreview()
         {
-            if (!m_IsDrawing || m_DrawnPoints.Count < 2)
+            // If we're not in drawing mode, just show a cursor indicator
+            if (!m_IsDrawing)
+            {
+                DrawCursorIndicator();
                 return;
+            }
+            
+            // If we're in drawing mode but don't have enough points, draw the cursor indicator
+            if (m_DrawnPoints.Count < 2)
+            {
+                DrawCursorIndicator();
+                return;
+            }
                 
             // Set the color for drawing
             Handles.color = Color.green;
@@ -283,19 +290,18 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                 }
                 else
                 {
-                    // If we didn't hit anything, use a plane with normal = up vector
-                    // Y position is the last drawn point's Y to maintain consistent height
+                    // Get cursor point on plane at same height as last point
                     float planeY = lastPoint.y;
+                    Vector3 pointOnPlane = GetMousePositionOnPlane(Event.current.mousePosition, planeY);
                     
-                    Plane plane = new Plane(Vector3.up, new Vector3(0, planeY, 0));
-                    if (plane.Raycast(ray, out float distance))
-                    {
-                        cursorPoint = ray.GetPoint(distance);
-                    }
-                    else
+                    if (pointOnPlane == Vector3.zero)
                     {
                         // Fallback if plane raycast fails
                         cursorPoint = lastPoint;
+                    }
+                    else
+                    {
+                        cursorPoint = pointOnPlane;
                     }
                 }
                 
@@ -312,7 +318,50 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                         Handles.DrawWireDisc(firstPoint, Vector3.up, closingThreshold);
                     }
                 }
+                
+                // Always draw the cursor indicator
+                DrawCursorAtPosition(cursorPoint);
             }
+        }
+        
+        // Helper method to draw the cursor indicator
+        private void DrawCursorIndicator()
+        {
+            // Draw a visual indicator at the mouse position
+            DrawCursorAtPosition(m_PlacementPosition);
+            
+            // Also draw instructions
+            Camera camera = SceneView.lastActiveSceneView.camera;
+            Vector3 textPosition = CalculateScreenSpaceTextPosition(camera, m_PlacementPosition);
+            
+            GUIStyle style = CreateLabelStyle();
+            Handles.Label(textPosition, "Click and drag to draw a spline shape", style);
+        }
+        
+        // Helper method to draw a cursor at a specific position
+        private void DrawCursorAtPosition(Vector3 position)
+        {
+            // Draw a crosshair cursor
+            float cursorSize = 0.5f;
+            Handles.color = Color.green;
+            
+            // Draw a circle
+            Handles.DrawWireDisc(position, Vector3.up, cursorSize);
+            
+            // Draw crossing lines (X shape)
+            Handles.DrawLine(
+                position + new Vector3(-cursorSize, 0, -cursorSize), 
+                position + new Vector3(cursorSize, 0, cursorSize)
+            );
+            
+            Handles.DrawLine(
+                position + new Vector3(-cursorSize, 0, cursorSize), 
+                position + new Vector3(cursorSize, 0, -cursorSize)
+            );
+            
+            // Draw a small sphere at the center
+            Handles.color = Color.white;
+            Handles.SphereHandleCap(0, position, Quaternion.identity, 0.1f, EventType.Repaint);
         }
         
         private void CreateSplineFromDrawnPoints(bool isSplineClosed)
@@ -553,6 +602,14 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             
             // Return distance to projection
             return math.distance(point, projection);
+        }
+
+        protected override void OnLeftMouseDown()
+        {
+            if (!m_IsDrawing)
+            {
+                StartDrawing(Event.current);
+            }
         }
     }
 }

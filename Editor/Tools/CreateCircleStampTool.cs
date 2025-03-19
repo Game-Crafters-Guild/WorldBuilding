@@ -9,14 +9,10 @@ namespace GameCraftersGuild.WorldBuilding.Editor
 #else
     [EditorTool("Create Circle Stamp")]
 #endif
-    public class CreateCircleStampTool : EditorTool
+    public class CreateCircleStampTool : BaseStampTool
     {
         private float m_Radius = 5f;
         private Vector2 m_Scale = Vector2.one; // X and Z scale factors
-        private Vector3 m_PlacementPosition;
-        private float m_Rotation = 0f; // Rotation in degrees
-        private RaycastHit m_RaycastHitInfo;
-        private GUIContent m_IconContent;
         
         // Adjustment parameters
         private const float m_RadiusAdjustSpeed = 0.5f;
@@ -40,7 +36,7 @@ namespace GameCraftersGuild.WorldBuilding.Editor
         
         public override GUIContent toolbarIcon => m_IconContent;
         
-        private void OnEnable()
+        protected override void OnToolEnable()
         {
             m_IconContent = new GUIContent
             {
@@ -50,200 +46,147 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             };
         }
         
-        public override void OnToolGUI(EditorWindow window)
+        protected override void OnLeftMouseDown()
         {
-            if (!(window is SceneView sceneView))
-                return;
-                
-            Event evt = Event.current;
-            
-            // Handle input events
-            int controlID = GUIUtility.GetControlID(FocusType.Passive);
-            HandleUtility.AddDefaultControl(controlID);
-            
-            // Update placement position based on mouse position
-            UpdatePlacementPosition(evt.mousePosition);
-            
-            switch (evt.type)
-            {
-                case EventType.MouseDown:
-                    if (evt.button == 0) // Left mouse button
-                    {
-                        CreateCircleStamp();
-                        evt.Use();
-                    }
-                    break;
-                    
-                case EventType.MouseMove:
-                    // Force repaint on mouse move to update preview
-                    sceneView.Repaint();
-                    break;
-                    
-                case EventType.ScrollWheel:
-                    // Only adjust if a modifier key is pressed to avoid conflicts with Unity's navigation
-                    if (evt.control) // Use only Control check first
-                    {
-                        // Fixed: Apply fast multiplier if both Control and Shift are held
-                        float speed = m_RadiusAdjustSpeed;
-                        if (evt.shift)
-                        {
-                            speed *= m_FastAdjustMultiplier;
-                        }
-                        
-                        float delta = Mathf.Abs(evt.delta.y) > Mathf.Abs(evt.delta.x) ? -evt.delta.y : -evt.delta.x;
-                        float adjustment = delta * speed;
-                        
-                        if (m_CurrentMode == AdjustmentMode.Uniform)
-                        {
-                            // Adjust radius for uniform scaling
-                            m_Radius = Mathf.Clamp(m_Radius + adjustment, m_MinRadius, m_MaxRadius);
-                        }
-                        else if (m_CurrentMode == AdjustmentMode.XScale)
-                        {
-                            // Adjust X scale
-                            m_Scale.x = Mathf.Clamp(m_Scale.x + adjustment * 0.1f, m_MinScale, m_MaxScale);
-                        }
-                        else if (m_CurrentMode == AdjustmentMode.ZScale)
-                        {
-                            // Adjust Z scale
-                            m_Scale.y = Mathf.Clamp(m_Scale.y + adjustment * 0.1f, m_MinScale, m_MaxScale);
-                        }
-                        else if (m_CurrentMode == AdjustmentMode.Rotation)
-                        {
-                            // Adjust rotation
-                            m_Rotation = (m_Rotation + adjustment * m_RotationAdjustSpeed) % 360f;
-                            if (m_Rotation < 0) m_Rotation += 360f;
-                        }
-                        
-                        evt.Use();
-                        sceneView.Repaint();
-                    }
-                    break;
-                    
-                case EventType.KeyDown:
-                    // Mode selection keys - 1, 2, 3, 4 to select adjustment modes
-                    if (evt.keyCode >= KeyCode.Alpha1 && evt.keyCode <= KeyCode.Alpha4)
-                    {
-                        m_CurrentMode = (AdjustmentMode)(evt.keyCode - KeyCode.Alpha1);
-                        evt.Use();
-                        sceneView.Repaint();
-                    }
-                    // Quick access keys
-                    else if (evt.keyCode == KeyCode.U || evt.keyCode == KeyCode.G)
-                    {
-                        // U for Uniform or G for Global
-                        m_CurrentMode = AdjustmentMode.Uniform;
-                        evt.Use();
-                        sceneView.Repaint();
-                    }
-                    else if (evt.keyCode == KeyCode.X)
-                    {
-                        // X for X-axis scaling
-                        m_CurrentMode = AdjustmentMode.XScale;
-                        evt.Use();
-                        sceneView.Repaint();
-                    }
-                    else if (evt.keyCode == KeyCode.Z)
-                    {
-                        // Z for Z-axis scaling
-                        m_CurrentMode = AdjustmentMode.ZScale;
-                        evt.Use();
-                        sceneView.Repaint();
-                    }
-                    else if (evt.keyCode == KeyCode.R)
-                    {
-                        // R for Rotation
-                        m_CurrentMode = AdjustmentMode.Rotation;
-                        evt.Use();
-                        sceneView.Repaint();
-                    }
-                    // Adjustments with keyboard arrows
-                    else if (evt.keyCode == KeyCode.UpArrow || evt.keyCode == KeyCode.DownArrow ||
-                             evt.keyCode == KeyCode.LeftArrow || evt.keyCode == KeyCode.RightArrow)
-                    {
-                        float speed = evt.shift ? m_RadiusAdjustSpeed * m_FastAdjustMultiplier : m_RadiusAdjustSpeed;
-                        float adjustment = 0;
-                        
-                        // Adjustment depends on arrow key direction
-                        bool isHorizontal = (evt.keyCode == KeyCode.LeftArrow || evt.keyCode == KeyCode.RightArrow);
-                        bool isPositive = (evt.keyCode == KeyCode.RightArrow || evt.keyCode == KeyCode.UpArrow);
-                        
-                        adjustment = isPositive ? speed : -speed;
-                        
-                        if (m_CurrentMode == AdjustmentMode.Rotation)
-                        {
-                            // In rotation mode, any arrow key adjusts rotation
-                            m_Rotation = (m_Rotation + adjustment * m_RotationAdjustSpeed) % 360f;
-                            if (m_Rotation < 0) m_Rotation += 360f;
-                        }
-                        else if (m_CurrentMode == AdjustmentMode.Uniform)
-                        {
-                            // Any arrow key adjusts the radius in uniform mode
-                            m_Radius = Mathf.Clamp(m_Radius + adjustment, m_MinRadius, m_MaxRadius);
-                        }
-                        else if (m_CurrentMode == AdjustmentMode.XScale)
-                        {
-                            // In X scale mode, prioritize horizontal arrows but allow all
-                            if (isHorizontal || evt.control)
-                            {
-                                m_Scale.x = Mathf.Clamp(m_Scale.x + adjustment * 0.1f, m_MinScale, m_MaxScale);
-                            }
-                            else if (!isHorizontal)
-                            {
-                                // Allow vertical arrows in X mode as a convenience
-                                m_Scale.x = Mathf.Clamp(m_Scale.x + adjustment * 0.1f, m_MinScale, m_MaxScale);
-                            }
-                        }
-                        else if (m_CurrentMode == AdjustmentMode.ZScale)
-                        {
-                            // In Z scale mode, prioritize vertical arrows but allow all
-                            if (!isHorizontal || evt.control)
-                            {
-                                m_Scale.y = Mathf.Clamp(m_Scale.y + adjustment * 0.1f, m_MinScale, m_MaxScale);
-                            }
-                            else if (isHorizontal)
-                            {
-                                // Allow horizontal arrows in Z mode as a convenience
-                                m_Scale.y = Mathf.Clamp(m_Scale.y + adjustment * 0.1f, m_MinScale, m_MaxScale);
-                            }
-                        }
-                        
-                        evt.Use();
-                        sceneView.Repaint();
-                    }
-                    break;
-                    
-                case EventType.Repaint:
-                    DrawPreview();
-                    break;
-            }
+            CreateCircleStamp();
         }
         
-        private void UpdatePlacementPosition(Vector2 mousePosition)
+        protected override bool HandleScrollWheelEvent(Event evt)
         {
-            Ray ray = HandleUtility.GUIPointToWorldRay(mousePosition);
-            
-            if (Physics.Raycast(ray, out m_RaycastHitInfo))
+            // Only adjust if a modifier key is pressed to avoid conflicts with Unity's navigation
+            if (evt.control) // Use only Control check first
             {
-                m_PlacementPosition = m_RaycastHitInfo.point;
-            }
-            else
-            {
-                // If we didn't hit anything, use a plane with normal = up vector
-                // Y position is either 0 or last hit position's Y
-                float planeY = m_PlacementPosition.y; // Use the last position's Y if available
-                if (float.IsNaN(planeY) || float.IsInfinity(planeY)) // If no valid previous position
-                    planeY = 0f;
-                
-                Plane plane = new Plane(Vector3.up, new Vector3(0, planeY, 0));
-                if (plane.Raycast(ray, out float distance))
+                // Apply fast multiplier if both Control and Shift are held
+                float speed = m_RadiusAdjustSpeed;
+                if (evt.shift)
                 {
-                    m_PlacementPosition = ray.GetPoint(distance);
+                    speed *= m_FastAdjustMultiplier;
                 }
+                
+                float delta = Mathf.Abs(evt.delta.y) > Mathf.Abs(evt.delta.x) ? -evt.delta.y : -evt.delta.x;
+                float adjustment = delta * speed;
+                
+                if (m_CurrentMode == AdjustmentMode.Uniform)
+                {
+                    // Adjust radius for uniform scaling
+                    m_Radius = Mathf.Clamp(m_Radius + adjustment, m_MinRadius, m_MaxRadius);
+                }
+                else if (m_CurrentMode == AdjustmentMode.XScale)
+                {
+                    // Adjust X scale
+                    m_Scale.x = Mathf.Clamp(m_Scale.x + adjustment * 0.1f, m_MinScale, m_MaxScale);
+                }
+                else if (m_CurrentMode == AdjustmentMode.ZScale)
+                {
+                    // Adjust Z scale
+                    m_Scale.y = Mathf.Clamp(m_Scale.y + adjustment * 0.1f, m_MinScale, m_MaxScale);
+                }
+                else if (m_CurrentMode == AdjustmentMode.Rotation)
+                {
+                    // Adjust rotation
+                    m_Rotation = (m_Rotation + adjustment * m_RotationAdjustSpeed) % 360f;
+                    if (m_Rotation < 0) m_Rotation += 360f;
+                }
+                
+                return true; // Event was handled
             }
+            
+            return false;
         }
         
-        private void DrawPreview()
+        protected override bool HandleKeyDownEvent(Event evt)
+        {
+            bool handled = false;
+            
+            // Mode selection keys - 1, 2, 3, 4 to select adjustment modes
+            if (evt.keyCode >= KeyCode.Alpha1 && evt.keyCode <= KeyCode.Alpha4)
+            {
+                m_CurrentMode = (AdjustmentMode)(evt.keyCode - KeyCode.Alpha1);
+                handled = true;
+            }
+            // Quick access keys
+            else if (evt.keyCode == KeyCode.U || evt.keyCode == KeyCode.G)
+            {
+                // U for Uniform or G for Global
+                m_CurrentMode = AdjustmentMode.Uniform;
+                handled = true;
+            }
+            else if (evt.keyCode == KeyCode.X)
+            {
+                // X for X-axis scaling
+                m_CurrentMode = AdjustmentMode.XScale;
+                handled = true;
+            }
+            else if (evt.keyCode == KeyCode.Z)
+            {
+                // Z for Z-axis scaling
+                m_CurrentMode = AdjustmentMode.ZScale;
+                handled = true;
+            }
+            else if (evt.keyCode == KeyCode.R)
+            {
+                // R for Rotation
+                m_CurrentMode = AdjustmentMode.Rotation;
+                handled = true;
+            }
+            // Adjustments with keyboard arrows
+            else if (evt.keyCode == KeyCode.UpArrow || evt.keyCode == KeyCode.DownArrow ||
+                     evt.keyCode == KeyCode.LeftArrow || evt.keyCode == KeyCode.RightArrow)
+            {
+                float speed = evt.shift ? m_RadiusAdjustSpeed * m_FastAdjustMultiplier : m_RadiusAdjustSpeed;
+                float adjustment = 0;
+                
+                // Adjustment depends on arrow key direction
+                bool isHorizontal = (evt.keyCode == KeyCode.LeftArrow || evt.keyCode == KeyCode.RightArrow);
+                bool isPositive = (evt.keyCode == KeyCode.RightArrow || evt.keyCode == KeyCode.UpArrow);
+                
+                adjustment = isPositive ? speed : -speed;
+                
+                if (m_CurrentMode == AdjustmentMode.Rotation)
+                {
+                    // In rotation mode, any arrow key adjusts rotation
+                    m_Rotation = (m_Rotation + adjustment * m_RotationAdjustSpeed) % 360f;
+                    if (m_Rotation < 0) m_Rotation += 360f;
+                }
+                else if (m_CurrentMode == AdjustmentMode.Uniform)
+                {
+                    // Any arrow key adjusts the radius in uniform mode
+                    m_Radius = Mathf.Clamp(m_Radius + adjustment, m_MinRadius, m_MaxRadius);
+                }
+                else if (m_CurrentMode == AdjustmentMode.XScale)
+                {
+                    // In X scale mode, prioritize horizontal arrows but allow all
+                    if (isHorizontal || evt.control)
+                    {
+                        m_Scale.x = Mathf.Clamp(m_Scale.x + adjustment * 0.1f, m_MinScale, m_MaxScale);
+                    }
+                    else if (!isHorizontal)
+                    {
+                        // Allow vertical arrows in X mode as a convenience
+                        m_Scale.x = Mathf.Clamp(m_Scale.x + adjustment * 0.1f, m_MinScale, m_MaxScale);
+                    }
+                }
+                else if (m_CurrentMode == AdjustmentMode.ZScale)
+                {
+                    // In Z scale mode, prioritize vertical arrows but allow all
+                    if (!isHorizontal || evt.control)
+                    {
+                        m_Scale.y = Mathf.Clamp(m_Scale.y + adjustment * 0.1f, m_MinScale, m_MaxScale);
+                    }
+                    else if (isHorizontal)
+                    {
+                        // Allow horizontal arrows in Z mode as a convenience
+                        m_Scale.y = Mathf.Clamp(m_Scale.y + adjustment * 0.1f, m_MinScale, m_MaxScale);
+                    }
+                }
+                
+                handled = true;
+            }
+            
+            return handled;
+        }
+        
+        protected override void DrawPreview()
         {
             // Draw circle outline at placement position
             using (new Handles.DrawingScope(Color.green))
@@ -316,20 +259,11 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                 }
                 
                 // Calculate the text position to appear just above the placement position
-                // Use the mouse position to determine where to place text in screen space
                 Camera camera = SceneView.lastActiveSceneView.camera;
-                Vector3 screenPos = camera.WorldToScreenPoint(m_PlacementPosition);
-                // Offset the position upward in screen space to be above the cursor
-                screenPos.y += 50; // Reduced from 100 to 50 pixels to move text closer to center
-                // Convert back to world space for label positioning
-                Vector3 textPosition = camera.ScreenToWorldPoint(screenPos);
+                Vector3 textPosition = CalculateScreenSpaceTextPosition(camera, m_PlacementPosition);
                 
                 // Show the radius and controls as text
-                GUIStyle style = new GUIStyle();
-                style.normal.textColor = Color.white;
-                style.fontSize = 14; // Increased font size
-                style.fontStyle = FontStyle.Bold;
-                style.alignment = TextAnchor.LowerCenter; // Align to bottom center
+                GUIStyle style = CreateLabelStyle();
                 
                 // Generate appropriate dimension text based on mode
                 string modeText = "";
