@@ -331,50 +331,62 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             Camera camera = SceneView.lastActiveSceneView.camera;
             if (camera == null) return;
             
+            // Get the surface normal at the cursor position
+            Ray ray = HandleUtility.GUIPointToWorldRay(Event.current.mousePosition);
+            RaycastHit hit;
+            Vector3 normal = Vector3.up; // Default to up if no hit
+            if (Physics.Raycast(ray, out hit))
+            {
+                normal = hit.normal;
+            }
+            
+            // Create rotation to align with surface normal
+            Quaternion rotation = Quaternion.FromToRotation(Vector3.up, normal);
+            
             // Get the distance from the camera to the cursor position
             float distanceToCamera = Vector3.Distance(camera.transform.position, position);
             
             // Calculate how many world units = desired pixel size at this distance
-            // This uses the camera's field of view and the scene view's height
-            float desiredPixelSize = 120f; // The cursor size in pixels we want to maintain
+            float desiredPixelSize = 40f; // The cursor size in pixels we want to maintain
             float pixelSizeInWorldUnits = 2.0f * distanceToCamera * Mathf.Tan(camera.fieldOfView * 0.5f * Mathf.Deg2Rad) / camera.pixelHeight;
             
             // Final cursor size in world units to maintain consistent pixel size
             float cursorSize = pixelSizeInWorldUnits * desiredPixelSize;
             
-            // Draw outer wire circle
-            Handles.color = new Color(0.2f, 0.8f, 0.2f, 0.8f); // Brighter, more opaque green
-            Handles.DrawWireDisc(position, Vector3.up, cursorSize * 0.5f);
+            // Draw outer wire circle aligned to surface
+            Handles.color = new Color(0.2f, 0.8f, 0.2f, 0.8f);
+            Handles.DrawWireDisc(position, normal, cursorSize * 0.5f);
             
             // Draw inner filled circle for better visibility
-            Handles.color = new Color(0.2f, 0.8f, 0.2f, 0.3f); // Semi-transparent green
-            Handles.DrawSolidDisc(position, Vector3.up, cursorSize * 0.4f);
+            Handles.color = new Color(0.2f, 0.8f, 0.2f, 0.3f);
+            Handles.DrawSolidDisc(position, normal, cursorSize * 0.4f);
             
             // Draw an X shape with multiple lines for thickness
             Handles.color = Color.white;
             
+            // Calculate perpendicular vectors for the X shape
+            Vector3 right = Vector3.Cross(normal, camera.transform.forward).normalized;
+            Vector3 forward = Vector3.Cross(right, normal).normalized;
+            
             // Draw multiple slightly offset lines to create thicker lines
             for (int i = 0; i < 3; i++)
             {
-                float offset = i * pixelSizeInWorldUnits * 0.5f; // Scale offset by pixel size
+                float offset = i * pixelSizeInWorldUnits * 0.5f;
                 
                 // First diagonal of X
-                Handles.DrawLine(
-                    position + new Vector3(-cursorSize * 0.5f + offset, 0, -cursorSize * 0.5f + offset), 
-                    position + new Vector3(cursorSize * 0.5f - offset, 0, cursorSize * 0.5f - offset)
-                );
+                Vector3 start1 = position + rotation * new Vector3(-cursorSize * 0.5f + offset, 0, -cursorSize * 0.5f + offset);
+                Vector3 end1 = position + rotation * new Vector3(cursorSize * 0.5f - offset, 0, cursorSize * 0.5f - offset);
+                Handles.DrawLine(start1, end1);
                 
                 // Second diagonal of X
-                Handles.DrawLine(
-                    position + new Vector3(-cursorSize * 0.5f + offset, 0, cursorSize * 0.5f - offset), 
-                    position + new Vector3(cursorSize * 0.5f - offset, 0, -cursorSize * 0.5f + offset)
-                );
+                Vector3 start2 = position + rotation * new Vector3(-cursorSize * 0.5f + offset, 0, cursorSize * 0.5f - offset);
+                Vector3 end2 = position + rotation * new Vector3(cursorSize * 0.5f - offset, 0, -cursorSize * 0.5f + offset);
+                Handles.DrawLine(start2, end2);
             }
             
             // Draw a small filled sphere at the center for precise positioning
             Handles.color = Color.white;
-            // Scale center point size based on pixel size to maintain consistent appearance
-            float centerPointSize = pixelSizeInWorldUnits * 5f; // About 5 pixels in diameter
+            float centerPointSize = pixelSizeInWorldUnits * 5f;
             Handles.SphereHandleCap(0, position, Quaternion.identity, centerPointSize, EventType.Repaint);
         }
         
