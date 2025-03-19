@@ -4,11 +4,6 @@ using UnityEngine;
 
 namespace GameCraftersGuild.WorldBuilding.Editor
 {
-#if UNITY_2023_1_OR_NEWER
-    [EditorTool("Create Circle Stamp", toolPriority = 10)]
-#else
-    [EditorTool("Create Circle Stamp")]
-#endif
     public class CreateCircleStampTool : BaseStampTool
     {
         private float m_Radius = 5f;

@@ -4,11 +4,6 @@ using UnityEngine;
 
 namespace GameCraftersGuild.WorldBuilding.Editor
 {
-#if UNITY_2023_1_OR_NEWER
-    [EditorTool("Create Rectangle Stamp", toolPriority = 11)]
-#else
-    [EditorTool("Create Rectangle Stamp")]
-#endif
     public class CreateRectangleStampTool : BaseStampTool
     {
         private Vector2 m_Size = new Vector2(10f, 10f);
@@ -35,7 +30,7 @@ namespace GameCraftersGuild.WorldBuilding.Editor
         {
             m_IconContent = new GUIContent
             {
-                image = EditorGUIUtility.IconContent("RectangleShape Icon").image,
+                image = EditorGUIUtility.IconContent("RectangleShape Icon").image as Texture2D,
                 text = "Create Rectangle Stamp",
                 tooltip = "Create a rectangle stamp"
             };

@@ -8,11 +8,6 @@ using Unity.Mathematics;
 
 namespace GameCraftersGuild.WorldBuilding.Editor
 {
-#if UNITY_2023_1_OR_NEWER
-    [EditorTool("Create Spline Stamp", toolPriority = 10)]
-#else
-    [EditorTool("Create Spline Stamp")]
-#endif
     public class CreateSplineStampTool : BaseStampTool
     {
         // Reusable collections to reduce allocations
@@ -36,7 +31,7 @@ namespace GameCraftersGuild.WorldBuilding.Editor
         {
             m_IconContent = new GUIContent
             {
-                image = EditorGUIUtility.IconContent("EditCollider").image,
+                image = EditorGUIUtility.IconContent("EditCollider").image as Texture2D,
                 text = "Create Spline Stamp",
                 tooltip = "Draw a shape to create a new spline stamp"
             };
@@ -417,7 +412,7 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             
             // Draw a background box for better readability
             Handles.BeginGUI();
-            Vector2 textSize = GUI.skin.label.CalcSize(new GUIContent(instructionText));
+            Vector2 textSize = GUI.skin.label.CalcSize(new GUIContent(instructionText)) * 2;
             Vector3 screenPos = camera.WorldToScreenPoint(textPosition);
             
             // Convert world position to screen position for GUI drawing
