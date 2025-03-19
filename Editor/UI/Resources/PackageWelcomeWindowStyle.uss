@@ -1,0 +1,64 @@
+/* General styles */
+.unity-label {
+    color: rgb(210, 210, 210);
+}
+
+/* Title style */
+#title-label {
+    font-size: 24px;
+    -unity-font-style: bold;
+    -unity-text-align: middle-center;
+    margin-bottom: 20px;
+    color: rgb(230, 230, 230);
+}
+
+/* Description style */
+#description-label {
+    font-size: 14px;
+    white-space: normal;
+    margin-bottom: 20px;
+}
+
+/* Heading styles */
+#features-heading, #getting-started-heading {
+    font-size: 18px;
+    -unity-font-style: bold;
+    margin-top: 10px;
+    margin-bottom: 10px;
+    color: rgb(230, 230, 230);
+}
+
+/* Features container */
+#features-container {
+    margin-left: 20px;
+    margin-bottom: 10px;
+}
+
+/* Button styles */
+.unity-button {
+    background-color: rgb(88, 88, 88);
+    border-width: 1px;
+    border-color: rgb(55, 55, 55);
+    border-radius: 3px;
+    padding: 5px 15px;
+    margin: 0 5px;
+    color: rgb(230, 230, 230);
+}
+
+.unity-button:hover {
+    background-color: rgb(100, 100, 100);
+}
+
+#docs-button {
+    background-color: rgba(55, 55, 55, 0.8);
+}
+
+#close-button {
+    background-color: rgba(32, 96, 148, 0.8);
+}
+
+/* Note style */
+#note-label {
+    font-size: 10px;
+    color: rgba(200, 200, 200, 0.6);
+} 
