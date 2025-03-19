@@ -21,9 +21,9 @@ namespace GameCraftersGuild.WorldBuilding.Editor
         // Adjustment mode enum
         private enum AdjustmentMode
         {
+            Uniform,
             Width,
             Height,
-            Uniform,
             Rotation
         }
         
@@ -97,7 +97,22 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             // Mode selection keys - 1, 2, 3, 4 to select adjustment modes
             if (evt.keyCode >= KeyCode.Alpha1 && evt.keyCode <= KeyCode.Alpha4)
             {
-                m_CurrentMode = (AdjustmentMode)(evt.keyCode - KeyCode.Alpha1);
+                // Map 1 to Uniform, 2 to Width, 3 to Height, 4 to Rotation
+                switch (evt.keyCode)
+                {
+                    case KeyCode.Alpha1:
+                        m_CurrentMode = AdjustmentMode.Uniform;
+                        break;
+                    case KeyCode.Alpha2:
+                        m_CurrentMode = AdjustmentMode.Width;
+                        break;
+                    case KeyCode.Alpha3:
+                        m_CurrentMode = AdjustmentMode.Height;
+                        break;
+                    case KeyCode.Alpha4:
+                        m_CurrentMode = AdjustmentMode.Rotation;
+                        break;
+                }
                 handled = true;
             }
             // Quick access keys
