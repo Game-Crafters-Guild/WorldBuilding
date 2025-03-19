@@ -16,12 +16,10 @@ namespace GameCraftersGuild.WorldBuilding.Editor
         
         // Adjustment parameters
         private const float m_RadiusAdjustSpeed = 0.5f;
-        private const float m_FastAdjustMultiplier = 5f; // For shift+arrows
         private const float m_MinRadius = 0.5f;
         private const float m_MaxRadius = 1000.0f;
         private const float m_MinScale = 0.1f;
         private const float m_MaxScale = 10f;
-        private const float m_RotationAdjustSpeed = 5.0f;
         
         // Adjustment mode enum
         private enum AdjustmentMode
@@ -33,8 +31,6 @@ namespace GameCraftersGuild.WorldBuilding.Editor
         }
         
         private AdjustmentMode m_CurrentMode = AdjustmentMode.Uniform;
-        
-        public override GUIContent toolbarIcon => m_IconContent;
         
         protected override void OnToolEnable()
         {

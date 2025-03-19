@@ -15,10 +15,8 @@ namespace GameCraftersGuild.WorldBuilding.Editor
         
         // Size adjustment parameters
         private const float m_SizeAdjustSpeed = 0.5f;
-        private const float m_FastAdjustMultiplier = 5f; // For shift+arrows
         private const float m_MinSize = 0.5f;
         private const float m_MaxSize = 1000.0f;
-        private const float m_RotationAdjustSpeed = 5.0f;
         
         // Adjustment mode enum
         private enum AdjustmentMode

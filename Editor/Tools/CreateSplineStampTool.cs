@@ -324,44 +324,89 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             }
         }
         
+        // Helper method to draw a cursor at a specific position
+        private void DrawCursorAtPosition(Vector3 position)
+        {
+            // Draw a crosshair cursor with increased size
+            float cursorSize = 1.2f; // Increased from 0.5f
+            
+            // Draw outer wire circle
+            Handles.color = new Color(0.2f, 0.8f, 0.2f, 0.8f); // Brighter, more opaque green
+            Handles.DrawWireDisc(position, Vector3.up, cursorSize);
+            
+            // Draw inner filled circle for better visibility
+            Handles.color = new Color(0.2f, 0.8f, 0.2f, 0.3f); // Semi-transparent green
+            Handles.DrawSolidDisc(position, Vector3.up, cursorSize * 0.8f);
+            
+            // Draw an X shape with multiple lines for thickness
+            Handles.color = Color.white;
+            
+            // Draw multiple slightly offset lines to create thicker lines
+            for (int i = 0; i < 3; i++)
+            {
+                float offset = i * 0.03f; // Small offset for each line
+                
+                // First diagonal of X
+                Handles.DrawLine(
+                    position + new Vector3(-cursorSize + offset, 0, -cursorSize + offset), 
+                    position + new Vector3(cursorSize - offset, 0, cursorSize - offset)
+                );
+                
+                // Second diagonal of X
+                Handles.DrawLine(
+                    position + new Vector3(-cursorSize + offset, 0, cursorSize - offset), 
+                    position + new Vector3(cursorSize - offset, 0, -cursorSize + offset)
+                );
+            }
+            
+            // Draw a small filled sphere at the center for precise positioning
+            Handles.color = Color.white;
+            Handles.SphereHandleCap(0, position, Quaternion.identity, 0.3f, EventType.Repaint); // Increased size
+        }
+        
         // Helper method to draw the cursor indicator
         private void DrawCursorIndicator()
         {
             // Draw a visual indicator at the mouse position
             DrawCursorAtPosition(m_PlacementPosition);
             
-            // Also draw instructions
-            Camera camera = SceneView.lastActiveSceneView.camera;
-            Vector3 textPosition = CalculateScreenSpaceTextPosition(camera, m_PlacementPosition);
-            
-            GUIStyle style = CreateLabelStyle();
-            Handles.Label(textPosition, "Click and drag to draw a spline shape", style);
+            // Draw instructions in a more eye-catching way
+            DrawInstructionLabel(m_PlacementPosition);
         }
         
-        // Helper method to draw a cursor at a specific position
-        private void DrawCursorAtPosition(Vector3 position)
+        // Helper method to draw clear instructions
+        private void DrawInstructionLabel(Vector3 position)
         {
-            // Draw a crosshair cursor
-            float cursorSize = 0.5f;
-            Handles.color = Color.green;
+            Camera camera = SceneView.lastActiveSceneView.camera;
+            Vector3 textPosition = CalculateScreenSpaceTextPosition(camera, position, 60f);
             
-            // Draw a circle
-            Handles.DrawWireDisc(position, Vector3.up, cursorSize);
+            // Create a style with a larger font and background
+            GUIStyle style = CreateLabelStyle();
+            style.fontSize = 16; // Larger font
+            style.normal.textColor = Color.white;
+            style.fontStyle = FontStyle.Bold;
             
-            // Draw crossing lines (X shape)
-            Handles.DrawLine(
-                position + new Vector3(-cursorSize, 0, -cursorSize), 
-                position + new Vector3(cursorSize, 0, cursorSize)
-            );
+            // Clear, simple instruction text
+            string instructionText = "Click and drag to draw a spline";
             
-            Handles.DrawLine(
-                position + new Vector3(-cursorSize, 0, cursorSize), 
-                position + new Vector3(cursorSize, 0, -cursorSize)
-            );
+            // Draw a background box for better readability
+            Handles.BeginGUI();
+            Vector2 textSize = GUI.skin.label.CalcSize(new GUIContent(instructionText));
+            Vector3 screenPos = camera.WorldToScreenPoint(textPosition);
             
-            // Draw a small sphere at the center
-            Handles.color = Color.white;
-            Handles.SphereHandleCap(0, position, Quaternion.identity, 0.1f, EventType.Repaint);
+            // Convert world position to screen position for GUI drawing
+            screenPos.y = camera.pixelHeight - screenPos.y; // Flip Y for GUI coordinates
+            
+            // Draw a semi-transparent background box
+            GUI.color = new Color(0.1f, 0.1f, 0.1f, 0.7f);
+            GUI.Box(new Rect(screenPos.x - textSize.x/2 - 10, screenPos.y - 10, 
+                            textSize.x + 20, textSize.y + 20), "");
+            
+            // Reset color and draw the text
+            GUI.color = Color.white;
+            GUI.Label(new Rect(screenPos.x - textSize.x/2, screenPos.y, 
+                             textSize.x, textSize.y), instructionText, style);
+            Handles.EndGUI();
         }
         
         private void CreateSplineFromDrawnPoints(bool isSplineClosed)
