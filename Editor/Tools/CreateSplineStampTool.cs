@@ -412,7 +412,7 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             
             // Draw a background box for better readability
             Handles.BeginGUI();
-            Vector2 textSize = GUI.skin.label.CalcSize(new GUIContent(instructionText)) * 2;
+            Vector2 textSize = style.CalcSize(new GUIContent(instructionText)) + Vector2.right * 15;
             Vector3 screenPos = camera.WorldToScreenPoint(textPosition);
             
             // Convert world position to screen position for GUI drawing

@@ -11,11 +11,45 @@ namespace GameCraftersGuild.WorldBuilding.Editor
     abstract class BaseStampToolToggle : EditorToolbarToggle
     {
         private static BaseStampToolToggle s_ActiveToggle;
+        private static bool s_ListeningToToolChanged = false;
         
         protected BaseStampToolToggle()
         {
             // Register callback for when the toggle changes
             this.RegisterValueChangedCallback(OnValueChanged);
+            
+            // Ensure we only register the global event once
+            if (!s_ListeningToToolChanged)
+            {
+                ToolManager.activeToolChanged += OnActiveToolChanged;
+                s_ListeningToToolChanged = true;
+            }
+        }
+        
+        // Global handler for tool changes from any source
+        private static void OnActiveToolChanged()
+        {
+            if (s_ActiveToggle != null)
+            {
+                // Get the active tool type
+                System.Type activeToolType = ToolManager.activeToolType;
+                
+                // Check if our tool is still active
+                bool shouldBeActive = false;
+                if (s_ActiveToggle is CircleStampToolToggle && activeToolType == typeof(CreateCircleStampTool))
+                    shouldBeActive = true;
+                else if (s_ActiveToggle is RectangleStampToolToggle && activeToolType == typeof(CreateRectangleStampTool))
+                    shouldBeActive = true;
+                else if (s_ActiveToggle is SplineStampToolToggle && activeToolType == typeof(CreateSplineStampTool))
+                    shouldBeActive = true;
+                
+                // Update toggle state if it doesn't match
+                if (!shouldBeActive)
+                {
+                    s_ActiveToggle.SetValueWithoutNotify(false);
+                    s_ActiveToggle = null;
+                }
+            }
         }
         
         private void OnValueChanged(ChangeEvent<bool> evt)

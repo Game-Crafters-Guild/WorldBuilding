@@ -92,8 +92,6 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             BaseStampToolToggle.DeactivateActiveToggle();
             // Just set the tool to null instead of restoring previous
             ToolManager.RestorePreviousPersistentTool();
-
-
         }
         
         protected virtual void OnToolDisable()
