@@ -234,14 +234,17 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             }
             else
             {
-                // If we didn't hit anything, use a point on an imaginary plane
-                float distanceToPlane = 10f; // Default distance
-                if (Physics.Raycast(ray, out m_RaycastHitInfo, Mathf.Infinity, LayerMask.GetMask("Grid")))
-                {
-                    distanceToPlane = m_RaycastHitInfo.distance;
-                }
+                // If we didn't hit anything, use a plane with normal = up vector
+                // Y position is either 0 or last hit position's Y
+                float planeY = m_PlacementPosition.y; // Use the last position's Y if available
+                if (float.IsNaN(planeY) || float.IsInfinity(planeY)) // If no valid previous position
+                    planeY = 0f;
                 
-                m_PlacementPosition = ray.origin + ray.direction * distanceToPlane;
+                Plane plane = new Plane(Vector3.up, new Vector3(0, planeY, 0));
+                if (plane.Raycast(ray, out float distance))
+                {
+                    m_PlacementPosition = ray.GetPoint(distance);
+                }
             }
         }
         

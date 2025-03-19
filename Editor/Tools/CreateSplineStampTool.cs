@@ -122,15 +122,13 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             }
             else
             {
-                // If we didn't hit anything, use a point on the grid
-                float distanceToGrid = 10f; // Default distance if no grid
-                if (Physics.Raycast(ray, out m_RaycastHitInfo, Mathf.Infinity, LayerMask.GetMask("Grid")))
+                // If we didn't hit anything, use a plane with normal = up vector at y=0
+                Plane plane = new Plane(Vector3.up, Vector3.zero);
+                if (plane.Raycast(ray, out float distance))
                 {
-                    distanceToGrid = m_RaycastHitInfo.distance;
+                    float3 pointOnPlane = ray.GetPoint(distance);
+                    m_DrawnPoints.Add(pointOnPlane);
                 }
-                
-                float3 pointOnGrid = ray.origin + ray.direction * distanceToGrid;
-                m_DrawnPoints.Add(pointOnGrid);
             }
         }
         
@@ -148,14 +146,20 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             }
             else
             {
-                // If we didn't hit anything, use a point on the grid
-                float distanceToGrid = 10f; // Default distance if no grid
-                if (Physics.Raycast(ray, out m_RaycastHitInfo, Mathf.Infinity, LayerMask.GetMask("Grid")))
-                {
-                    distanceToGrid = m_RaycastHitInfo.distance;
-                }
+                // If we didn't hit anything, use a plane with normal = up vector
+                // Y position is the last drawn point's Y to maintain consistent height
+                float planeY = m_DrawnPoints[m_DrawnPoints.Count - 1].y;
                 
-                newPoint = ray.origin + ray.direction * distanceToGrid;
+                Plane plane = new Plane(Vector3.up, new Vector3(0, planeY, 0));
+                if (plane.Raycast(ray, out float distance))
+                {
+                    newPoint = ray.GetPoint(distance);
+                }
+                else
+                {
+                    // Fallback if plane raycast fails
+                    return;
+                }
             }
             
             // Only add point if it's far enough from the last one
@@ -265,7 +269,7 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             float closingThreshold = CalculateClosingThreshold();
             
             // Draw dashed line from last point to mouse position if drawing
-            if (m_IsDrawing)
+            if (m_IsDrawing && m_DrawnPoints.Count > 0)
             {
                 Handles.color = new Color(1, 1, 0, 0.5f);
                 
@@ -279,13 +283,20 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                 }
                 else
                 {
-                    float distanceToGrid = 10f;
-                    if (Physics.Raycast(ray, out m_RaycastHitInfo, Mathf.Infinity, LayerMask.GetMask("Grid")))
-                    {
-                        distanceToGrid = m_RaycastHitInfo.distance;
-                    }
+                    // If we didn't hit anything, use a plane with normal = up vector
+                    // Y position is the last drawn point's Y to maintain consistent height
+                    float planeY = lastPoint.y;
                     
-                    cursorPoint = ray.origin + ray.direction * distanceToGrid;
+                    Plane plane = new Plane(Vector3.up, new Vector3(0, planeY, 0));
+                    if (plane.Raycast(ray, out float distance))
+                    {
+                        cursorPoint = ray.GetPoint(distance);
+                    }
+                    else
+                    {
+                        // Fallback if plane raycast fails
+                        cursorPoint = lastPoint;
+                    }
                 }
                 
                 Handles.DrawDottedLine(lastPoint, cursorPoint, 5f);
