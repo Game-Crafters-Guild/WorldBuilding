@@ -454,81 +454,95 @@ namespace GameCraftersGuild.WorldBuilding
             // Calculate bounds in terrain space
             Vector3 terrainPos = context.TerrainPosition;
             Vector3 terrainSize = terrainData.size;
-            
+
+            // Store the original world bounds for deterministic area calculation
+            Vector3 worldBoundsSize = worldBounds.size;
+            float worldBoundsWidth = worldBoundsSize.x;
+            float worldBoundsDepth = worldBoundsSize.z;
+
+            // Calculate normalized bounds for the shader
             float boundsMinX = (worldBounds.min.x - terrainPos.x) / terrainSize.x;
             float boundsMinZ = (worldBounds.min.z - terrainPos.z) / terrainSize.z;
             float boundsMaxX = (worldBounds.max.x - terrainPos.x) / terrainSize.x;
             float boundsMaxZ = (worldBounds.max.z - terrainPos.z) / terrainSize.z;
-            
+
             // Clamp to terrain bounds
             boundsMinX = Mathf.Clamp01(boundsMinX);
             boundsMinZ = Mathf.Clamp01(boundsMinZ);
             boundsMaxX = Mathf.Clamp01(boundsMaxX);
             boundsMaxZ = Mathf.Clamp01(boundsMaxZ);
-            
-            // Calculate the area in square units
-            float areaWidth = (boundsMaxX - boundsMinX) * terrainSize.x;
-            float areaDepth = (boundsMaxZ - boundsMinZ) * terrainSize.z;
+
+            // Calculate the area in square units directly from world bounds
+            float areaWidth = worldBoundsWidth;
+            float areaDepth = worldBoundsDepth;
             float areaSize = areaWidth * areaDepth;
-            
-            // Calculate number of square units in the area
-            int totalSquareUnits = Mathf.CeilToInt(areaSize);
-            
+
+            // Calculate number of square units in the area - use a deterministic ceiling function
+            int totalSquareUnits = (int)Math.Ceiling(areaSize);
+
             // Calculate potential number of objects based on ObjectsPerSquareUnit
             int potentialObjectsPerSquareUnit = modifier.ObjectsPerSquareUnit;
             int potentialTotalObjects = totalSquareUnits * potentialObjectsPerSquareUnit;
-            
+
             // Apply density to determine how many objects to actually spawn
-            int numObjects = Mathf.FloorToInt(potentialTotalObjects * modifier.Density);
+            int numObjects = (int)Math.Floor(potentialTotalObjects * modifier.Density);
             if (numObjects == 0)
                 return null;
-            
+
             // Apply max objects limit if set
             if (modifier.MaxObjects > 0)
             {
-                numObjects = Mathf.Min(numObjects, modifier.MaxObjects);
+                numObjects = Math.Min(numObjects, modifier.MaxObjects);
             }
-            
+
             // Make sure we at least try to place 1 object if density > 0
             if (modifier.Density > 0 && numObjects == 0)
             {
                 numObjects = 1;
             }
-            
+
             //Debug.Log($"GPU Placement: Area size={areaSize:F2} square units, Total square units={totalSquareUnits}, " +
               //      $"Potential objects={potentialTotalObjects}, Density={modifier.Density:F2}, Objects to place={numObjects}");
-            
+
             // Calculate grid dimensions for square unit based placement
             // For very large terrains, we may not need a 1:1 grid cell to square unit ratio
             // Limit to a maximum reasonable grid size
             const int MaxGridDimension = 500; // Maximum grid cells in any dimension
-            
+
+            // Create a deterministic grid that doesn't change based on small position differences
+            // Round to integer units to make grid cell count more stable
+            int baseGridWidth = (int)Math.Ceiling(areaWidth);
+            int baseGridDepth = (int)Math.Ceiling(areaDepth);
+
             int gridWidth, gridDepth;
-            if (areaWidth > MaxGridDimension || areaDepth > MaxGridDimension)
+            if (baseGridWidth > MaxGridDimension || baseGridDepth > MaxGridDimension)
             {
-                // Scale down grid for very large terrains
-                float scaleFactor = Mathf.Min(MaxGridDimension / areaWidth, MaxGridDimension / areaDepth);
-                gridWidth = Mathf.CeilToInt(areaWidth * scaleFactor);
-                gridDepth = Mathf.CeilToInt(areaDepth * scaleFactor);
+                // Scale down grid for very large terrains - use deterministic math functions
+                float scaleFactor = Math.Min(
+                    (float)MaxGridDimension / baseGridWidth, 
+                    (float)MaxGridDimension / baseGridDepth
+                );
+                gridWidth = (int)Math.Ceiling(baseGridWidth * scaleFactor);
+                gridDepth = (int)Math.Ceiling(baseGridDepth * scaleFactor);
                 
-                Debug.Log($"GPU Placement: Scaling down grid from {Mathf.CeilToInt(areaWidth)}x{Mathf.CeilToInt(areaDepth)} " +
+                Debug.Log($"GPU Placement: Scaling down grid from {baseGridWidth}x{baseGridDepth} " +
                           $"to {gridWidth}x{gridDepth} for performance");
             }
             else
             {
-                gridWidth = Mathf.CeilToInt(areaWidth);
-                gridDepth = Mathf.CeilToInt(areaDepth);
+                gridWidth = baseGridWidth;
+                gridDepth = baseGridDepth;
             }
-            
+
             // Ensure minimum grid dimensions
-            gridWidth = Mathf.Max(1, gridWidth);
-            gridDepth = Mathf.Max(1, gridDepth);
-            
+            gridWidth = Math.Max(1, gridWidth);
+            gridDepth = Math.Max(1, gridDepth);
+
             // Limit the number of parallel calculations for performance
-            // Ensure we spawn enough threads for effective hashed distribution - increased multiplier for better results
-            int numThreads = Mathf.Max(
+            // Make this calculation deterministic and based on integers
+            int numThreads = Math.Max(
                 numObjects * 10,  // At least 10x the objects we want to place for better distribution
-                Mathf.Min(totalSquareUnits * potentialObjectsPerSquareUnit * 2, 1000000)  // Double the potential objects but cap at 1M
+                Math.Min(totalSquareUnits * potentialObjectsPerSquareUnit * 2, 1000000)  // Double the potential objects but cap at 1M
             );
             
             //Debug.Log($"GPU Placement: Using {numThreads} threads for {gridWidth}x{gridDepth} grid");
@@ -558,7 +572,7 @@ namespace GameCraftersGuild.WorldBuilding
             );
             
             // FIRST PASS: Generate potential positions
-            int threadGroupsX = Mathf.CeilToInt(numThreads / 64f);
+            int threadGroupsX = (int)Math.Ceiling(numThreads / 64.0);
             placementComputeShader.Dispatch(generatePositionsKernelId, threadGroupsX, 1, 1);
             
             // Get results back from GPU

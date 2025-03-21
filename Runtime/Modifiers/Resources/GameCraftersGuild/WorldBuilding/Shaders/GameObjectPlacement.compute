@@ -100,7 +100,8 @@ float2 GetRandomPosition(uint id)
     // to distribute objects more evenly across the entire grid
     uint hashedId = id;
     
-    // Simple hash based on Wang hash
+    // Simple hash based on Wang hash - only use thread ID and seed for hashing
+    hashedId = (hashedId ^ _RandomSeed) * 0x27d4eb2d;
     hashedId = (hashedId ^ 61) ^ (hashedId >> 16);
     hashedId = hashedId + (hashedId << 3);
     hashedId = hashedId ^ (hashedId >> 4);
@@ -115,11 +116,31 @@ float2 GetRandomPosition(uint id)
         return float2(0, 0);
     
     // Get a cell ID that's distributed across the entire grid
+    // Use a deterministic hash of the original ID for the cell selection
     uint gridCellId = hashedId % totalGridCells;
     
-    // Calculate grid x, y coordinates
-    uint gridX = gridCellId % _GridWidth;
-    uint gridY = gridCellId / _GridWidth;
+    // Hash the grid cell ID with the seed to get a reproducible cell position
+    // This ensures consistency even if gridCellId is the same but in a different location
+    uint hashedCellId = gridCellId ^ _RandomSeed;
+    hashedCellId = hashedCellId * 1664525 + 1013904223; // Linear congruential generator
+
+    // Calculate grid x, y coordinates based on hashed cell ID 
+    // This makes the cell positions more random but still deterministic
+    uint gridX = hashedCellId % _GridWidth;
+    uint gridY = (hashedCellId / _GridWidth) % _GridDepth;
+    
+    // Generate deterministic random values for the relative position within the cell
+    // These values are ONLY based on thread ID and seed, not on cell position
+    float relativeX = GetRandomFloat(id * 12345 + 1, _RandomSeed);
+    float relativeY = GetRandomFloat(id * 12345 + 2, _RandomSeed);
+    
+    // Random offset is also generated deterministically
+    float2 randomOffset = float2(0, 0);
+    if (_RandomOffset > 0)
+    {
+        randomOffset.x = (GetRandomFloat(id * 12345 + 3, _RandomSeed) * 2 - 1) * _RandomOffset;
+        randomOffset.y = (GetRandomFloat(id * 12345 + 4, _RandomSeed) * 2 - 1) * _RandomOffset;
+    }
     
     // Calculate normalized bounds width and height
     float boundsWidth = _BoundsMax.x - _BoundsMin.x;
@@ -129,34 +150,20 @@ float2 GetRandomPosition(uint id)
     float cellWidth = boundsWidth / _GridWidth;
     float cellHeight = boundsHeight / _GridDepth;
     
-    // Calculate base position of this grid cell
+    // Calculate position with the grid cell
+    float2 position;
+    
+    // Base position of this grid cell
     float baseX = _BoundsMin.x + gridX * cellWidth;
     float baseY = _BoundsMin.z + gridY * cellHeight;
     
-    // Get randomization within this cell
-    uint localId = id % _ObjectsPerSquareUnit;
-    float randX = GetRandomFloat(gridCellId * 1000 + localId * 2, _RandomSeed);
-    float randY = GetRandomFloat(gridCellId * 1000 + localId * 2 + 1, _RandomSeed);
+    // Final position = base position + relative position within cell + random offset
+    position.x = baseX + relativeX * cellWidth + randomOffset.x * cellWidth;
+    position.y = baseY + relativeY * cellHeight + randomOffset.y * cellHeight;
     
-    // Final position within the cell
-    float2 position;
-    position.x = baseX + randX * cellWidth;
-    position.y = baseY + randY * cellHeight;
-    
-    // Apply random offset if needed
-    if (_RandomOffset > 0)
-    {
-        float2 offsetScale = float2(cellWidth, cellHeight) * _RandomOffset;
-        float2 offset;
-        offset.x = (GetRandomFloat(gridCellId * 1000 + localId * 4 + 2, _RandomSeed) * 2 - 1) * offsetScale.x;
-        offset.y = (GetRandomFloat(gridCellId * 1000 + localId * 4 + 3, _RandomSeed) * 2 - 1) * offsetScale.y;
-        
-        position += offset;
-        
-        // Clamp to bounds
-        position.x = clamp(position.x, _BoundsMin.x, _BoundsMax.x);
-        position.y = clamp(position.y, _BoundsMin.z, _BoundsMax.z);
-    }
+    // Clamp to bounds
+    position.x = clamp(position.x, _BoundsMin.x, _BoundsMax.x);
+    position.y = clamp(position.y, _BoundsMin.z, _BoundsMax.z);
     
     // Ensure we're within terrain bounds (0-1)
     position.x = clamp(position.x, 0, 1);
@@ -224,16 +231,21 @@ bool CheckNoiseConstraint(float2 boundsNorm)
     // Fall back to procedural noise if the texture returns a zero value (might be a default white texture)
     if (noiseValue < 0.001f)
     {
-        // Simple Perlin-like noise as fallback
-        float2 scaledPos = boundsNorm * noiseParams.y + float2(noiseParams.z, noiseParams.z);
+        // Simple Perlin-like noise as fallback, but with added seed influence to make it deterministic
+        float2 scaledPos = boundsNorm * noiseParams.y + float2(noiseParams.z + (_RandomSeed % 100) * 0.01, 
+                                                              noiseParams.z + (_RandomSeed % 100) * 0.01);
         float2 i = floor(scaledPos);
         float2 f = frac(scaledPos);
         float2 u = f * f * (3.0 - 2.0 * f); // Smoothstep
         
-        float n00 = frac(sin(dot(i, float2(127.1, 311.7))) * 43758.5453);
-        float n01 = frac(sin(dot(i + float2(0, 1), float2(127.1, 311.7))) * 43758.5453);
-        float n10 = frac(sin(dot(i + float2(1, 0), float2(127.1, 311.7))) * 43758.5453);
-        float n11 = frac(sin(dot(i + float2(1, 1), float2(127.1, 311.7))) * 43758.5453);
+        // Include random seed in the hash calculations
+        uint seedOffset = _RandomSeed * 1103515245 + 12345; // Linear congruential generator
+        
+        // Generate 4 pseudo-random values using seed and position
+        float n00 = frac(sin(dot(i, float2(127.1, 311.7)) + seedOffset * 0.0001) * 43758.5453);
+        float n01 = frac(sin(dot(i + float2(0, 1), float2(127.1, 311.7)) + seedOffset * 0.0001) * 43758.5453);
+        float n10 = frac(sin(dot(i + float2(1, 0), float2(127.1, 311.7)) + seedOffset * 0.0001) * 43758.5453);
+        float n11 = frac(sin(dot(i + float2(1, 1), float2(127.1, 311.7)) + seedOffset * 0.0001) * 43758.5453);
         
         float nx0 = lerp(n00, n10, u.x);
         float nx1 = lerp(n01, n11, u.x);
@@ -369,8 +381,8 @@ void GeneratePositions(uint3 id : SV_DispatchThreadID)
         return;
     
     // Apply density-based filtering only if density is less than 1.0
-    // With higher object counts and two-pass filtering, we can be less aggressive here
-    if (_Density < 0.99f && GetRandomFloat(index * 13 + 9, _RandomSeed) > _Density)
+    // Use a consistent hash value for density check - only based on thread ID and seed
+    if (_Density < 0.99f && GetRandomFloat(index * 54321 + 9, _RandomSeed) > _Density)
         return;
     
     // Generate grid-based random position with hashing for better distribution
@@ -419,8 +431,8 @@ void GeneratePositions(uint3 id : SV_DispatchThreadID)
     // Get terrain normal for alignment
     float3 normal = GetTerrainNormal(normPos);
     
-    // Choose prefab index
-    uint prefabIndex = floor(GetRandomFloat(index * 7 + 5, _RandomSeed) * _NumberOfGameObjects);
+    // Choose prefab index - use consistent hash values
+    uint prefabIndex = floor(GetRandomFloat(index * 98765 + 5, _RandomSeed) * _NumberOfGameObjects);
     if (prefabIndex >= _NumberOfGameObjects)
         prefabIndex = _NumberOfGameObjects - 1;
     
@@ -433,15 +445,15 @@ void GeneratePositions(uint3 id : SV_DispatchThreadID)
     worldPos.y = height + settings.yOffset;
     worldPos.z = _TerrainPosition.z + normPos.y * _TerrainParams.z;
     
-    // Calculate random scale based on prefab settings
-    float scale = lerp(settings.minScale, settings.maxScale, GetRandomFloat(index * 9 + 6, _RandomSeed));
+    // Calculate random scale based on prefab settings - use consistent hash values
+    float scale = lerp(settings.minScale, settings.maxScale, GetRandomFloat(index * 87654 + 6, _RandomSeed));
     
     // Calculate normal alignment factor (0-1) if normal alignment is enabled
     float normalAlignmentFactor = 0.0;
     if (settings.alignToNormal > 0)
     {
         normalAlignmentFactor = lerp(settings.minNormalAlignment, settings.maxNormalAlignment, 
-                                     GetRandomFloat(index * 15 + 8, _RandomSeed));
+                                     GetRandomFloat(index * 76543 + 8, _RandomSeed));
     }
     
     // Check all constraints and mark if slope constraint fails
@@ -473,7 +485,8 @@ void GeneratePositions(uint3 id : SV_DispatchThreadID)
         _Results[index].rotation = 0;
         if (settings.randomYRotation > 0)
         {
-            _Results[index].rotation = lerp(settings.minRotation, settings.maxRotation, GetRandomFloat(index * 11 + 7, _RandomSeed));
+            _Results[index].rotation = lerp(settings.minRotation, settings.maxRotation, 
+                                           GetRandomFloat(index * 65432 + 7, _RandomSeed));
         }
         _Results[index].prefabIndex = prefabIndex;
         _Results[index].isValid = 1;
