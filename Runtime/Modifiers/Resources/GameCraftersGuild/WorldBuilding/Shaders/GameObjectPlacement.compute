@@ -8,8 +8,10 @@ float4 _TerrainPosition; // x, y, z position of terrain
 float2 _HeightmapResolution; // x: width, y: height
 
 // Bounds parameters
-float4 _BoundsMin; // x, z: normalized bounds min, y, w: unused
-float4 _BoundsMax; // x, z: normalized bounds max, y, w: unused
+float4 _BoundsMin; // x, z: normalized bounds min (clamped to 0-1), y, w: unused
+float4 _BoundsMax; // x, z: normalized bounds max (clamped to 0-1), y, w: unused
+float4 _OriginalBoundsMin; // x, z: normalized bounds min (unclamped), y, w: unused  
+float4 _OriginalBoundsMax; // x, z: normalized bounds max (unclamped), y, w: unused
 
 // Object placement parameters
 float _Density;
@@ -142,9 +144,10 @@ float2 GetRandomPosition(uint id)
         randomOffset.y = (GetRandomFloat(id * 12345 + 4, _RandomSeed) * 2 - 1) * _RandomOffset;
     }
     
-    // Calculate normalized bounds width and height
-    float boundsWidth = _BoundsMax.x - _BoundsMin.x;
-    float boundsHeight = _BoundsMax.z - _BoundsMin.z;
+    // Calculate normalized bounds width and height using ORIGINAL unclamped bounds
+    // This ensures grid cell consistency even when partially outside terrain
+    float boundsWidth = _OriginalBoundsMax.x - _OriginalBoundsMin.x;
+    float boundsHeight = _OriginalBoundsMax.z - _OriginalBoundsMin.z;
     
     // Calculate cell size in normalized coordinates
     float cellWidth = boundsWidth / _GridWidth;
@@ -153,22 +156,29 @@ float2 GetRandomPosition(uint id)
     // Calculate position with the grid cell
     float2 position;
     
-    // Base position of this grid cell
-    float baseX = _BoundsMin.x + gridX * cellWidth;
-    float baseY = _BoundsMin.z + gridY * cellHeight;
+    // Base position of this grid cell using ORIGINAL bounds for consistency
+    float baseX = _OriginalBoundsMin.x + gridX * cellWidth;
+    float baseY = _OriginalBoundsMin.z + gridY * cellHeight;
     
     // Final position = base position + relative position within cell + random offset
     position.x = baseX + relativeX * cellWidth + randomOffset.x * cellWidth;
     position.y = baseY + relativeY * cellHeight + randomOffset.y * cellHeight;
     
-    // Clamp to bounds
-    position.x = clamp(position.x, _BoundsMin.x, _BoundsMax.x);
-    position.y = clamp(position.y, _BoundsMin.z, _BoundsMax.z);
+    // Check if the position is within the valid terrain bounds (0-1)
+    // If outside terrain, mark as invalid by returning (0,0)
+    if (position.x < 0 || position.x > 1 || position.y < 0 || position.y > 1)
+        return float2(0, 0);
     
-    // Ensure we're within terrain bounds (0-1)
-    position.x = clamp(position.x, 0, 1);
-    position.y = clamp(position.y, 0, 1);
+    // For positions that ARE within the terrain bounds (0-1), check if they're
+    // actually within our clamped usable area
+    if (position.x < _BoundsMin.x || position.x > _BoundsMax.x || 
+        position.y < _BoundsMin.z || position.y > _BoundsMax.z)
+    {
+        // Position is within terrain but outside our usable area, invalidate it
+        return float2(0, 0);
+    }
     
+    // Position is valid - no need to clamp since we already confirmed it's within bounds
     return position;
 }
 
@@ -388,37 +398,38 @@ void GeneratePositions(uint3 id : SV_DispatchThreadID)
     // Generate grid-based random position with hashing for better distribution
     float2 normPos = GetRandomPosition(index);
     
-    // Skip if position is invalid (outside grid)
-    if (normPos.x == 0 && normPos.y == 0 && _GridWidth > 0 && _GridDepth > 0)
+    // Skip if position is invalid (outside terrain or outside grid)
+    // GetRandomPosition returns (0,0) for invalid positions
+    if (normPos.x == 0 && normPos.y == 0)
         return;
     
     // Calculate position within bounds (0-1 relative to bounds, not terrain)
     float2 boundsNorm;
     
     // Calculate the aspect ratio of the bounds
-    float boundsWidth = _BoundsMax.x - _BoundsMin.x;
-    float boundsDepth = _BoundsMax.z - _BoundsMin.z;
+    float boundsWidth = _OriginalBoundsMax.x - _OriginalBoundsMin.x;
+    float boundsDepth = _OriginalBoundsMax.z - _OriginalBoundsMin.z;
     
     // Adjust for square aspect ratio (matching SplineAreaShape's adjustment)
     if (boundsWidth > boundsDepth)
     {
         // X is dominant, so we need to scale Z to match
-        float center = (_BoundsMin.z + _BoundsMax.z) * 0.5;
+        float center = (_OriginalBoundsMin.z + _OriginalBoundsMax.z) * 0.5;
         float halfSize = boundsWidth * 0.5;
         
         // Map Y (Z) coordinate properly to match the square aspect in the mask
-        boundsNorm.x = (normPos.x - _BoundsMin.x) / boundsWidth;
+        boundsNorm.x = (normPos.x - _OriginalBoundsMin.x) / boundsWidth;
         boundsNorm.y = (normPos.y - (center - halfSize)) / boundsWidth;
     }
     else
     {
         // Z is dominant, so we need to scale X to match
-        float center = (_BoundsMin.x + _BoundsMax.x) * 0.5;
+        float center = (_OriginalBoundsMin.x + _OriginalBoundsMax.x) * 0.5;
         float halfSize = boundsDepth * 0.5;
         
         // Map X coordinate properly to match the square aspect in the mask
         boundsNorm.x = (normPos.x - (center - halfSize)) / boundsDepth;
-        boundsNorm.y = (normPos.y - _BoundsMin.z) / boundsDepth;
+        boundsNorm.y = (normPos.y - _OriginalBoundsMin.z) / boundsDepth;
     }
     
     // Clamp to 0-1 range to ensure valid texture coordinates

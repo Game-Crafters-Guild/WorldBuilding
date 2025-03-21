@@ -460,19 +460,20 @@ namespace GameCraftersGuild.WorldBuilding
             float worldBoundsWidth = worldBoundsSize.x;
             float worldBoundsDepth = worldBoundsSize.z;
 
-            // Calculate normalized bounds for the shader
-            float boundsMinX = (worldBounds.min.x - terrainPos.x) / terrainSize.x;
-            float boundsMinZ = (worldBounds.min.z - terrainPos.z) / terrainSize.z;
-            float boundsMaxX = (worldBounds.max.x - terrainPos.x) / terrainSize.x;
-            float boundsMaxZ = (worldBounds.max.z - terrainPos.z) / terrainSize.z;
+            // Calculate normalized bounds for the shader - keep original unclamped values for consistency
+            float boundsMinX_original = (worldBounds.min.x - terrainPos.x) / terrainSize.x;
+            float boundsMinZ_original = (worldBounds.min.z - terrainPos.z) / terrainSize.z;
+            float boundsMaxX_original = (worldBounds.max.x - terrainPos.x) / terrainSize.x;
+            float boundsMaxZ_original = (worldBounds.max.z - terrainPos.z) / terrainSize.z;
 
-            // Clamp to terrain bounds
-            boundsMinX = Mathf.Clamp01(boundsMinX);
-            boundsMinZ = Mathf.Clamp01(boundsMinZ);
-            boundsMaxX = Mathf.Clamp01(boundsMaxX);
-            boundsMaxZ = Mathf.Clamp01(boundsMaxZ);
+            // Create clamped versions for the shader - these won't affect our area calculations
+            float boundsMinX = Mathf.Clamp01(boundsMinX_original);
+            float boundsMinZ = Mathf.Clamp01(boundsMinZ_original);
+            float boundsMaxX = Mathf.Clamp01(boundsMaxX_original);
+            float boundsMaxZ = Mathf.Clamp01(boundsMaxZ_original);
 
-            // Calculate the area in square units directly from world bounds
+            // Calculate the area in square units directly from world bounds without clamping
+            // This ensures consistency even when partially outside terrain bounds
             float areaWidth = worldBoundsWidth;
             float areaDepth = worldBoundsDepth;
             float areaSize = areaWidth * areaDepth;
@@ -563,6 +564,7 @@ namespace GameCraftersGuild.WorldBuilding
                 context, 
                 terrainData,
                 boundsMinX, boundsMinZ, boundsMaxX, boundsMaxZ,
+                boundsMinX_original, boundsMinZ_original, boundsMaxX_original, boundsMaxZ_original,
                 modifier.Density, numObjects, 
                 modifier.GameObjects.Count, 
                 modifier.RandomSeed, 
@@ -769,6 +771,8 @@ namespace GameCraftersGuild.WorldBuilding
             TerrainData terrainData,
             float boundsMinX, float boundsMinZ,
             float boundsMaxX, float boundsMaxZ,
+            float boundsMinX_original, float boundsMinZ_original,
+            float boundsMaxX_original, float boundsMaxZ_original,
             float density, 
             int maxObjectCount, 
             int numberOfGameObjects, 
@@ -785,14 +789,11 @@ namespace GameCraftersGuild.WorldBuilding
             placementComputeShader.SetVector("_TerrainPosition", new Vector4(terrainPosition.x, terrainPosition.y, terrainPosition.z, 0));
             placementComputeShader.SetVector("_HeightmapResolution", new Vector2(terrainData.heightmapResolution, terrainData.heightmapResolution));
             
-            // Additional debug logging for terrain info
-            /*Debug.Log($"Terrain Parameters: Size=({terrainSize.x:F1},{terrainSize.y:F1},{terrainSize.z:F1}), " +
-                     $"Position=({terrainPosition.x:F1},{terrainPosition.y:F1},{terrainPosition.z:F1}), " +
-                     $"HeightmapRes={terrainData.heightmapResolution}");*/
-            
-            // Set bounds parameters
+            // Set bounds parameters - both clamped and original
             placementComputeShader.SetVector("_BoundsMin", new Vector4(boundsMinX, 0, boundsMinZ, 0));
             placementComputeShader.SetVector("_BoundsMax", new Vector4(boundsMaxX, 0, boundsMaxZ, 0));
+            placementComputeShader.SetVector("_OriginalBoundsMin", new Vector4(boundsMinX_original, 0, boundsMinZ_original, 0));
+            placementComputeShader.SetVector("_OriginalBoundsMax", new Vector4(boundsMaxX_original, 0, boundsMaxZ_original, 0));
             
             // Set object placement parameters
             placementComputeShader.SetFloat("_Density", density);
@@ -805,12 +806,6 @@ namespace GameCraftersGuild.WorldBuilding
             int objectCount = placedObjectPositions.Length / 3; // Each object has 3 float coordinates
             placementComputeShader.SetInt("_PlacedObjectCount", objectCount);
             placementComputeShader.SetFloat("_DefaultMinDistance", defaultMinDistance);
-            
-            // For any existing slope constraints, log them for debugging
-            /*if (slopeConstraints != null && slopeConstraints.Length > 0)
-            {
-                Debug.Log($"Setting slope constraint: Min={slopeConstraints[0].x}°, Max={slopeConstraints[0].y}°");
-            }*/
             
             // Set texture samplers - use the context render textures directly
             placementComputeShader.SetTexture(generatePositionsKernelId, "_HeightmapTexture", context.HeightmapRenderTexture);
