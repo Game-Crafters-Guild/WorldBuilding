@@ -19,6 +19,14 @@ namespace GameCraftersGuild.WorldBuilding.Editor
         // Track which dimension each handle controls
         private NativeArray<Vector2> m_HandleDimensions;
         
+        // Cache tooltip resources to prevent GC allocations
+        private GUIStyle m_TooltipStyle;
+        private GUIContent m_CornerTooltipContent;
+        private GUIContent m_EdgeTooltipContent;
+        private Vector3[] m_TooltipBorderPoints;
+        private readonly Color m_BorderColor = new Color(1f, 1f, 1f, 0.5f);
+        private readonly Color m_BgColor = new Color(0.1f, 0.1f, 0.1f, 0.9f);
+        
         private void OnEnable()
         {
             m_RectangleShape = (RectangleShape)target;
@@ -40,10 +48,32 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             m_HandleDimensions[6] = new Vector2(1, 0); // Left
             m_HandleDimensions[7] = new Vector2(0, 1); // Bottom
             
+            // Initialize tooltip resources
+            InitTooltipResources();
+            
             UpdateHandlePositions();
             
             // Ensure SceneView repaint to show tooltips properly
             SceneView.duringSceneGui += OnSceneGUIDelegate;
+        }
+        
+        private void InitTooltipResources()
+        {
+            // Create tooltip style once
+            m_TooltipStyle = new GUIStyle(EditorStyles.helpBox);
+            m_TooltipStyle.normal.textColor = Color.white;
+            m_TooltipStyle.fontSize = 12;
+            m_TooltipStyle.fontStyle = FontStyle.Bold;
+            m_TooltipStyle.alignment = TextAnchor.MiddleCenter;
+            m_TooltipStyle.padding = new RectOffset(10, 10, 6, 6);
+            m_TooltipStyle.stretchWidth = true;
+            
+            // Create tooltip content objects once
+            m_CornerTooltipContent = new GUIContent("Drag to resize\nHold SHIFT for uniform scaling");
+            m_EdgeTooltipContent = new GUIContent("Drag to resize");
+            
+            // Initialize border points array once
+            m_TooltipBorderPoints = new Vector3[8];
         }
         
         private void OnDisable()
@@ -303,23 +333,11 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             Vector3 worldPos = m_RectangleShape.transform.TransformPoint(handlePos);
             Vector2 screenPos = HandleUtility.WorldToGUIPoint(worldPos);
             
-            // Create tooltip style
-            GUIStyle tooltipStyle = new GUIStyle(EditorStyles.helpBox);
-            tooltipStyle.normal.textColor = Color.white;
-            tooltipStyle.fontSize = 12;
-            tooltipStyle.fontStyle = FontStyle.Bold;
-            tooltipStyle.alignment = TextAnchor.MiddleCenter;
-            tooltipStyle.padding = new RectOffset(10, 10, 6, 6);
-            tooltipStyle.stretchWidth = true;
-            
-            // Choose tooltip text based on handle type
-            string tooltipText = handleIndex < 4
-                ? "Drag to resize\nHold SHIFT for uniform scaling"
-                : "Drag to resize";
+            // Choose tooltip content based on handle type - reuse cached content
+            GUIContent content = handleIndex < 4 ? m_CornerTooltipContent : m_EdgeTooltipContent;
             
             // Calculate tooltip size with padding
-            GUIContent content = new GUIContent(tooltipText);
-            Vector2 tooltipSize = tooltipStyle.CalcSize(content);
+            Vector2 tooltipSize = m_TooltipStyle.CalcSize(content);
             
             // Use consistent dimensions for all tooltips
             float minWidth = 180f;
@@ -343,45 +361,37 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                 tooltipSize.y
             );
             
+            // Update existing points array values
+            // Top edge
+            m_TooltipBorderPoints[0] = new Vector3(tooltipRect.x, tooltipRect.y);
+            m_TooltipBorderPoints[1] = new Vector3(tooltipRect.x + tooltipRect.width, tooltipRect.y);
+            
+            // Right edge
+            m_TooltipBorderPoints[2] = new Vector3(tooltipRect.x + tooltipRect.width, tooltipRect.y);
+            m_TooltipBorderPoints[3] = new Vector3(tooltipRect.x + tooltipRect.width, tooltipRect.y + tooltipRect.height);
+            
+            // Bottom edge
+            m_TooltipBorderPoints[4] = new Vector3(tooltipRect.x + tooltipRect.width, tooltipRect.y + tooltipRect.height);
+            m_TooltipBorderPoints[5] = new Vector3(tooltipRect.x, tooltipRect.y + tooltipRect.height);
+            
+            // Left edge
+            m_TooltipBorderPoints[6] = new Vector3(tooltipRect.x, tooltipRect.y + tooltipRect.height);
+            m_TooltipBorderPoints[7] = new Vector3(tooltipRect.x, tooltipRect.y);
+            
             // Draw the tooltip with GUI
             Handles.BeginGUI();
             
             // Draw dark background with consistent size
-            Color bgColor = new Color(0.1f, 0.1f, 0.1f, 0.9f);
-            EditorGUI.DrawRect(tooltipRect, bgColor);
+            EditorGUI.DrawRect(tooltipRect, m_BgColor);
             
-            // Draw border with precise positioning
-            // Adding a small offset to ensure the border aligns perfectly with the background
-            Color borderColor = new Color(1f, 1f, 1f, 0.5f);
-            Rect borderRect = new Rect(tooltipRect.x, tooltipRect.y, tooltipRect.width, tooltipRect.height);
-            
-            // Make an array where each pair of consecutive points forms a line segment
-            Vector3[] points = new Vector3[]
-            {
-                // Top edge
-                new Vector3(borderRect.x, borderRect.y), 
-                new Vector3(borderRect.x + borderRect.width, borderRect.y),
-                
-                // Right edge
-                new Vector3(borderRect.x + borderRect.width, borderRect.y), 
-                new Vector3(borderRect.x + borderRect.width, borderRect.y + borderRect.height),
-                
-                // Bottom edge
-                new Vector3(borderRect.x + borderRect.width, borderRect.y + borderRect.height), 
-                new Vector3(borderRect.x, borderRect.y + borderRect.height),
-                
-                // Left edge
-                new Vector3(borderRect.x, borderRect.y + borderRect.height), 
-                new Vector3(borderRect.x, borderRect.y)
-            };
-            
-            Handles.color = borderColor;
-            Handles.DrawLines(points);
+            // Draw border with cached color and points
+            Handles.color = m_BorderColor;
+            Handles.DrawLines(m_TooltipBorderPoints);
             
             // Draw the tooltip text with white color
-            tooltipStyle.normal.background = null;
+            m_TooltipStyle.normal.background = null;
             GUI.color = Color.white;
-            GUI.Label(tooltipRect, tooltipText, tooltipStyle);
+            GUI.Label(tooltipRect, content, m_TooltipStyle);
             
             Handles.EndGUI();
         }
