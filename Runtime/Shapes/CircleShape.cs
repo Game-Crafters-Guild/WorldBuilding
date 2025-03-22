@@ -15,15 +15,5 @@ namespace GameCraftersGuild.WorldBuilding
             float Diameter = Radius * 2.0f;
             LocalBounds = new Bounds(Vector3.zero, new Vector3(Diameter, 0.0f, Diameter));
         }
-
-#if UNITY_EDITOR
-        public void OnDrawGizmosSelected()
-        {
-            using (new UnityEditor.Handles.DrawingScope(Color.blue, transform.localToWorldMatrix))
-            {
-                UnityEditor.Handles.DrawWireDisc(Vector3.zero, transform.up, Radius);
-            }
-        }
-#endif
     }
 }

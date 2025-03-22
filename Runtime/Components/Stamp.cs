@@ -138,10 +138,10 @@ namespace GameCraftersGuild.WorldBuilding
                 m_Modifiers.ResetChangedFlag();
             }
             
-            if (m_Shape != null && m_Shape.hideFlags != HideFlags.HideInInspector)
+            /*if (m_Shape != null && m_Shape.hideFlags != HideFlags.HideInInspector)
             {
                 m_Shape.hideFlags = HideFlags.HideInInspector;
-            }
+            }*/
         }
 
         public void GenerateMask()
