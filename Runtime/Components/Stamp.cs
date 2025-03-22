@@ -62,6 +62,7 @@ namespace GameCraftersGuild.WorldBuilding
         protected Stamp()
         {
             m_Modifiers.TerrainHeightModifiers.Add(new ApplyTransformToHeightmap());
+            m_Modifiers.GameObjectModifiers.Add(new GameObjectModifier());
         }
 
         private void OnDestroy()
@@ -135,6 +136,11 @@ namespace GameCraftersGuild.WorldBuilding
                 
                 // Reset the changed flag after processing
                 m_Modifiers.ResetChangedFlag();
+            }
+            
+            if (m_Shape != null && m_Shape.hideFlags != HideFlags.HideInInspector)
+            {
+                m_Shape.hideFlags = HideFlags.HideInInspector;
             }
         }
 
