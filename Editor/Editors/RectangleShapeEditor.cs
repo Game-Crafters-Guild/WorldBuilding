@@ -38,7 +38,6 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             m_HandleDimensions = new NativeArray<Vector2>(8, Allocator.Persistent);
             
             // Set fixed dimension flags for each handle
-            // (1,0) means it affects x dimension, (0,1) means y dimension, (1,1) means both
             m_HandleDimensions[0] = new Vector2(1, 1); // Top-Right
             m_HandleDimensions[1] = new Vector2(1, 1); // Top-Left
             m_HandleDimensions[2] = new Vector2(1, 1); // Bottom-Left
@@ -201,7 +200,7 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                             {
                                 Vector3 hitPoint = ray.GetPoint(hitDistance);
                                 
-                                // Transform hitpoint to local space - this already accounts for scale
+                                // Transform hit-point to local space - this already accounts for scale
                                 Vector3 localHitPoint = m_RectangleShape.transform.InverseTransformPoint(hitPoint);
                                 
                                 // Record for undo and update
