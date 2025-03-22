@@ -14,15 +14,5 @@ namespace GameCraftersGuild.WorldBuilding
                 MaskTexture = Resources.Load<Texture2D>($"GameCraftersGuild/WorldBuilding/SquareMask");
             }
         }
-
-#if UNITY_EDITOR
-        public void OnDrawGizmosSelected()
-        {
-            using (new UnityEditor.Handles.DrawingScope(Color.blue, transform.localToWorldMatrix))
-            {
-                UnityEditor.Handles.DrawWireCube(Vector3.zero, new Vector3(Size.x, 0.0f, Size.y));
-            }
-        }
-#endif
     }
 }
