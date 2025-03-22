@@ -122,15 +122,16 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                             {
                                 Vector3 hitPoint = ray.GetPoint(hitDistance);
                                 
-                                // Transform hitpoint to local space
+                                // Transform hitpoint to local space - this already accounts for scale
                                 Vector3 localHitPoint = m_CircleShape.transform.InverseTransformPoint(hitPoint);
                                 
-                                // Update radius based on distance from center, accounting for scale
-                                float scaledRadius = Vector3.Scale(localHitPoint, new Vector3(1f / objectScale.x, 1f / objectScale.y, 1f / objectScale.z)).magnitude;
+                                // Calculate radius directly from the local hit point
+                                // InverseTransformPoint already compensates for object scale
+                                float radius = localHitPoint.magnitude;
                                 
                                 // Record for undo and update
                                 Undo.RecordObject(m_CircleShape, "Change Circle Radius");
-                                m_CircleShape.Radius = scaledRadius;
+                                m_CircleShape.Radius = radius;
                                 m_CircleShape.GenerateMask();
                                 EditorUtility.SetDirty(m_CircleShape);
                             }

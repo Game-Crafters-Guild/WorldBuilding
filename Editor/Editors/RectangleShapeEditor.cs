@@ -171,15 +171,8 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                             {
                                 Vector3 hitPoint = ray.GetPoint(hitDistance);
                                 
-                                // Transform hitpoint to local space
+                                // Transform hitpoint to local space - this already accounts for scale
                                 Vector3 localHitPoint = m_RectangleShape.transform.InverseTransformPoint(hitPoint);
-                                
-                                // Unscale the local hit point to get size in shape-space, not object-space
-                                Vector3 unscaledHitPoint = new Vector3(
-                                    localHitPoint.x / objectScale.x,
-                                    localHitPoint.y / objectScale.y,
-                                    localHitPoint.z / objectScale.z
-                                );
                                 
                                 // Record for undo and update
                                 Undo.RecordObject(m_RectangleShape, "Change Rectangle Size");
@@ -199,8 +192,8 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                                     float signZ = (i == 2 || i == 3) ? -1 : 1;
                                     
                                     // Get the drag vector components in the appropriate directions
-                                    float dragX = Mathf.Abs(unscaledHitPoint.x);
-                                    float dragZ = Mathf.Abs(unscaledHitPoint.z);
+                                    float dragX = Mathf.Abs(localHitPoint.x);
+                                    float dragZ = Mathf.Abs(localHitPoint.z);
                                     
                                     // Find the larger scale factor to maintain aspect ratio
                                     float scaleFactorX = dragX / (m_StartSize.x * 0.5f);
@@ -218,17 +211,20 @@ namespace GameCraftersGuild.WorldBuilding.Editor
                                 else
                                 {
                                     // Non-uniform scaling - handle each dimension separately
+                                    
                                     // Update width (x) if this handle affects it
                                     if (dimensions.x > 0)
                                     {
-                                        float width = Mathf.Abs(unscaledHitPoint.x) * 2f;
+                                        // Use absolute value for consistent behavior regardless of handle position
+                                        float width = Mathf.Abs(localHitPoint.x) * 2f;
                                         newSize.x = Mathf.Max(0.1f, width);
                                     }
                                     
                                     // Update depth (y) if this handle affects it
                                     if (dimensions.y > 0)
                                     {
-                                        float depth = Mathf.Abs(unscaledHitPoint.z) * 2f;
+                                        // Use absolute value for consistent behavior regardless of handle position
+                                        float depth = Mathf.Abs(localHitPoint.z) * 2f;
                                         newSize.y = Mathf.Max(0.1f, depth);
                                     }
                                 }
