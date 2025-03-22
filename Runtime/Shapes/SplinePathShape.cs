@@ -43,6 +43,120 @@ namespace GameCraftersGuild.WorldBuilding
             }
         }
 
+        // Method to ensure width points at the beginning and end of a spline
+        private void EnsureWidthEndPoints(SplineData<float> widthData, Spline spline)
+        {
+            if (widthData == null || spline == null || spline.Count < 2)
+                return;
+ 
+            // Only add points if the width data is completely empty
+            // This prevents interference when editing existing points
+            if (widthData.Count == 0)
+            {
+                float startValue = 0f;
+                float endValue = 0f;
+                
+                // Determine end values based on the PathIndexUnit
+                switch (widthData.PathIndexUnit)
+                {
+                    case PathIndexUnit.Normalized:
+                        startValue = 0f;
+                        endValue = 1f;
+                        break;
+                    case PathIndexUnit.Distance:
+                        startValue = 0f;
+                        endValue = spline.GetLength();
+                        break;
+                    case PathIndexUnit.Knot:
+                        startValue = 0f;
+                        endValue = spline.Count - 1;
+                        break;
+                }
+                
+                // Add points at the start and end
+                widthData.Add(startValue, Width);
+                widthData.Add(endValue, Width);
+            }
+        }
+
+        // Method to create width data for each spline and ensure end points
+        internal void EnsureWidthDataForSplines(int splineCount)
+        {
+            // Create width data entries for any missing splines
+            while (m_Widths.Count < splineCount)
+            {
+                var splineData = new SplineData<float>();
+                splineData.DefaultValue = Width;
+                
+                // Set a consistent PathIndexUnit for new data
+                splineData.PathIndexUnit = PathIndexUnit.Normalized;
+                
+                m_Widths.Add(splineData);
+            }
+            
+            // Ensure start and end points for each width data
+            for (int i = 0; i < Math.Min(m_Widths.Count, m_SplineContainer.Splines.Count); i++)
+            {
+                EnsureWidthEndPoints(m_Widths[i], m_SplineContainer.Splines[i]);
+            }
+        }
+
+        private void OnSplineContainerAdded(SplineContainer container, int index)
+        {
+            if (container != m_SplineContainer)
+                return;
+
+            // Make sure we have width data for all splines
+            EnsureWidthDataForSplines(m_SplineContainer.Splines.Count);
+        }
+
+        private void OnSplineContainerRemoved(SplineContainer container, int index)
+        {
+            if (container != m_SplineContainer)
+                return;
+
+            if (index < m_Widths.Count)
+            {
+                m_Widths.RemoveAt(index);
+            }
+        }
+
+        private void OnSplineContainerReordered(SplineContainer container, int previousIndex, int newIndex)
+        {
+            if (container != m_SplineContainer)
+                return;
+
+            // Reorder the width data to match the spline order
+            if (previousIndex < m_Widths.Count && newIndex < m_Widths.Count)
+            {
+                var temp = m_Widths[previousIndex];
+                m_Widths.RemoveAt(previousIndex);
+                m_Widths.Insert(newIndex, temp);
+            }
+        }
+
+        private void OnSplineChanged(Spline spline, int knotIndex, SplineModification modification)
+        {
+            // Only ensure width data on specific modifications that would require it
+            // This prevents interference with the width tool's editing operations
+            if (modification == SplineModification.KnotRemoved || 
+                modification == SplineModification.KnotInserted ||
+                modification == SplineModification.Default)
+            {
+                for (int i = 0; i < m_SplineContainer.Splines.Count; i++)
+                {
+                    if (m_SplineContainer.Splines[i] == spline && i < m_Widths.Count)
+                    {
+                        if (m_Widths[i].Count == 0)
+                        {
+                            EnsureWidthEndPoints(m_Widths[i], spline);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
         public override void GenerateMask()
         {
             if (m_SplineContainer.Splines.Count == 0) return;
@@ -154,6 +268,24 @@ namespace GameCraftersGuild.WorldBuilding
         {
             m_SplineContainer = GetComponent<SplineContainer>();
             FindSplineMaskMaterial();
+            
+            // Register for spline events
+            SplineContainer.SplineAdded += OnSplineContainerAdded;
+            SplineContainer.SplineRemoved += OnSplineContainerRemoved;
+            SplineContainer.SplineReordered += OnSplineContainerReordered;
+            Spline.Changed += OnSplineChanged;
+            
+            // Initialize widths data for existing splines
+            EnsureWidthDataForSplines(m_SplineContainer.Splines.Count);
+        }
+        
+        protected void OnDisable()
+        {
+            // Unregister from spline events
+            SplineContainer.SplineAdded -= OnSplineContainerAdded;
+            SplineContainer.SplineRemoved -= OnSplineContainerRemoved;
+            SplineContainer.SplineReordered -= OnSplineContainerReordered;
+            Spline.Changed -= OnSplineChanged;
         }
         
         // Add debugging method to visualize height encoding
@@ -385,12 +517,33 @@ namespace GameCraftersGuild.WorldBuilding
                           new float3(1f / scale.x, 1f / scale.y, 1f / scale.z);
             }
             
-            // Get width - PERFORMANCE: Simplified width calculation
+            // Get width - respecting the PathIndexUnit
             float width = Width * 0.5f;
             if (widthDataIndex < m_Widths.Count && m_Widths[widthDataIndex] != null && 
                 m_Widths[widthDataIndex].Count > 0)
             {
-                width = m_Widths[widthDataIndex].Evaluate(spline, t, PathIndexUnit.Normalized,
+                // Convert normalized t to the appropriate PathIndexUnit for evaluation
+                float indexForEvaluation;
+                PathIndexUnit unit = m_Widths[widthDataIndex].PathIndexUnit;
+                
+                switch (unit)
+                {
+                    case PathIndexUnit.Distance:
+                        // Convert normalized t to distance along spline
+                        indexForEvaluation = t * spline.GetLength();
+                        break;
+                    case PathIndexUnit.Knot:
+                        // Convert normalized t to knot index
+                        indexForEvaluation = t * (spline.Count - 1);
+                        break;
+                    case PathIndexUnit.Normalized:
+                    default:
+                        // Keep t as is for normalized
+                        indexForEvaluation = t;
+                        break;
+                }
+                
+                width = m_Widths[widthDataIndex].Evaluate(spline, indexForEvaluation, unit,
                     new UnityEngine.Splines.Interpolators.LerpFloat());
                 width = math.clamp(width, .001f, 10000f) * 0.5f;
             }

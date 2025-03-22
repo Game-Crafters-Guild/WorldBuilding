@@ -35,20 +35,21 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             m_DisableHandles = false;
 
             var splines = splineDataTarget.m_SplineContainer.Splines;
+            
+            // Ensure there's a width data for each spline
+            splineDataTarget.EnsureWidthDataForSplines(splines.Count);
+
             for (var i = 0; i < splines.Count; i++)
             {
-                if (i < splineDataTarget.Widths.Count)
-                {
-                    var nativeSpline = new NativeSpline(splines[i], splineDataTarget.m_SplineContainer.transform.localToWorldMatrix);
+                var nativeSpline = new NativeSpline(splines[i], splineDataTarget.m_SplineContainer.transform.localToWorldMatrix);
 
-                    Undo.RecordObject(splineDataTarget, "Modifying Widths SplineData");
+                Undo.RecordObject(splineDataTarget, "Modifying Widths SplineData");
 
-                    // User defined handles to manipulate width
-                    DrawDataPoints(nativeSpline, splineDataTarget.Widths[i]);
+                // User defined handles to manipulate width
+                DrawDataPoints(nativeSpline, splineDataTarget.Widths[i]);
 
-                    // Using the out-of the box behaviour to manipulate indexes
-                    nativeSpline.DataPointHandles(splineDataTarget.Widths[i], false, i);
-                }
+                // Using the out-of the box behaviour to manipulate indexes
+                nativeSpline.DataPointHandles(splineDataTarget.Widths[i], false, i);
             }
         }
 
@@ -64,14 +65,15 @@ namespace GameCraftersGuild.WorldBuilding.Editor
             m_DisableHandles = true;
 
             var splines = splineDataTarget.m_SplineContainer.Splines;
+            
+            // Ensure there's a width data for each spline when drawing handles too
+            splineDataTarget.EnsureWidthDataForSplines(splines.Count);
+            
             for (var i = 0; i < splines.Count; i++)
             {
-                if (i < splineDataTarget.Widths.Count)
-                {
-                    var nativeSpline = new NativeSpline(splines[i], splineDataTarget.SplineContainer
-                        .transform.localToWorldMatrix);
-                    DrawDataPoints(nativeSpline, splineDataTarget.Widths[i]);
-                }
+                var nativeSpline = new NativeSpline(splines[i], splineDataTarget.SplineContainer
+                    .transform.localToWorldMatrix);
+                DrawDataPoints(nativeSpline, splineDataTarget.Widths[i]);
             }
         }
 
