@@ -25,8 +25,6 @@ namespace GameCraftersGuild.WorldBuilding
 
         [SerializeField] List<SplineData<float>> m_Widths = new List<SplineData<float>>();
 
-        [SerializeField] private bool m_DebugMode = false;
-
         public List<SplineData<float>> Widths
         {
             get
@@ -293,44 +291,10 @@ namespace GameCraftersGuild.WorldBuilding
             Spline.Changed -= OnSplineChanged;
         }
         
+#if UNITY_EDITOR
         // Add debugging method to visualize height encoding
-        private void OnDrawGizmosSelected()
-        {
-            if (!m_DebugMode || m_SplineContainer == null) return;
-            
-            // Draw gizmos to help visualize spline heights
-            Gizmos.color = Color.yellow;
-            
-            foreach (var spline in m_SplineContainer.Splines)
-            {
-                if (spline == null || spline.Count < 2) continue;
-                
-                float length = spline.GetLength();
-                int steps = Mathf.Max(20, Mathf.CeilToInt(length));
-                
-                for (int i = 0; i < steps; i++)
-                {
-                    float t = (float)i / (steps - 1);
-                    
-                    SplineUtility.Evaluate(spline, t, out var pos, out var dir, out var up);
-                    Vector3 worldPos = transform.TransformPoint(pos);
-                    
-                    // Draw sphere at each evaluation point
-                    Gizmos.DrawSphere(worldPos, 0.2f);
-                    
-                    // Draw line to visualize height from ground
-                    if (i % 5 == 0)
-                    {
-                        Vector3 groundPos = worldPos;
-                        groundPos.y = 0;
-                        Gizmos.DrawLine(groundPos, worldPos);
-                        
-                        // Draw height text
-                        UnityEditor.Handles.Label(worldPos + Vector3.up * 0.5f, $"Y: {worldPos.y:F1}");
-                    }
-                }
-            }
-        }
+        [SerializeField] internal bool m_DebugMode = false;
+#endif
 
         // Add this method to properly store and encode height information in the mask
         private Bounds CalculateSplineBoundsWithHeight()
