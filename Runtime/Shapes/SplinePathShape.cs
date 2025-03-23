@@ -166,9 +166,14 @@ namespace GameCraftersGuild.WorldBuilding
             int maskTextureWidth = kMaskResolution;
             int maskTextureHeight = maskTextureWidth;
 
-            RenderTexture renderTexture = RenderTexture.GetTemporary(maskTextureWidth, maskTextureHeight, 0,
-                RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
-            renderTexture.enableRandomWrite = true;
+            var renderTextureDesc = new RenderTextureDescriptor(maskTextureWidth, maskTextureHeight)
+            {
+                depthBufferBits = 0,
+                colorFormat = RenderTextureFormat.ARGB32,
+                sRGB = false,
+                enableRandomWrite = true
+            };
+            RenderTexture renderTexture = RenderTexture.GetTemporary(renderTextureDesc);
 
             FindSplineMaskMaterial();
 

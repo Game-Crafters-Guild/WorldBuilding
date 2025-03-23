@@ -69,9 +69,14 @@ namespace GameCraftersGuild.WorldBuilding
 
         public override void GenerateMask()
         {
-            RenderTexture renderTexture = RenderTexture.GetTemporary(kMaskTextureWidth, kMaskTextureHeight, 0,
-                RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
-            renderTexture.enableRandomWrite = true;
+            var renderTextureDesc = new RenderTextureDescriptor(kMaskTextureWidth, kMaskTextureHeight)
+            {
+                depthBufferBits = 0,
+                colorFormat = RenderTextureFormat.ARGB32,
+                sRGB = false,
+                enableRandomWrite = true
+            };
+            RenderTexture renderTexture = RenderTexture.GetTemporary(renderTextureDesc);
 
             CalculateWorldBounds();
             MaskTexture = new Texture2D(kMaskTextureWidth, kMaskTextureHeight, TextureFormat.ARGB32, false, true);

@@ -253,15 +253,25 @@ namespace GameCraftersGuild.WorldBuilding
             context.m_TerrainSize = new float2(terrainData.size.x, terrainData.size.z);
             context.MaxTerrainHeight = terrainData.heightmapScale.y;
 
-            context.m_HeightmapRenderTexture = RenderTexture.GetTemporary(terrainData.heightmapResolution,
-                terrainData.heightmapResolution, 0, Terrain.heightmapRenderTextureFormat,
-                RenderTextureReadWrite.Linear);
+            var heightmapDesc = new RenderTextureDescriptor(terrainData.heightmapResolution, terrainData.heightmapResolution)
+            {
+                depthBufferBits = 0,
+                colorFormat = Terrain.heightmapRenderTextureFormat,
+                sRGB = false
+            };
+            context.m_HeightmapRenderTexture = RenderTexture.GetTemporary(heightmapDesc);
+
             int numLayersTextures = terrainData.alphamapTextureCount;
             RenderTexture[] splatmapRenderTextures = new RenderTexture[numLayersTextures];
             for (int i = 0; i < numLayersTextures; i++)
             {
-                splatmapRenderTextures[i] = RenderTexture.GetTemporary(terrainData.alphamapWidth,
-                    terrainData.alphamapHeight, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+                var splatmapDesc = new RenderTextureDescriptor(terrainData.alphamapWidth, terrainData.alphamapHeight)
+                {
+                    depthBufferBits = 0,
+                    colorFormat = RenderTextureFormat.ARGB32,
+                    sRGB = false
+                };
+                splatmapRenderTextures[i] = RenderTexture.GetTemporary(splatmapDesc);
             }
 
             context.SplatRenderTextures = splatmapRenderTextures;
@@ -479,15 +489,14 @@ namespace GameCraftersGuild.WorldBuilding
                 }
                 
                 // Create new normal map render texture with RGBA format for normal vectors
-                NormalRenderTexture = RenderTexture.GetTemporary(
-                    m_HeightmapRenderTexture.width, 
-                    m_HeightmapRenderTexture.height,
-                    0, 
-                    RenderTextureFormat.ARGBFloat,
-                    RenderTextureReadWrite.Linear);
-                
-                NormalRenderTexture.enableRandomWrite = true;
-                NormalRenderTexture.Create();
+                var normalMapDesc = new RenderTextureDescriptor(m_HeightmapRenderTexture.width, m_HeightmapRenderTexture.height)
+                {
+                    depthBufferBits = 0,
+                    colorFormat = RenderTextureFormat.ARGBFloat,
+                    sRGB = false,
+                    enableRandomWrite = true
+                };
+                NormalRenderTexture = RenderTexture.GetTemporary(normalMapDesc);
             }
 
             // Find the kernel
