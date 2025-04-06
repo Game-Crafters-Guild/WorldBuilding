@@ -296,7 +296,7 @@ namespace GameCraftersGuild.WorldBuilding
                         // Debug output to help identify the issue
                         foreach (var allowedLayer in layerConstraint.AllowedLayers)
                         {
-                            Debug.LogWarning($"Looking for layer: {allowedLayer?.name ?? "null"}");
+                            Debug.LogWarning($"Looking for layer: { (allowedLayer != null ? allowedLayer.name : "null")}");
                         }
                         
                         for (int i = 0; i < terrainData.terrainLayers.Length; i++)
