@@ -38,6 +38,8 @@ struct PrefabSettings
     float minimumDistance;
     float minNormalAlignment; // 0-1 value for minimum normal alignment
     float maxNormalAlignment; // 0-1 value for maximum normal alignment
+    float padding1; // Added padding to match C# struct (48 bytes total)
+    float padding2; // Added padding to match C# struct (48 bytes total)
 };
 StructuredBuffer<PrefabSettings> _PrefabSettings;
 
@@ -75,13 +77,14 @@ struct PlacementResult
     uint isValid;       // 1 if valid position, 0 if not (4 bytes)
     float normalAlignmentFactor; // How much to align to normal (0-1) (4 bytes)
     float3 normal;      // Surface normal at this point (12 bytes)
+    float padding;      // 4 bytes - ADDED to match C# (48 bytes total)
     // Total: 44 bytes
 };
 
 // Buffers for filter pass
 RWStructuredBuffer<PlacementResult> _Results;
 RWStructuredBuffer<PlacementResult> _FilteredResults;
-RWStructuredBuffer<int> _ValidCount;
+RWStructuredBuffer<uint> _ValidCount;
 int _MaxResults;
 int _InputResultsCount;
 
@@ -442,22 +445,35 @@ void GeneratePositions(uint3 id : SV_DispatchThreadID)
     // Get terrain normal for alignment
     float3 normal = GetTerrainNormal(normPos);
     
-    // Choose prefab index - use consistent hash values
-    uint prefabIndex = floor(GetRandomFloat(index * 98765 + 5, _RandomSeed) * _NumberOfGameObjects);
-    if (prefabIndex >= _NumberOfGameObjects)
-        prefabIndex = _NumberOfGameObjects - 1;
+    // Choose prefab index - Final attempt at robust calculation
+    float randomForIndex = GetRandomFloat(index * 98765 + 5, _RandomSeed);
+    int potentialIndex = (int)floor(randomForIndex * _NumberOfGameObjects); 
+    // Clamp using int range first, then cast to uint
+    int clampedIndex = clamp(potentialIndex, 0, (int)_NumberOfGameObjects - 1);
+    uint prefabIndex = (uint)clampedIndex;
     
     // Get prefab-specific settings
     PrefabSettings settings = _PrefabSettings[prefabIndex];
-    
+
+    // --- Sanity Check --- 
+    // Immediately invalidate if read settings seem corrupt (e.g., scale is zero or negative)
+    // Adjust threshold as needed based on expected values
+    if (settings.minScale <= 0 || settings.maxScale <= 0) {
+         _Results[index].isValid = 0; // Mark as invalid immediately
+         return; // Stop processing for this thread
+    }
+    // --- End Sanity Check ---
+
     // Convert normalized to world position with Y offset
     float3 worldPos;
     worldPos.x = _TerrainPosition.x + normPos.x * _TerrainParams.x;
     worldPos.y = height + settings.yOffset;
     worldPos.z = _TerrainPosition.z + normPos.y * _TerrainParams.z;
     
-    // Calculate random scale based on prefab settings - use consistent hash values
-    float scale = lerp(settings.minScale, settings.maxScale, GetRandomFloat(index * 87654 + 6, _RandomSeed));
+    // Calculate random scale based on prefab settings - RESTORED
+    float randomLerpFactor = GetRandomFloat(index * 87654 + 6, _RandomSeed);
+    randomLerpFactor = clamp(randomLerpFactor, 0.0f, 1.0f); // Explicitly clamp [0,1]
+    float scale = lerp(settings.minScale, settings.maxScale, randomLerpFactor);
     
     // Calculate normal alignment factor (0-1) if normal alignment is enabled
     float normalAlignmentFactor = 0.0;
@@ -466,7 +482,7 @@ void GeneratePositions(uint3 id : SV_DispatchThreadID)
         normalAlignmentFactor = lerp(settings.minNormalAlignment, settings.maxNormalAlignment, 
                                      GetRandomFloat(index * 76543 + 8, _RandomSeed));
     }
-    
+
     // Check all constraints and mark if slope constraint fails
     bool allConstraintsValid = true;
     bool slopeValid = CheckSlopeConstraint(slope, 0);
@@ -503,6 +519,12 @@ void GeneratePositions(uint3 id : SV_DispatchThreadID)
         _Results[index].isValid = 1;
         _Results[index].normalAlignmentFactor = normalAlignmentFactor;
         _Results[index].normal = normal;
+    }
+    else
+    {
+        // Non-valid result
+        _Results[index].scale = 0.0f; 
+        _Results[index].isValid = 0;
     }
 }
 
@@ -543,14 +565,14 @@ void FilterObjectCollisions(uint3 id : SV_DispatchThreadID)
     
     // Next, check against other objects already in the filtered results buffer
     uint validCount = 0;
-    InterlockedAdd(_ValidCount[0], 0, validCount); // Atomic read of current valid count
+    InterlockedAdd(_ValidCount[0], (uint)0, validCount); // Ensure 0 is treated as uint for InterlockedAdd
     
     // Early exit for the first object (always valid and nothing to check against)
     if (validCount == 0)
     {
         // This is the first valid object, add it
         uint slotIndex = 0;
-        InterlockedAdd(_ValidCount[0], 1, slotIndex);
+        InterlockedAdd(_ValidCount[0], (uint)1, slotIndex); // Ensure 1 is treated as uint
         
         if (slotIndex < _MaxResults)
         {
@@ -604,7 +626,7 @@ void FilterObjectCollisions(uint3 id : SV_DispatchThreadID)
     {
         // Atomically increment valid count to get our "slot"
         uint slotIndex = 0;
-        InterlockedAdd(_ValidCount[0], 1, slotIndex);
+        InterlockedAdd(_ValidCount[0], (uint)1, slotIndex); // Ensure 1 is treated as uint
         
         // Check if we're still under the max objects limit
         if (slotIndex < _MaxResults)

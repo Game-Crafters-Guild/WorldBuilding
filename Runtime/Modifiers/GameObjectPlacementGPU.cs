@@ -79,7 +79,7 @@ namespace GameCraftersGuild.WorldBuilding
         // Array to hold results
         private PlacementResult[] results;
         private PlacementResult[] filteredResults;
-        private int[] validCountArray;
+        private uint[] validCountArray;
         
         // Arrays for constraints data
         private Vector2[] heightConstraints;
@@ -387,7 +387,9 @@ namespace GameCraftersGuild.WorldBuilding
                     maxRotation = gameObj.MaxRotation,
                     minimumDistance = minDist, // Store unscaled distance
                     minNormalAlignment = gameObj.MinNormalAlignment,
-                    maxNormalAlignment = gameObj.MaxNormalAlignment
+                    maxNormalAlignment = gameObj.MaxNormalAlignment,
+                    padding1 = 0f,
+                    padding2 = 0f
                 };
             }
         }
@@ -607,7 +609,7 @@ namespace GameCraftersGuild.WorldBuilding
             
             // Skip GPU filtering and use valid results directly
             // This allows the coroutine to handle collisions during placement
-            int validIdx = 0;
+            uint validIdx = 0;
             for (int i = 0; i < results.Length && validIdx < numObjects * 3; i++) // Get more candidates than needed
             {
                 if (results[i].isValid == 1)
@@ -619,7 +621,7 @@ namespace GameCraftersGuild.WorldBuilding
             
             validCountArray[0] = validIdx;
             
-            int validCount = Mathf.Min(validCountArray[0], numObjects * 3); // Generate extra candidates
+            int validCount = Mathf.Min((int)validCountArray[0], numObjects * 3); // Generate extra candidates
             //Debug.Log($"GPU Placement: Generated {validCount} candidates for placement");
             
             // Process results
@@ -683,8 +685,8 @@ namespace GameCraftersGuild.WorldBuilding
             if (validCountBuffer == null)
             {
                 ReleaseBuffer(ref validCountBuffer);
-                validCountBuffer = new ComputeBuffer(1, sizeof(int));
-                validCountArray = new int[1];
+                validCountBuffer = new ComputeBuffer(1, sizeof(uint));
+                validCountArray = new uint[1];
             }
             
             // Create/resize height constraints buffer
@@ -753,13 +755,13 @@ namespace GameCraftersGuild.WorldBuilding
             }
             
             // Setup prefab settings buffer with proper struct stride
-            // PrefabSettings has floats and uints which should be aligned properly
             const int prefabSettingsStride = 48; // Use fixed stride for consistent memory layout
             if (prefabSettingsBuffer == null || prefabSettingsBuffer.count != prefabSettings.Length)
             {
                 ReleaseBuffer(ref prefabSettingsBuffer);
                 prefabSettingsBuffer = new ComputeBuffer(Mathf.Max(1, prefabSettings.Length), prefabSettingsStride);
             }
+
             prefabSettingsBuffer.SetData(prefabSettings);
         }
         
