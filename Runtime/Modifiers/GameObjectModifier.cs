@@ -621,11 +621,10 @@ namespace GameCraftersGuild.WorldBuilding
                         else
                         {
                             // Use synchronous instantiation with coroutine
-                            GameObject newObject = UnityEngine.Object.Instantiate(
-                                request.prefab,
+                            GameObject newObject = InstantiateInternal(request.prefab,
                                 request.position,
                                 request.rotation,
-                                currentBatchParent.transform); // Use the batch parent
+                                currentBatchParent.transform);
                             
                             // Set scale
                             newObject.transform.localScale = request.scale;
@@ -733,7 +732,18 @@ namespace GameCraftersGuild.WorldBuilding
             m_EditorCoroutine = null;
             #endif
         }
-        
+
+        private static GameObject InstantiateInternal(GameObject requestPrefab, Vector3 requestPosition, Quaternion requestRotation, Transform transform)
+        {
+#if UNITY_EDITOR
+            GameObject go = PrefabUtility.InstantiatePrefab(requestPrefab, transform) as GameObject;
+            go.transform.position = requestPosition;
+            go.transform.rotation = requestRotation;
+            return go;
+#endif
+            return UnityEngine.Object.Instantiate(requestPrefab, requestPrefab.transform.position, requestPrefab.transform.rotation, transform);
+        }
+
         private void SpawnGameObjectsGPU(WorldBuildingContext context, Bounds worldBounds, Texture mask)
         {
             // Initialize GPU placement if needed
@@ -887,7 +897,7 @@ namespace GameCraftersGuild.WorldBuilding
                     m_CollisionConstraint.AddObject(request.position, effectiveMinDistance);
                 }
                 
-                GameObject newObject = UnityEngine.Object.Instantiate(
+                GameObject newObject = InstantiateInternal(
                     request.prefab,
                     request.position,
                     request.rotation,
