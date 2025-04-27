@@ -194,7 +194,7 @@ namespace GameCraftersGuild.WorldBuilding
             }
         }
 
-        public virtual void SpawnGameObjects(WorldBuildingContext context)
+        public virtual void SpawnGameObjects(WorldBuildingContext context, StampShape shape)
         {
             context.MaintainMaskAspectRatio = m_Shape.MaintainMaskAspectRatio;
 
@@ -206,7 +206,7 @@ namespace GameCraftersGuild.WorldBuilding
                     
                 if (modifier is GameObjectModifier gameObjectModifier)
                 {
-                    gameObjectModifier.SpawnGameObjects(context, WorldBounds, MaskTexture, this.transform);
+                    gameObjectModifier.SpawnGameObjects(context, WorldBounds, MaskTexture, shape);
                 }
             }
         }

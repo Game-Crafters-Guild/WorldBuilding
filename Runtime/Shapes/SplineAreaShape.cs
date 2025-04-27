@@ -13,6 +13,10 @@ namespace GameCraftersGuild.WorldBuilding
         private const int kMaskTextureWidth = 256;
         private const int kMaskTextureHeight = 256;
 
+        // Store the bounds used for mask generation
+        private Vector3 m_MaskGenBoundsMin;
+        private Vector3 m_MaskGenBoundsSize;
+
         // Shader Parameters.
         [SerializeField, HideInInspector] private ComputeShader m_CreateSplineAreaTextureComputeShader;
         private static readonly int kComputeResultId = Shader.PropertyToID("Result");
@@ -102,6 +106,10 @@ namespace GameCraftersGuild.WorldBuilding
                 splineBounds.size = new Vector3(splineBounds.size.z, splineBounds.size.y, splineBounds.size.z);
             }
 
+            // Store the bounds used for generation
+            m_MaskGenBoundsMin = splineBounds.min;
+            m_MaskGenBoundsSize = splineBounds.size;
+
             //
             // Evaluate the positions on the spline.
             //
@@ -172,5 +180,9 @@ namespace GameCraftersGuild.WorldBuilding
 
             spline.Closed = wasClosedShape;
         }
+
+        // Override properties to return the specific bounds used for mask generation
+        public override Vector3 MaskGenerationBoundsMin => m_MaskGenBoundsMin;
+        public override Vector3 MaskGenerationBoundsSize => m_MaskGenBoundsSize;
     }
 }

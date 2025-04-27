@@ -419,7 +419,8 @@ namespace GameCraftersGuild.WorldBuilding
             }
         }
         
-        public void SpawnGameObjects(WorldBuildingContext context, Bounds worldBounds, Texture mask, Transform parent)
+        // Modified signature to accept StampShape
+        public void SpawnGameObjects(WorldBuildingContext context, Bounds worldBounds, Texture mask, StampShape shape)
         {
             // Cancel any in-progress spawning operations
             CancelQueueProcessing();
@@ -444,16 +445,16 @@ namespace GameCraftersGuild.WorldBuilding
             
             // Create a container for spawned objects if needed
             string containerName = "SpawnedObjects";
-            if (parent != null)
+            if (shape != null) // Use shape.name if available
             {
-                containerName = $"{parent.gameObject.name}_Objects";
+                containerName = $"{shape.gameObject.name}_Objects";
             }
             m_ObjectContainer = new GameObject(containerName);
             
             // Parent the container to the Stamp if available
-            if (parent != null)
+            if (shape != null)
             {
-                m_ObjectContainer.transform.SetParent(parent.transform);
+                m_ObjectContainer.transform.SetParent(shape.transform); // Use shape.transform
             }
             
             // Get terrain data
@@ -480,7 +481,7 @@ namespace GameCraftersGuild.WorldBuilding
             // Use GPU-based placement if enabled and available
             if (HasPlacementShader())
             {                
-                SpawnGameObjectsGPU(context, worldBounds, mask);
+                SpawnGameObjectsGPU(context, worldBounds, mask, shape);
             }
         }
 
@@ -744,7 +745,8 @@ namespace GameCraftersGuild.WorldBuilding
             return UnityEngine.Object.Instantiate(requestPrefab, requestPrefab.transform.position, requestPrefab.transform.rotation, transform);
         }
 
-        private void SpawnGameObjectsGPU(WorldBuildingContext context, Bounds worldBounds, Texture mask)
+        // Modified signature to accept StampShape
+        private void SpawnGameObjectsGPU(WorldBuildingContext context, Bounds worldBounds, Texture mask, StampShape shape)
         {
             // Initialize GPU placement if needed
             if (m_GPUPlacement == null)
@@ -753,9 +755,32 @@ namespace GameCraftersGuild.WorldBuilding
             }
             m_GPUPlacement.PlacementComputeShader = PlacementComputeShader;
             
-            // Generate placements on GPU
+            // --- DEBUG LOGGING ---
+            if (shape != null)
+            {
+                Debug.Log($"[SpawnGPU] Shape: {shape.name}");
+                Debug.Log($"[SpawnGPU] WorldToLocalMatrix:\n{shape.transform.worldToLocalMatrix}");
+                Debug.Log($"[SpawnGPU] LocalBounds Center: {shape.LocalBounds.center}");
+                Debug.Log($"[SpawnGPU] LocalBounds Size: {shape.LocalBounds.size}");
+            }
+            else
+            {
+                Debug.LogWarning("[SpawnGPU] Shape is null!");
+            }
+            // --- END DEBUG LOGGING ---
+            
+            // Generate placements on GPU - Pass shape transform info, scale, and mask gen bounds
             List<GameObjectPlacementInfo> placements = m_GPUPlacement.GenerateObjectPlacements(
-                this, context, worldBounds, mask);
+                this, 
+                context, 
+                worldBounds, 
+                mask, 
+                shape.transform.worldToLocalMatrix, // Pass worldToLocalMatrix
+                shape.LocalBounds,                    // Pass LocalBounds (still needed for area calc? Check usage)
+                shape.transform.lossyScale,           // Pass lossyScale
+                shape.MaskGenerationBoundsMin,        // Pass mask gen min
+                shape.MaskGenerationBoundsSize        // Pass mask gen size
+            );
             
             if (placements == null) return;
                 

@@ -15,10 +15,12 @@ namespace GameCraftersGuild.WorldBuilding
 
         SplineContainer SplineContainer { get; }
 
+        StampShape Shape { get; }
+
         public bool ApplyHeights(WorldBuildingContext context);
         public bool ApplySplatmap(WorldBuildingContext context);
         public void GenerateVegetation(WorldBuildingContext context);
-        public void SpawnGameObjects(WorldBuildingContext context);
+        public void SpawnGameObjects(WorldBuildingContext context, StampShape shape);
 
         public Bounds WorldBounds { get; }
         public void GenerateMask();

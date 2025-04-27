@@ -25,6 +25,11 @@ int _GridWidth;
 int _GridDepth;
 int _ObjectsPerSquareUnit;
 
+// Shape transform parameters (NEW)
+float4x4 _ShapeWorldToLocalMatrix;
+float3 _MaskGenerationBoundsMin;
+float3 _MaskGenerationBoundsSize;
+
 // Prefab-specific settings
 struct PrefabSettings
 {
@@ -219,9 +224,10 @@ bool CheckSlopeConstraint(float slope, uint constraintIndex)
     return isValid;
 }
 
-bool CheckMaskConstraint(float2 boundsNorm)
+bool CheckMaskConstraint(float2 shapeUV)
 {
-    float4 maskColor = _MaskTexture.SampleLevel(sampler_MaskTexture, boundsNorm, 0);
+    // Restore original logic
+    float4 maskColor = _MaskTexture.SampleLevel(sampler_MaskTexture, shapeUV, 0);
     
     // Use the actual threshold from MaskConstraint
     float maskValue = maskColor.r;
@@ -230,13 +236,13 @@ bool CheckMaskConstraint(float2 boundsNorm)
     return maskValue > _MaskConstraintThresholds[0];
 }
 
-bool CheckNoiseConstraint(float2 boundsNorm)
+bool CheckNoiseConstraint(float2 shapeUV)
 {
     // Get noise parameters
     float4 noiseParams = _NoiseConstraints[0]; // x: threshold, y: scale, z: offset, w: unused
     
-    // Sample the noise texture
-    float4 noiseColor = _NoiseTexture.SampleLevel(sampler_NoiseTexture, boundsNorm, 0);
+    // Sample the noise texture using shapeUV
+    float4 noiseColor = _NoiseTexture.SampleLevel(sampler_NoiseTexture, shapeUV, 0);
     
     // Use grayscale value for comparison (average of RGB)
     float noiseValue = (noiseColor.r + noiseColor.g + noiseColor.b) / 3.0;
@@ -245,7 +251,7 @@ bool CheckNoiseConstraint(float2 boundsNorm)
     if (noiseValue < 0.001f)
     {
         // Simple Perlin-like noise as fallback, but with added seed influence to make it deterministic
-        float2 scaledPos = boundsNorm * noiseParams.y + float2(noiseParams.z + (_RandomSeed % 100) * 0.01, 
+        float2 scaledPos = shapeUV * noiseParams.y + float2(noiseParams.z + (_RandomSeed % 100) * 0.01, 
                                                               noiseParams.z + (_RandomSeed % 100) * 0.01);
         float2 i = floor(scaledPos);
         float2 f = frac(scaledPos);
@@ -351,10 +357,10 @@ bool CheckLayerConstraint(float2 normPos)
     return false;
 }
 
-bool CheckAllConstraints(float2 normPos, float2 boundsNorm, float height, float slope, float3 worldPos, float minDistance, float objectScale)
+bool CheckAllConstraints(float2 normPos, float2 shapeUV, float height, float slope, float3 worldPos, float minDistance, float objectScale)
 {
-    // Check mask constraint if texture provided
-    if (!CheckMaskConstraint(boundsNorm))
+    // Check mask constraint if texture provided (using shapeUV)
+    if (!CheckMaskConstraint(shapeUV))
         return false;
     
     // Check height constraints
@@ -365,8 +371,8 @@ bool CheckAllConstraints(float2 normPos, float2 boundsNorm, float height, float 
     if (!CheckSlopeConstraint(slope, 0))
         return false;
     
-    // Check noise constraints
-    if (!CheckNoiseConstraint(boundsNorm))
+    // Check noise constraints (using shapeUV)
+    if (!CheckNoiseConstraint(shapeUV))
         return false;
     
     // Check layer constraint
@@ -407,6 +413,8 @@ void GeneratePositions(uint3 id : SV_DispatchThreadID)
         return;
     
     // Calculate position within bounds (0-1 relative to bounds, not terrain)
+    // This boundsNorm is kept for potential future use or debugging, 
+    // but mask sampling will use shapeUV calculated later.
     float2 boundsNorm;
     
     // Calculate the aspect ratio of the bounds
@@ -471,6 +479,19 @@ void GeneratePositions(uint3 id : SV_DispatchThreadID)
     worldPos.y = height + settings.yOffset;
     worldPos.z = _TerrainPosition.z + normPos.y * _TerrainParams.z;
     
+    // --- Calculate Shape UVs --- (NEW)
+    // Transform world position to shape's local space
+    float3 localPos = mul(_ShapeWorldToLocalMatrix, float4(worldPos, 1.0)).xyz;
+    
+    // Calculate UVs relative to the mask generation bounds
+    float3 relativePos = localPos - _MaskGenerationBoundsMin; // Use Min instead of Center
+    float2 shapeUV;
+    // Normalize position within the mask generation bounds (handle potential division by zero)
+    shapeUV.x = (_MaskGenerationBoundsSize.x > 0.001) ? (relativePos.x / _MaskGenerationBoundsSize.x) : 0.5;
+    shapeUV.y = (_MaskGenerationBoundsSize.z > 0.001) ? (relativePos.z / _MaskGenerationBoundsSize.z) : 0.5;
+    shapeUV = clamp(shapeUV, 0.0, 1.0); // Clamp UVs to [0, 1] range
+    // --- End Calculate Shape UVs ---
+    
     // Calculate random scale based on prefab settings - RESTORED
     float randomLerpFactor = GetRandomFloat(index * 87654 + 6, _RandomSeed);
     randomLerpFactor = clamp(randomLerpFactor, 0.0f, 1.0f); // Explicitly clamp [0,1]
@@ -488,20 +509,16 @@ void GeneratePositions(uint3 id : SV_DispatchThreadID)
     bool allConstraintsValid = true;
     bool slopeValid = CheckSlopeConstraint(slope, 0);
     
+    // Pass shapeUV to CheckAllConstraints instead of boundsNorm
+    if (!CheckAllConstraints(normPos, shapeUV, height, slope, worldPos, settings.minimumDistance, scale))
+    {
+        allConstraintsValid = false;
+    }
+    
     // Store the raw slope with a special marker if slope constraint fails
     if (!slopeValid)
     {
         _Results[index].normalAlignmentFactor = -10.0; // Use this field for debugging since we're not using debugSlope anymore
-        allConstraintsValid = false;
-    }
-    
-    // Check other constraints
-    if (!CheckHeightConstraint(height, 0) || 
-        !CheckMaskConstraint(boundsNorm) ||
-        !CheckNoiseConstraint(boundsNorm) ||
-        !CheckLayerConstraint(normPos) ||
-        !CheckCollisionConstraint(worldPos, settings.minimumDistance, scale))
-    {
         allConstraintsValid = false;
     }
     

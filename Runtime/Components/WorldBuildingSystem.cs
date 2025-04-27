@@ -675,7 +675,8 @@ namespace GameCraftersGuild.WorldBuilding
                 {
                     m_WorldBuildingContext.CurrentTransform = builder.TransformMatrix;
                     m_WorldBuildingContext.CurrentTransformComponent = builder.Transform;
-                    builder.SpawnGameObjects(m_WorldBuildingContext);
+                    // Directly use builder.Shape as guaranteed by the interface
+                    builder.SpawnGameObjects(m_WorldBuildingContext, builder.Shape); 
                 }
             }
             

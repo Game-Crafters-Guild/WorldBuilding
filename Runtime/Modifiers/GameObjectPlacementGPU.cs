@@ -428,6 +428,11 @@ namespace GameCraftersGuild.WorldBuilding
             WorldBuildingContext context, 
             Bounds worldBounds, 
             Texture mask,
+            Matrix4x4 shapeWorldToLocalMatrix,
+            Bounds shapeLocalBounds,
+            Vector3 shapeScale,
+            Vector3 maskGenBoundsMin,
+            Vector3 maskGenBoundsSize,
             int maxAttempts = 1000000)
         {
             placementComputeShader = modifier.PlacementComputeShader;
@@ -474,10 +479,10 @@ namespace GameCraftersGuild.WorldBuilding
             float boundsMaxX = Mathf.Clamp01(boundsMaxX_original);
             float boundsMaxZ = Mathf.Clamp01(boundsMaxZ_original);
 
-            // Calculate the area in square units directly from world bounds without clamping
-            // This ensures consistency even when partially outside terrain bounds
-            float areaWidth = worldBoundsWidth;
-            float areaDepth = worldBoundsDepth;
+            // Calculate the area in square units directly from the scaled shape bounds
+            // This ensures density is relative to the shape's actual size
+            float areaWidth = shapeLocalBounds.size.x * Mathf.Abs(shapeScale.x); 
+            float areaDepth = shapeLocalBounds.size.z * Mathf.Abs(shapeScale.z);
             float areaSize = areaWidth * areaDepth;
 
             // Calculate number of square units in the area - use a deterministic ceiling function
@@ -572,7 +577,10 @@ namespace GameCraftersGuild.WorldBuilding
                 modifier.RandomSeed, 
                 modifier.RandomOffset,
                 collisionConstraint != null ? collisionConstraint.DefaultMinDistance : 2.0f, // Get from constraint
-                mask
+                mask,
+                shapeWorldToLocalMatrix,
+                maskGenBoundsMin,
+                maskGenBoundsSize
             );
             
             // FIRST PASS: Generate potential positions
@@ -781,7 +789,10 @@ namespace GameCraftersGuild.WorldBuilding
             int randomSeed, 
             float randomOffset,
             float defaultMinDistance,
-            Texture mask)
+            Texture mask,
+            Matrix4x4 shapeWorldToLocalMatrix,
+            Vector3 maskGenBoundsMin,
+            Vector3 maskGenBoundsSize)
         {
             Vector3 terrainPosition = context.TerrainPosition;
             Vector3 terrainSize = terrainData.size;
@@ -808,6 +819,11 @@ namespace GameCraftersGuild.WorldBuilding
             int objectCount = placedObjectPositions.Length / 3; // Each object has 3 float coordinates
             placementComputeShader.SetInt("_PlacedObjectCount", objectCount);
             placementComputeShader.SetFloat("_DefaultMinDistance", defaultMinDistance);
+            
+            // Set shape transform parameters
+            placementComputeShader.SetMatrix("_ShapeWorldToLocalMatrix", shapeWorldToLocalMatrix);
+            placementComputeShader.SetVector("_MaskGenerationBoundsMin", maskGenBoundsMin);
+            placementComputeShader.SetVector("_MaskGenerationBoundsSize", maskGenBoundsSize);
             
             // Set texture samplers - use the context render textures directly
             placementComputeShader.SetTexture(generatePositionsKernelId, "_HeightmapTexture", context.HeightmapRenderTexture);
