@@ -449,11 +449,12 @@ void GeneratePositions(uint3 id : SV_DispatchThreadID)
     float randomForIndex = GetRandomFloat(index * 98765 + 5, _RandomSeed);
     int potentialIndex = (int)floor(randomForIndex * _NumberOfGameObjects); 
     // Clamp using int range first, then cast to uint
-    int clampedIndex = clamp(potentialIndex, 0, (int)_NumberOfGameObjects - 1);
-    uint prefabIndex = (uint)clampedIndex;
+    int maxPrefabIndex = max(0, (int)_NumberOfGameObjects - 1); // Ensure max index is not negative if count is 0
+    int clampedIndex = clamp(potentialIndex, 0, maxPrefabIndex);
+    int prefabIndex = clampedIndex; // Use int directly
     
     // Get prefab-specific settings
-    PrefabSettings settings = _PrefabSettings[prefabIndex];
+    PrefabSettings settings = _PrefabSettings[prefabIndex]; // Access with int
 
     // --- Sanity Check --- 
     // Immediately invalidate if read settings seem corrupt (e.g., scale is zero or negative)
@@ -515,7 +516,7 @@ void GeneratePositions(uint3 id : SV_DispatchThreadID)
             _Results[index].rotation = lerp(settings.minRotation, settings.maxRotation, 
                                            GetRandomFloat(index * 65432 + 7, _RandomSeed));
         }
-        _Results[index].prefabIndex = prefabIndex;
+        _Results[index].prefabIndex = (uint)prefabIndex; // Cast to uint only for storage
         _Results[index].isValid = 1;
         _Results[index].normalAlignmentFactor = normalAlignmentFactor;
         _Results[index].normal = normal;
@@ -525,6 +526,7 @@ void GeneratePositions(uint3 id : SV_DispatchThreadID)
         // Non-valid result
         _Results[index].scale = 0.0f; 
         _Results[index].isValid = 0;
+        _Results[index].prefabIndex = (uint)prefabIndex; // Cast to uint only for storage
     }
 }
 
@@ -545,7 +547,7 @@ void FilterObjectCollisions(uint3 id : SV_DispatchThreadID)
     // Get this object's position, scale, and prefab index
     float3 position = _Results[index].position;
     float scale = _Results[index].scale;
-    uint prefabIndex = _Results[index].prefabIndex;
+    int prefabIndex = (int)_Results[index].prefabIndex; // Read as uint, cast to int for use
     
     // Get minimum distance for this object
     PrefabSettings settings = _PrefabSettings[prefabIndex];
@@ -574,7 +576,7 @@ void FilterObjectCollisions(uint3 id : SV_DispatchThreadID)
         uint slotIndex = 0;
         InterlockedAdd(_ValidCount[0], (uint)1, slotIndex); // Ensure 1 is treated as uint
         
-        if (slotIndex < _MaxResults)
+        if (slotIndex < (uint)_MaxResults)
         {
             _FilteredResults[slotIndex] = _Results[index];
         }
@@ -591,7 +593,7 @@ void FilterObjectCollisions(uint3 id : SV_DispatchThreadID)
         // Get the other object's position, scale, and minimum distance
         float3 otherPos = _FilteredResults[j].position;
         float otherScale = _FilteredResults[j].scale;
-        uint otherPrefabIndex = _FilteredResults[j].prefabIndex;
+        int otherPrefabIndex = (int)_FilteredResults[j].prefabIndex; // Read as uint, cast to int for use
         
         // Skip distance check for far away objects (optimization)
         float3 diff = position - otherPos;
@@ -629,7 +631,7 @@ void FilterObjectCollisions(uint3 id : SV_DispatchThreadID)
         InterlockedAdd(_ValidCount[0], (uint)1, slotIndex); // Ensure 1 is treated as uint
         
         // Check if we're still under the max objects limit
-        if (slotIndex < _MaxResults)
+        if (slotIndex < (uint)_MaxResults)
         {
             // Copy result to filtered array
             _FilteredResults[slotIndex] = _Results[index];
