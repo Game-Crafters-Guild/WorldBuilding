@@ -175,8 +175,8 @@ namespace GameCraftersGuild.WorldBuilding
             foreach (var splatModifier in m_Modifiers.TerrainSplatModifiers)
             {
                 if (!splatModifier.Enabled) continue;
-                splatModifier.ApplySplatmap(context, WorldBounds, MaskTexture);
                 // Assume that if an enabled splat modifier exists, changes were applied
+                splatModifier.ApplySplatmap(context, this.WorldBounds, MaskTexture);
                 changesApplied = true;
             }
             

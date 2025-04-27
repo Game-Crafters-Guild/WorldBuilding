@@ -755,20 +755,6 @@ namespace GameCraftersGuild.WorldBuilding
             }
             m_GPUPlacement.PlacementComputeShader = PlacementComputeShader;
             
-            // --- DEBUG LOGGING ---
-            if (shape != null)
-            {
-                Debug.Log($"[SpawnGPU] Shape: {shape.name}");
-                Debug.Log($"[SpawnGPU] WorldToLocalMatrix:\n{shape.transform.worldToLocalMatrix}");
-                Debug.Log($"[SpawnGPU] LocalBounds Center: {shape.LocalBounds.center}");
-                Debug.Log($"[SpawnGPU] LocalBounds Size: {shape.LocalBounds.size}");
-            }
-            else
-            {
-                Debug.LogWarning("[SpawnGPU] Shape is null!");
-            }
-            // --- END DEBUG LOGGING ---
-            
             // Generate placements on GPU - Pass shape transform info, scale, and mask gen bounds
             List<GameObjectPlacementInfo> placements = m_GPUPlacement.GenerateObjectPlacements(
                 this, 
@@ -776,7 +762,6 @@ namespace GameCraftersGuild.WorldBuilding
                 worldBounds, 
                 mask, 
                 shape.transform.worldToLocalMatrix, // Pass worldToLocalMatrix
-                shape.LocalBounds,                    // Pass LocalBounds (still needed for area calc? Check usage)
                 shape.transform.lossyScale,           // Pass lossyScale
                 shape.MaskGenerationBoundsMin,        // Pass mask gen min
                 shape.MaskGenerationBoundsSize        // Pass mask gen size

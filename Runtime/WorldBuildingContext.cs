@@ -152,16 +152,19 @@ namespace GameCraftersGuild.WorldBuilding
         public void DrawQuad(Bounds worldBounds, RenderTexture renderTexture, Material material,
             MaterialPropertyBlock materialPropertyBlock, int shaderPass = 0)
         {
+            // Use worldBounds directly as it should now be the correct AABB
             float2 positionToTerrainSpace = WorldPositionToTerrainSpace(worldBounds.center) - new float2(0.5f, 0.5f);
-            float2 sizeToTerrainSpace = new float2(worldBounds.size.x, worldBounds.size.z) / m_TerrainSize;
+            float2 sizeToTerrainSpace = new float2(worldBounds.size.x, worldBounds.size.z) / m_TerrainSize; 
+            
             Matrix4x4 worldTransform = CurrentTransform;
-            worldTransform.m03 = worldTransform.m13 = worldTransform.m23 = 0.0f;
+            worldTransform.m03 = worldTransform.m13 = worldTransform.m23 = 0.0f; // Remove translation for matrix mul
 
             float3 aspectRatio;
             if (MaintainMaskAspectRatio)
             {
                 aspectRatio = Vector3.one;
             }
+            // Use worldBounds for aspect ratio calculation
             else if (worldBounds.size.x > worldBounds.size.z)
             {
                 aspectRatio = new Vector3(1.0f, 1.0f, worldBounds.size.x / worldBounds.size.z);
@@ -183,7 +186,9 @@ namespace GameCraftersGuild.WorldBuilding
                 Matrix4x4.Scale(new Vector3(sizeToTerrainSpace.x, 1.0f, sizeToTerrainSpace.y) * aspectRatio);
             Matrix4x4 translationMatrix = Matrix4x4.Translate(new Vector3(positionToTerrainSpace.x, 0.0f,
                 positionToTerrainSpace.y));
-            Matrix4x4 transform = translationMatrix * worldTransform * scaleMatrix;
+            // Apply worldTransform (rotation/scale) AFTER translation and scaling 
+            // This should be correct now because worldBounds provides the correct final size
+            Matrix4x4 transform = translationMatrix * scaleMatrix; 
             cmd.DrawMesh(m_Quad, transform, material, 0, shaderPass, properties: materialPropertyBlock);
             Graphics.ExecuteCommandBuffer(cmd);
         }
@@ -191,16 +196,19 @@ namespace GameCraftersGuild.WorldBuilding
         private void DrawQuadSplat(Bounds worldBounds, RenderTexture renderTexture, Material material,
             MaterialPropertyBlock materialPropertyBlock)
         {
+            // Use worldBounds directly as it should now be the correct AABB
             float2 positionToTerrainSpace = WorldPositionToTerrainSpace(worldBounds.center) - new float2(0.5f, 0.5f);
             float2 sizeToTerrainSpace = new float2(worldBounds.size.x, worldBounds.size.z) / m_TerrainSize;
+            
             Matrix4x4 worldTransform = CurrentTransform;
-            worldTransform.m03 = worldTransform.m13 = worldTransform.m23 = 0.0f;
+            worldTransform.m03 = worldTransform.m13 = worldTransform.m23 = 0.0f; // Remove translation for matrix mul
 
             float3 aspectRatio;
             if (MaintainMaskAspectRatio)
             {
                 aspectRatio = Vector3.one;
             }
+            // Use worldBounds for aspect ratio calculation
             else if (worldBounds.size.x > worldBounds.size.z)
             {
                 aspectRatio = new Vector3(1.0f, 1.0f, worldBounds.size.x / worldBounds.size.z);
@@ -222,7 +230,8 @@ namespace GameCraftersGuild.WorldBuilding
                 Matrix4x4.Scale(new Vector3(sizeToTerrainSpace.x, 1.0f, sizeToTerrainSpace.y) * aspectRatio);
             Matrix4x4 translationMatrix = Matrix4x4.Translate(new Vector3(positionToTerrainSpace.x, 0.0f,
                 positionToTerrainSpace.y));
-            Matrix4x4 transform = translationMatrix * worldTransform * scaleMatrix;
+            // Apply worldTransform (rotation/scale) AFTER translation and scaling
+            Matrix4x4 transform = translationMatrix * scaleMatrix;
 
             cmd.DrawMesh(m_Quad, transform, material, 0, 0, properties: materialPropertyBlock);
             cmd.DrawMesh(m_Quad, transform, material, 0, 1, properties: materialPropertyBlock);

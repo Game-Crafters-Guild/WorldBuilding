@@ -429,7 +429,6 @@ namespace GameCraftersGuild.WorldBuilding
             Bounds worldBounds, 
             Texture mask,
             Matrix4x4 shapeWorldToLocalMatrix,
-            Bounds shapeLocalBounds,
             Vector3 shapeScale,
             Vector3 maskGenBoundsMin,
             Vector3 maskGenBoundsSize,
@@ -479,10 +478,9 @@ namespace GameCraftersGuild.WorldBuilding
             float boundsMaxX = Mathf.Clamp01(boundsMaxX_original);
             float boundsMaxZ = Mathf.Clamp01(boundsMaxZ_original);
 
-            // Calculate the area in square units directly from the scaled shape bounds
-            // This ensures density is relative to the shape's actual size
-            float areaWidth = shapeLocalBounds.size.x * Mathf.Abs(shapeScale.x); 
-            float areaDepth = shapeLocalBounds.size.z * Mathf.Abs(shapeScale.z);
+            // Calculate the area in square units using mask generation bounds and scale
+            float areaWidth = maskGenBoundsSize.x * Mathf.Abs(shapeScale.x); 
+            float areaDepth = maskGenBoundsSize.z * Mathf.Abs(shapeScale.z);
             float areaSize = areaWidth * areaDepth;
 
             // Calculate number of square units in the area - use a deterministic ceiling function

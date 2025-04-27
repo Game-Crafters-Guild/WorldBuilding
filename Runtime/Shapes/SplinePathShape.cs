@@ -21,6 +21,10 @@ namespace GameCraftersGuild.WorldBuilding
         [Tooltip("Higher resolution gives smoother edges but uses more memory")]
         private const int kMaskResolution = 512;
 
+        // Store the bounds used for mask generation projection
+        private Vector3 m_MaskGenBoundsMin;
+        private Vector3 m_MaskGenBoundsSize;
+
         private static readonly int kMaterialColorId = Shader.PropertyToID("_Color");
 
         [SerializeField] List<SplineData<float>> m_Widths = new List<SplineData<float>>();
@@ -201,7 +205,13 @@ namespace GameCraftersGuild.WorldBuilding
             Matrix4x4 projectionMatrix = Matrix4x4.Ortho(-largerMeshExtents, largerMeshExtents, -largerMeshExtents,
                 largerMeshExtents, -extentsYPlusOne, extentsYPlusOne);
             projectionMatrix = GL.GetGPUProjectionMatrix(projectionMatrix, false);
-
+            
+            // Store the bounds used for this ortho projection for GPU placement UVs
+            // Center is meshBounds.center, Size is determined by largerMeshExtents * 2
+            float maskGenSize = largerMeshExtents * 2.0f;
+            m_MaskGenBoundsSize = new Vector3(maskGenSize, meshBounds.size.y, maskGenSize); // Keep original Y size if needed
+            m_MaskGenBoundsMin = meshBounds.center - m_MaskGenBoundsSize * 0.5f;
+            
             CommandBuffer cmd = new CommandBuffer();
             cmd.SetRenderTarget(renderTexture);
             cmd.ClearRenderTarget(false, true, Color.clear);
@@ -241,6 +251,10 @@ namespace GameCraftersGuild.WorldBuilding
 
             RenderTexture.ReleaseTemporary(renderTexture);
         }
+
+        // Override properties to return the specific bounds used for mask generation
+        public override Vector3 MaskGenerationBoundsMin => m_MaskGenBoundsMin;
+        public override Vector3 MaskGenerationBoundsSize => m_MaskGenBoundsSize;
 
         public override bool ContainsSplineData(SplineData<float> splineData)
         {

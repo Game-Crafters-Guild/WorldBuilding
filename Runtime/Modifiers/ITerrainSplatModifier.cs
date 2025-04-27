@@ -14,6 +14,5 @@ namespace GameCraftersGuild.WorldBuilding
 
         public abstract int GetNumTerrainLayers();
         public abstract TerrainLayer GetTerrainLayer(int index);
-
     }
 }
