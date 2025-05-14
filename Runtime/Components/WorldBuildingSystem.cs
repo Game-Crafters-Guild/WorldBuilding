@@ -21,8 +21,7 @@ namespace GameCraftersGuild.WorldBuilding
 
         private static void StateChange(UnityEditor.PlayModeStateChange playModeState)
         {
-            if (playModeState == UnityEditor.PlayModeStateChange.EnteredEditMode ||
-                playModeState == UnityEditor.PlayModeStateChange.EnteredPlayMode)
+            if (playModeState is UnityEditor.PlayModeStateChange.EnteredEditMode or UnityEditor.PlayModeStateChange.EnteredPlayMode)
             {
                 IsChangingState = false;
                 return;
