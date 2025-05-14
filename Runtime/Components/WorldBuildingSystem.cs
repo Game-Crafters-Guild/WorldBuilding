@@ -11,6 +11,26 @@ namespace GameCraftersGuild.WorldBuilding
     [ExecuteInEditMode]
     public class WorldBuildingSystem : MonoBehaviour
     {
+#if UNITY_EDITOR
+        private static bool IsChangingState = false;
+        [UnityEditor.InitializeOnLoadMethod]
+        static void InitOnLoadMethod()
+        {
+            UnityEditor.EditorApplication.playModeStateChanged += StateChange;
+        }
+
+        private static void StateChange(UnityEditor.PlayModeStateChange playModeState)
+        {
+            if (playModeState == UnityEditor.PlayModeStateChange.EnteredEditMode ||
+                playModeState == UnityEditor.PlayModeStateChange.EnteredPlayMode)
+            {
+                IsChangingState = false;
+                return;
+            }
+            IsChangingState = true;
+        }
+#endif
+        [SerializeField, HideInInspector]
         private List<IWorldBuilder> m_WorldBuilders = new List<IWorldBuilder>();
         private Dictionary<TerrainLayer, int> m_TerrainLayersIndexMap = new Dictionary<TerrainLayer, int>();
 
@@ -283,6 +303,12 @@ namespace GameCraftersGuild.WorldBuilding
 
         private void Update()
         {
+#if UNITY_EDITOR
+            if (IsChangingState)
+            {
+                return;
+            }
+#endif
             // Check for dirty builders and collect them
             for (int i = m_WorldBuilders.Count - 1; i >= 0; i--)
             {
@@ -320,6 +346,9 @@ namespace GameCraftersGuild.WorldBuilding
 
         internal void AddWorldBuilder(IWorldBuilder worldBuilder)
         {
+#if UNITY_EDITOR
+            if (IsChangingState) return;
+#endif
             if (m_WorldBuilders.Contains(worldBuilder))
                 return;
 
@@ -337,6 +366,10 @@ namespace GameCraftersGuild.WorldBuilding
 
         internal void RemoveWorldBuilder(IWorldBuilder worldBuilder)
         {
+#if UNITY_EDITOR
+            if (IsChangingState) return;
+#endif
+            
             if (!m_WorldBuilders.Contains(worldBuilder))
                 return;
             
