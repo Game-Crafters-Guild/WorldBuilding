@@ -368,13 +368,33 @@ namespace GameCraftersGuild.WorldBuilding
             }
         }
         
-        public void ClearSpawnedObjects()
+        public void ClearSpawnedObjects(WorldBuildingContext context = null)
         {
             // Cancel any running coroutines first
             CancelQueueProcessing();
             
             // Clear the instantiation queue
             m_InstantiationQueue.Clear();
+            
+            #if UNITY_EDITOR
+            if (context != null)
+            {
+                for (int i = context.CurrentTransformComponent.childCount; i-- > 0;)
+                {
+                    var child = context.CurrentTransformComponent.GetChild(i);
+                    if (child.gameObject.name != $"{context.CurrentTransformComponent.gameObject.name}_Objects")
+                        continue;
+                    if (Application.isPlaying)
+                    {
+                        UnityEngine.Object.Destroy(child.gameObject);
+                    }
+                    else
+                    {
+                        UnityEngine.Object.DestroyImmediate(child.gameObject);
+                    }
+                }
+            }
+#endif
             
             foreach (var obj in m_SpawnedObjects)
             {
@@ -441,7 +461,7 @@ namespace GameCraftersGuild.WorldBuilding
             }
             
             // First clear any previously spawned objects
-            ClearSpawnedObjects();
+            ClearSpawnedObjects(context);
             
             // Create a container for spawned objects if needed
             string containerName = "SpawnedObjects";
