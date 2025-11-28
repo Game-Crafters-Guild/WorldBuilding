@@ -28,7 +28,7 @@ namespace GameCraftersGuild.WorldBuilding
         private float MaxTerrainHeight { get; set; }
         public TerrainData TerrainData { get; private set; }
         public Matrix4x4 CurrentTransform { get; internal set; }
-        
+
         public Transform CurrentTransformComponent { get; internal set; }
         public Dictionary<TerrainLayer, int> TerrainLayersIndexMap { get; internal set; }
         public RenderTexture[] SplatRenderTextures { get; private set; }
@@ -38,21 +38,21 @@ namespace GameCraftersGuild.WorldBuilding
         internal Material m_ApplyHeightmapMaterial;
         internal Material m_ApplySplatmapMaterial;
 
-        private float4 FallOffVector 
-        { 
+        private float4 FallOffVector
+        {
             get
             {
                 // Base values for min and max
                 float min = 1.0f - MaskFalloff.MaxIntensity;
                 float max = 1.0f - MaskFalloff.MinIntensity;
-                
+
                 // Encode the falloff type in the z component
                 float falloffTypeEncoded = (float)MaskFalloff.FalloffFunction;
-                
+
                 return new float4(min, max, falloffTypeEncoded, 0.0f);
             }
         }
-        
+
         private float4 MaskRangeVector
         {
             get
@@ -67,7 +67,7 @@ namespace GameCraftersGuild.WorldBuilding
         // Vegetation data containers
         private List<TreeInstance> m_TreeInstances = new List<TreeInstance>();
         private Dictionary<int, int[,]> m_DetailLayers = new Dictionary<int, int[,]>();
-        
+
         // Tree and detail prototype collections.
         private List<TreePrototype> m_TreePrototypes = new List<TreePrototype>();
         private List<DetailPrototype> m_DetailPrototypes = new List<DetailPrototype>();
@@ -85,7 +85,8 @@ namespace GameCraftersGuild.WorldBuilding
             float4 terrainWorldHeightRange =
                 new float4(m_TerrainPosition.y, m_TerrainPosition.y + MaxTerrainHeight, 0.0f, 0.0f);
             MaterialPropertyBlock materialPropertyBlock = new MaterialPropertyBlock();
-            materialPropertyBlock.SetTexture("_Mask", mask);
+            // Unity 6.2+: SetTexture no longer accepts null, so fall back to a white mask when none is provided
+            materialPropertyBlock.SetTexture("_Mask", mask != null ? mask : Texture2D.whiteTexture);
             materialPropertyBlock.SetTexture("_Data", Texture2D.blackTexture);
             materialPropertyBlock.SetVector("_HeightRange", Vector4.zero);
             materialPropertyBlock.SetVector("_Falloff", FallOffVector);
@@ -108,7 +109,8 @@ namespace GameCraftersGuild.WorldBuilding
             float4 terrainWorldHeightRange =
                 new float4(m_TerrainPosition.y, m_TerrainPosition.y + MaxTerrainHeight, 0.0f, 0.0f);
             MaterialPropertyBlock materialPropertyBlock = new MaterialPropertyBlock();
-            materialPropertyBlock.SetTexture("_Mask", mask);
+            // Unity 6.2+: SetTexture no longer accepts null, so fall back to a white mask when none is provided
+            materialPropertyBlock.SetTexture("_Mask", mask != null ? mask : Texture2D.whiteTexture);
             materialPropertyBlock.SetTexture("_Data", heightmap != null ? heightmap : Texture2D.whiteTexture);
             materialPropertyBlock.SetVector("_HeightRange", heightRangeNormalized);
             materialPropertyBlock.SetVector("_Falloff", FallOffVector);
@@ -154,8 +156,8 @@ namespace GameCraftersGuild.WorldBuilding
         {
             // Use worldBounds directly as it should now be the correct AABB
             float2 positionToTerrainSpace = WorldPositionToTerrainSpace(worldBounds.center) - new float2(0.5f, 0.5f);
-            float2 sizeToTerrainSpace = new float2(worldBounds.size.x, worldBounds.size.z) / m_TerrainSize; 
-            
+            float2 sizeToTerrainSpace = new float2(worldBounds.size.x, worldBounds.size.z) / m_TerrainSize;
+
             Matrix4x4 worldTransform = CurrentTransform;
             worldTransform.m03 = worldTransform.m13 = worldTransform.m23 = 0.0f; // Remove translation for matrix mul
 
@@ -188,7 +190,7 @@ namespace GameCraftersGuild.WorldBuilding
                 positionToTerrainSpace.y));
             // Apply worldTransform (rotation/scale) AFTER translation and scaling 
             // This should be correct now because worldBounds provides the correct final size
-            Matrix4x4 transform = translationMatrix * scaleMatrix; 
+            Matrix4x4 transform = translationMatrix * scaleMatrix;
             cmd.DrawMesh(m_Quad, transform, material, 0, shaderPass, properties: materialPropertyBlock);
             Graphics.ExecuteCommandBuffer(cmd);
         }
@@ -199,7 +201,7 @@ namespace GameCraftersGuild.WorldBuilding
             // Use worldBounds directly as it should now be the correct AABB
             float2 positionToTerrainSpace = WorldPositionToTerrainSpace(worldBounds.center) - new float2(0.5f, 0.5f);
             float2 sizeToTerrainSpace = new float2(worldBounds.size.x, worldBounds.size.z) / m_TerrainSize;
-            
+
             Matrix4x4 worldTransform = CurrentTransform;
             worldTransform.m03 = worldTransform.m13 = worldTransform.m23 = 0.0f; // Remove translation for matrix mul
 
@@ -244,7 +246,8 @@ namespace GameCraftersGuild.WorldBuilding
             int layerRenderTextureIndex = terrainLayerIndex / 4;
             RenderTexture layerRenderTarget = SplatRenderTextures[layerRenderTextureIndex];
             MaterialPropertyBlock materialPropertyBlock = new MaterialPropertyBlock();
-            materialPropertyBlock.SetTexture("_Mask", mask);
+            // Unity 6.2+: SetTexture no longer accepts null, so fall back to a white mask when none is provided
+            materialPropertyBlock.SetTexture("_Mask", mask != null ? mask : Texture2D.whiteTexture);
             float4 intensityVector = float4.zero;
             intensityVector[terrainLayerIndex % 4] = intensity;
             materialPropertyBlock.SetVector("_Intensity", intensityVector);
@@ -317,7 +320,7 @@ namespace GameCraftersGuild.WorldBuilding
             }
 
             SplatRenderTextures = null;
-            
+
             ClearVegetation();
         }
 
@@ -343,7 +346,7 @@ namespace GameCraftersGuild.WorldBuilding
             m_TreeInstances.Add(treeInstance);
             m_RegisteredTreeIndices.Add(treeInstance.prototypeIndex);
         }
-        
+
         /// <summary>
         /// Sets a detail density at the specified position.
         /// </summary>
@@ -358,14 +361,14 @@ namespace GameCraftersGuild.WorldBuilding
                     m_DetailLayers[prototypeIndex] = detailLayer;
                 }
             }
-            
+
             if (detailLayer != null && x >= 0 && y >= 0 && x < detailLayer.GetLength(1) && y < detailLayer.GetLength(0))
             {
                 detailLayer[y, x] = density;
                 m_RegisteredDetailIndices.Add(prototypeIndex);
             }
         }
-        
+
         /// <summary>
         /// Sets detail densities for a region of the terrain.
         /// </summary>
@@ -380,12 +383,12 @@ namespace GameCraftersGuild.WorldBuilding
                     m_DetailLayers[prototypeIndex] = detailLayer;
                 }
             }
-            
+
             if (detailLayer != null && detailPatch != null)
             {
                 int patchWidth = detailPatch.GetLength(1);
                 int patchHeight = detailPatch.GetLength(0);
-                
+
                 // Copy patch to the main detail layer
                 for (int y = 0; y < patchHeight; y++)
                 {
@@ -393,18 +396,18 @@ namespace GameCraftersGuild.WorldBuilding
                     {
                         int targetX = xBase + x;
                         int targetY = yBase + y;
-                        
+
                         if (targetX >= 0 && targetY >= 0 && targetX < detailLayer.GetLength(1) && targetY < detailLayer.GetLength(0))
                         {
                             detailLayer[targetY, targetX] = detailPatch[y, x];
                         }
                     }
                 }
-                
+
                 m_RegisteredDetailIndices.Add(prototypeIndex);
             }
         }
-        
+
         /// <summary>
         /// Applies all collected vegetation data to the terrain.
         /// </summary>
@@ -412,14 +415,14 @@ namespace GameCraftersGuild.WorldBuilding
         {
             if (TerrainData == null)
                 return;
-            
+
             // Apply tree prototypes and instances to the terrain
             if (m_TreePrototypes.Count > 0)
             {
                 TerrainData.treePrototypes = m_TreePrototypes.ToArray();
                 TerrainData.RefreshPrototypes();
             }
-            
+
             if (m_TreeInstances.Count > 0)
             {
                 TerrainData.treeInstances = m_TreeInstances.ToArray();
@@ -437,11 +440,11 @@ namespace GameCraftersGuild.WorldBuilding
             {
                 int detailIndex = detailLayer.Key;
                 int[,] detailData = detailLayer.Value;
-                
+
                 TerrainData.SetDetailLayer(0, 0, detailIndex, detailData);
             }
         }
-        
+
         /// <summary>
         /// Clears all vegetation data stored in the context.
         /// </summary>
@@ -487,8 +490,8 @@ namespace GameCraftersGuild.WorldBuilding
             }
 
             // Create normal render texture if it doesn't exist
-            if (NormalRenderTexture == null || 
-                NormalRenderTexture.width != m_HeightmapRenderTexture.width || 
+            if (NormalRenderTexture == null ||
+                NormalRenderTexture.width != m_HeightmapRenderTexture.width ||
                 NormalRenderTexture.height != m_HeightmapRenderTexture.height)
             {
                 // Release existing texture if it exists
@@ -496,7 +499,7 @@ namespace GameCraftersGuild.WorldBuilding
                 {
                     RenderTexture.ReleaseTemporary(NormalRenderTexture);
                 }
-                
+
                 // Create new normal map render texture with RGBA format for normal vectors
                 var normalMapDesc = new RenderTextureDescriptor(m_HeightmapRenderTexture.width, m_HeightmapRenderTexture.height)
                 {
@@ -510,17 +513,17 @@ namespace GameCraftersGuild.WorldBuilding
 
             // Find the kernel
             int kernelHandle = NormalGenerationShader.FindKernel("GenerateNormals");
-            
+
             // Set shader parameters
             NormalGenerationShader.SetTexture(kernelHandle, "HeightMap", m_HeightmapRenderTexture);
             NormalGenerationShader.SetTexture(kernelHandle, "NormalMap", NormalRenderTexture);
             NormalGenerationShader.SetVector("_HeightmapSize", new Vector4(m_HeightmapRenderTexture.width, m_HeightmapRenderTexture.height, 0, 0));
             NormalGenerationShader.SetVector("_TerrainSize", new Vector4(TerrainSize.x, MaxTerrainHeight, TerrainSize.y, 0));
-            
+
             // Calculate thread groups - 8x8 is a common thread group size
             int threadGroupsX = Mathf.CeilToInt(m_HeightmapRenderTexture.width / 8.0f);
             int threadGroupsY = Mathf.CeilToInt(m_HeightmapRenderTexture.height / 8.0f);
-            
+
             // Dispatch the compute shader
             NormalGenerationShader.Dispatch(kernelHandle, threadGroupsX, threadGroupsY, 1);
         }
